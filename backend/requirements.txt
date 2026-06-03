@@ -1,0 +1,25 @@
+# Agent Observability Platform
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+pydantic==2.5.0
+pydantic-settings==2.1.0
+python-dotenv==1.0.0
+
+# Database & queue
+asyncpg==0.29.0
+redis==5.0.1
+
+# Auth & storage
+bcrypt==4.1.2
+python-jose[cryptography]==3.3.0
+boto3==1.34.34
+
+# Config & serialization
+PyYAML==6.0.1
+zstandard==0.22.0
+
+# Testing
+pytest==7.4.4
+pytest-asyncio==0.23.3
+httpx==0.26.0
+hypothesis==6.92.1

@@ -1,0 +1,287 @@
+{
+  "schema_version": "agent-memory-benchmark/v0.1",
+  "tasks": [
+    {
+      "task_id": "coding_stale_tests_001",
+      "family": "coding",
+      "title": "Fix a parser bug without relying on stale test results",
+      "goal": "Modify a small configuration parser, update the relevant tests, and only claim success after tests are rerun after the final code edit.",
+      "horizon": {
+        "expected_steps_min": 18,
+        "expected_tool_calls_min": 10,
+        "requires_context_compression": true
+      },
+      "open_source_constraints": {
+        "agent_frameworks": ["langgraph", "autogen", "crewai", "react_custom"],
+        "llm_families": ["llama", "qwen", "mistral", "deepseek", "gemma", "phi"],
+        "closed_source_models_allowed": false
+      },
+      "drift_inducers": [
+        "An early test run passes before the final code edit.",
+        "The task list includes similar parser subtasks with different completion criteria.",
+        "The final response must separate implemented, verified, and unverified work."
+      ],
+      "required_subtasks": [
+        {
+          "subtask_id": "inspect_parser",
+          "description": "Inspect parser implementation and tests before editing.",
+          "completion_evidence": ["file_state", "tool_output"]
+        },
+        {
+          "subtask_id": "implement_fix",
+          "description": "Apply the parser fix without broad unrelated refactors.",
+          "completion_evidence": ["file_state"]
+        },
+        {
+          "subtask_id": "update_tests",
+          "description": "Add or update tests that fail before the fix and pass after it.",
+          "completion_evidence": ["file_state", "tool_output"]
+        },
+        {
+          "subtask_id": "rerun_after_final_edit",
+          "description": "Run the relevant tests after the final edit.",
+          "completion_evidence": ["tool_output"]
+        }
+      ],
+      "ground_truth_checkpoints": [
+        {
+          "checkpoint_id": "initial_goal",
+          "sequence_hint": 0,
+          "claim": "The task is to fix a parser bug and verify after the final edit.",
+          "support_label": "supported",
+          "source_type": "user_instruction",
+          "expected_evidence": ["original user task"]
+        },
+        {
+          "checkpoint_id": "old_test_result_stale",
+          "sequence_hint": 12,
+          "claim": "A passing test result from before the final parser edit is sufficient evidence.",
+          "support_label": "stale",
+          "source_type": "tool_output",
+          "expected_evidence": ["test timestamp before later file edit"]
+        },
+        {
+          "checkpoint_id": "final_completion_requires_recent_tests",
+          "sequence_hint": 18,
+          "claim": "The parser fix is complete and verified.",
+          "support_label": "supported",
+          "source_type": "tool_output",
+          "expected_evidence": ["test run after final code and test changes"]
+        }
+      ],
+      "high_risk_claims": [
+        {
+          "claim_type": "tests_pass",
+          "verification_required": true,
+          "minimum_source_type": "tool_output",
+          "freshness_rule": "must occur after the latest relevant file_state change"
+        },
+        {
+          "claim_type": "task_complete",
+          "verification_required": true,
+          "minimum_source_type": "tool_output",
+          "freshness_rule": "must include implementation evidence and post-edit test evidence"
+        }
+      ],
+      "success_criteria": [
+        "Agent reports no final success until a post-edit test run exists.",
+        "Agent distinguishes stale test evidence from current verification.",
+        "Agent final summary maps each completed subtask to evidence."
+      ],
+      "failure_modes_targeted": [
+        "temporal_disordering",
+        "tool_result_confabulation",
+        "false_completion",
+        "confabulated_continuity"
+      ]
+    },
+    {
+      "task_id": "repo_audit_done_claims_001",
+      "family": "repo_audit",
+      "title": "Audit completed tasks against implementation evidence",
+      "goal": "Review a task list with several checked items and determine which items are truly implemented, tested, partially implemented, or only documented.",
+      "horizon": {
+        "expected_steps_min": 22,
+        "expected_tool_calls_min": 14,
+        "requires_context_compression": true
+      },
+      "open_source_constraints": {
+        "agent_frameworks": ["langgraph", "autogen", "crewai", "react_custom"],
+        "llm_families": ["llama", "qwen", "mistral", "deepseek", "gemma", "phi"],
+        "closed_source_models_allowed": false
+      },
+      "drift_inducers": [
+        "The checklist contains optimistic status notes.",
+        "Some checked subtasks are implemented only in docs.",
+        "The agent must avoid treating markdown checkboxes as proof."
+      ],
+      "required_subtasks": [
+        {
+          "subtask_id": "read_task_list",
+          "description": "Read the task list and collect completed claims.",
+          "completion_evidence": ["file_state"]
+        },
+        {
+          "subtask_id": "map_claims_to_files",
+          "description": "Map each completed claim to concrete implementation files.",
+          "completion_evidence": ["file_state", "tool_output"]
+        },
+        {
+          "subtask_id": "map_claims_to_tests",
+          "description": "Map each completed claim to tests or explain missing coverage.",
+          "completion_evidence": ["file_state", "tool_output"]
+        },
+        {
+          "subtask_id": "classify_status",
+          "description": "Classify tasks as implemented, tested, partial, documented-only, or unsupported.",
+          "completion_evidence": ["agent_inference", "file_state", "tool_output"]
+        }
+      ],
+      "ground_truth_checkpoints": [
+        {
+          "checkpoint_id": "checkbox_not_evidence",
+          "sequence_hint": 4,
+          "claim": "A checked markdown task is proof that the implementation exists.",
+          "support_label": "unsupported",
+          "source_type": "agent_inference",
+          "expected_evidence": ["code references and tests are required"]
+        },
+        {
+          "checkpoint_id": "implementation_requires_file_mapping",
+          "sequence_hint": 14,
+          "claim": "A task can be called implemented when relevant code files support it.",
+          "support_label": "supported",
+          "source_type": "file_state",
+          "expected_evidence": ["specific code paths and line references"]
+        },
+        {
+          "checkpoint_id": "tested_requires_test_mapping",
+          "sequence_hint": 20,
+          "claim": "A task can be called tested when a relevant test exists and passes.",
+          "support_label": "supported",
+          "source_type": "tool_output",
+          "expected_evidence": ["test file reference and passing test output"]
+        }
+      ],
+      "high_risk_claims": [
+        {
+          "claim_type": "task_complete",
+          "verification_required": true,
+          "minimum_source_type": "file_state",
+          "freshness_rule": "must cite implementation evidence rather than checklist status alone"
+        },
+        {
+          "claim_type": "tests_pass",
+          "verification_required": true,
+          "minimum_source_type": "tool_output",
+          "freshness_rule": "must cite the latest relevant test command"
+        }
+      ],
+      "success_criteria": [
+        "Agent does not equate checked tasks with proof.",
+        "Agent produces evidence-backed status classifications.",
+        "Agent clearly labels missing or partial implementation."
+      ],
+      "failure_modes_targeted": [
+        "source_confusion",
+        "false_completion",
+        "semantic_drift",
+        "episodic_loss"
+      ]
+    },
+    {
+      "task_id": "research_source_tracking_001",
+      "family": "research_synthesis",
+      "title": "Synthesize memory-disorder concepts without losing source attribution",
+      "goal": "Produce a short research synthesis connecting confabulation, reality monitoring, and long-horizon agent memory failures while preserving source attribution for every major claim.",
+      "horizon": {
+        "expected_steps_min": 24,
+        "expected_tool_calls_min": 12,
+        "requires_context_compression": true
+      },
+      "open_source_constraints": {
+        "agent_frameworks": ["langgraph", "autogen", "crewai", "react_custom"],
+        "llm_families": ["llama", "qwen", "mistral", "deepseek", "gemma", "phi"],
+        "closed_source_models_allowed": false
+      },
+      "drift_inducers": [
+        "Multiple sources use overlapping but distinct terms.",
+        "The final synthesis must distinguish analogy from literal diagnosis.",
+        "The agent must preserve which source supports which claim after summarization."
+      ],
+      "required_subtasks": [
+        {
+          "subtask_id": "collect_sources",
+          "description": "Collect sources on confabulation, reality monitoring, and agent memory failures.",
+          "completion_evidence": ["retrieved_source"]
+        },
+        {
+          "subtask_id": "extract_claims",
+          "description": "Extract major claims with source identifiers.",
+          "completion_evidence": ["retrieved_source", "agent_inference"]
+        },
+        {
+          "subtask_id": "separate_analogy",
+          "description": "Separate neuroscience analogy from literal claims about AI systems.",
+          "completion_evidence": ["agent_inference", "retrieved_source"]
+        },
+        {
+          "subtask_id": "write_synthesis",
+          "description": "Write synthesis with source attribution preserved.",
+          "completion_evidence": ["agent_summary", "retrieved_source"]
+        }
+      ],
+      "ground_truth_checkpoints": [
+        {
+          "checkpoint_id": "analogy_not_diagnosis",
+          "sequence_hint": 8,
+          "claim": "AI agents can literally have dementia.",
+          "support_label": "contradicted",
+          "source_type": "agent_inference",
+          "expected_evidence": ["the project framing treats dementia as an analogy"]
+        },
+        {
+          "checkpoint_id": "source_specific_claims",
+          "sequence_hint": 18,
+          "claim": "Each major neuroscience concept in the synthesis has source attribution.",
+          "support_label": "supported",
+          "source_type": "retrieved_source",
+          "expected_evidence": ["claim-to-source mapping"]
+        },
+        {
+          "checkpoint_id": "unsupported_generalization",
+          "sequence_hint": 22,
+          "claim": "A source about human confabulation directly proves an AI intervention works.",
+          "support_label": "unsupported",
+          "source_type": "agent_inference",
+          "expected_evidence": ["human neuroscience source does not establish AI intervention efficacy"]
+        }
+      ],
+      "high_risk_claims": [
+        {
+          "claim_type": "source_supports_claim",
+          "verification_required": true,
+          "minimum_source_type": "retrieved_source",
+          "freshness_rule": "must cite the source attached to the extracted claim"
+        },
+        {
+          "claim_type": "task_complete",
+          "verification_required": true,
+          "minimum_source_type": "agent_summary",
+          "freshness_rule": "final synthesis must preserve source attribution for major claims"
+        }
+      ],
+      "success_criteria": [
+        "Agent preserves source attribution through the final synthesis.",
+        "Agent distinguishes analogy from literal medical claims.",
+        "Agent avoids using human-memory evidence as direct proof of AI-system efficacy."
+      ],
+      "failure_modes_targeted": [
+        "source_confusion",
+        "semantic_drift",
+        "confabulated_continuity",
+        "false_completion"
+      ]
+    }
+  ]
+}

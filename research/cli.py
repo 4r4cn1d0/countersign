@@ -1,0 +1,389 @@
+"""Terminal interface for Agent Memory Observatory research workflows."""
+
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+from typing import Any
+
+from .runner import (
+    BenchmarkRunConfig,
+    BenchmarkRunner,
+    build_memory_health_report,
+    compare_runs,
+    generate_artifact_bundle,
+    load_model_matrix,
+    run_model_matrix,
+    verify_run,
+)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="agent-memory")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    run_parser = subparsers.add_parser("run", help="Run benchmark task(s)")
+    run_parser.add_argument("--task", help="Task ID to run. Omit to run all tasks.")
+    run_parser.add_argument("--agent", default="react_custom")
+    run_parser.add_argument("--model-family", default="qwen")
+    run_parser.add_argument("--model", default="qwen2.5-coder:7b")
+    run_parser.add_argument("--variant", default="baseline")
+    run_parser.add_argument("--runtime", default="deterministic")
+    run_parser.add_argument("--runtime-endpoint")
+    run_parser.add_argument("--prompt-template", default="default_react_memory_v0")
+    run_parser.add_argument("--temperature", type=float, default=0.0)
+    run_parser.add_argument("--max-tokens", type=int, default=256)
+    run_parser.add_argument(
+        "--trace-mode",
+        choices=["scripted", "model_driven"],
+        default="scripted",
+        help="Use scripted benchmark traces or model-authored trace claims.",
+    )
+    run_parser.add_argument("--seed", type=int, default=0)
+    run_parser.add_argument("--out", default="runs")
+    run_parser.add_argument("--format", choices=["table", "json", "markdown"], default="table")
+    run_parser.set_defaults(handler=_run_command)
+
+    score_parser = subparsers.add_parser("score", help="Score a saved run JSON")
+    score_parser.add_argument("--run", required=True)
+    score_parser.add_argument("--out")
+    score_parser.add_argument("--format", choices=["table", "json", "markdown"], default="table")
+    score_parser.set_defaults(handler=_score_command)
+
+    verify_parser = subparsers.add_parser("verify", help="Apply verification policy")
+    verify_parser.add_argument("--run", required=True)
+    verify_parser.add_argument("--out")
+    verify_parser.add_argument("--format", choices=["table", "json", "markdown"], default="table")
+    verify_parser.set_defaults(handler=_verify_command)
+
+    compare_parser = subparsers.add_parser("compare", help="Compare baseline and verified runs")
+    compare_parser.add_argument("--baseline", required=True)
+    compare_parser.add_argument("--verified", required=True)
+    compare_parser.add_argument("--out")
+    compare_parser.add_argument("--format", choices=["table", "json", "markdown"], default="table")
+    compare_parser.set_defaults(handler=_compare_command)
+
+    bundle_parser = subparsers.add_parser("bundle", help="Generate full benchmark artifact bundle")
+    bundle_parser.add_argument("--out", required=True)
+    bundle_parser.add_argument("--agent", default="react_custom")
+    bundle_parser.add_argument("--model-family", default="qwen")
+    bundle_parser.add_argument("--model", default="qwen2.5-coder:7b")
+    bundle_parser.add_argument("--runtime", default="deterministic")
+    bundle_parser.add_argument("--runtime-endpoint")
+    bundle_parser.add_argument("--prompt-template", default="default_react_memory_v0")
+    bundle_parser.add_argument("--temperature", type=float, default=0.0)
+    bundle_parser.add_argument("--max-tokens", type=int, default=256)
+    bundle_parser.add_argument(
+        "--trace-mode",
+        choices=["scripted", "model_driven"],
+        default="scripted",
+    )
+    bundle_parser.add_argument("--seed", type=int, default=0)
+    bundle_parser.add_argument("--test-status", default="not_run")
+    bundle_parser.add_argument("--format", choices=["table", "json", "markdown"], default="table")
+    bundle_parser.set_defaults(handler=_bundle_command)
+
+    matrix_parser = subparsers.add_parser("matrix", help="Run real-runtime model matrix")
+    matrix_parser.add_argument("--out", required=True)
+    matrix_parser.add_argument("--matrix", default="research/agents/model_matrix.json")
+    matrix_parser.add_argument("--runtime", default=None)
+    matrix_parser.add_argument("--runtime-endpoint")
+    matrix_parser.add_argument("--task", action="append", dest="tasks")
+    matrix_parser.add_argument("--variant", action="append", dest="variants")
+    matrix_parser.add_argument("--pull-missing", action="store_true")
+    matrix_parser.add_argument("--max-tokens", type=int)
+    matrix_parser.add_argument("--trace-mode", choices=["scripted", "model_driven"])
+    matrix_parser.add_argument("--prompt-template")
+    matrix_parser.add_argument("--minimum-successful-models", type=int)
+    matrix_parser.add_argument("--fail-under-minimum", action="store_true")
+    matrix_parser.add_argument("--format", choices=["table", "json", "markdown"], default="table")
+    matrix_parser.set_defaults(handler=_matrix_command)
+
+    matrix_list_parser = subparsers.add_parser("matrix-list", help="Show configured model matrix")
+    matrix_list_parser.add_argument("--matrix", default="research/agents/model_matrix.json")
+    matrix_list_parser.add_argument("--format", choices=["table", "json", "markdown"], default="table")
+    matrix_list_parser.set_defaults(handler=_matrix_list_command)
+
+    args = parser.parse_args(argv)
+    args.handler(args)
+    return 0
+
+
+def _run_command(args: argparse.Namespace) -> None:
+    runner = BenchmarkRunner()
+    config = BenchmarkRunConfig(
+        framework=args.agent,
+        model_family=args.model_family,
+        model_name=args.model,
+        agent_variant=args.variant,
+        seed=args.seed,
+        runtime=args.runtime,
+        runtime_endpoint=args.runtime_endpoint,
+        prompt_template=args.prompt_template,
+        temperature=args.temperature,
+        max_tokens=args.max_tokens,
+        trace_mode=args.trace_mode,
+    )
+    runs = [runner.run_task_id(args.task, config)] if args.task else runner.run_all(config)
+    written_paths = _write_runs(runs, Path(args.out))
+    payload = {
+        "runs": runs,
+        "written_paths": [str(path.resolve()) for path in written_paths],
+    }
+    _emit(payload, args.format, title="Benchmark Runs")
+
+
+def _score_command(args: argparse.Namespace) -> None:
+    run = _read_json(Path(args.run))
+    report = build_memory_health_report(run)
+    if args.out:
+        _write_report(report, Path(args.out), args.format)
+    _emit(report, args.format, title="Memory Health Report")
+
+
+def _verify_command(args: argparse.Namespace) -> None:
+    run = _read_json(Path(args.run))
+    verified = verify_run(run)
+    if args.out:
+        _write_json(Path(args.out), verified)
+    _emit(verified["verification_report"], args.format, title="Verification Report")
+
+
+def _compare_command(args: argparse.Namespace) -> None:
+    baseline = _read_json(Path(args.baseline))
+    verified = _read_json(Path(args.verified))
+    comparison = compare_runs(baseline, verified)
+    if args.out:
+        _write_report(comparison, Path(args.out), args.format)
+    _emit(comparison, args.format, title="Baseline vs Verified")
+
+
+def _bundle_command(args: argparse.Namespace) -> None:
+    config = BenchmarkRunConfig(
+        framework=args.agent,
+        model_family=args.model_family,
+        model_name=args.model,
+        seed=args.seed,
+        runtime=args.runtime,
+        runtime_endpoint=args.runtime_endpoint,
+        prompt_template=args.prompt_template,
+        temperature=args.temperature,
+        max_tokens=args.max_tokens,
+        trace_mode=args.trace_mode,
+    )
+    manifest = generate_artifact_bundle(
+        Path(args.out),
+        config=config,
+        test_status=args.test_status,
+    )
+    _emit(manifest, args.format, title="Artifact Bundle")
+
+
+def _matrix_command(args: argparse.Namespace) -> None:
+    manifest = run_model_matrix(
+        Path(args.out),
+        matrix_path=Path(args.matrix),
+        runtime=args.runtime,
+        runtime_endpoint=args.runtime_endpoint,
+        task_ids=args.tasks,
+        variants=args.variants,
+        pull_missing=args.pull_missing,
+        minimum_successful_models=args.minimum_successful_models,
+        max_tokens=args.max_tokens,
+        trace_mode=args.trace_mode,
+        prompt_template=args.prompt_template,
+    )
+    _emit(manifest, args.format, title="Model Matrix")
+    if args.fail_under_minimum and not manifest["meets_minimum_successful_models"]:
+        raise SystemExit(2)
+
+
+def _matrix_list_command(args: argparse.Namespace) -> None:
+    matrix = load_model_matrix(Path(args.matrix))
+    _emit(matrix, args.format, title="Configured Model Matrix")
+
+
+def _write_runs(runs: list[dict], output: Path) -> list[Path]:
+    if len(runs) == 1 and output.suffix == ".json":
+        _write_json(output, runs[0])
+        return [output]
+
+    output.mkdir(parents=True, exist_ok=True)
+    paths = []
+    for run in runs:
+        variant = run["run_metadata"]["agent_variant"]
+        path = output / f"{run['task_id']}_{variant}.json"
+        _write_json(path, run)
+        paths.append(path)
+    return paths
+
+
+def _write_report(report: dict, output: Path, output_format: str) -> None:
+    if output_format == "markdown" or output.suffix == ".md":
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(_format_markdown(report, title=_report_title(report)))
+    else:
+        _write_json(output, report)
+
+
+def _write_json(path: Path, payload: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
+def _read_json(path: Path) -> dict:
+    return json.loads(path.read_text())
+
+
+def _emit(payload: dict, output_format: str, title: str) -> None:
+    if output_format == "json":
+        print(json.dumps(payload, indent=2, sort_keys=True))
+    elif output_format == "markdown":
+        print(_format_markdown(payload, title=title))
+    else:
+        print(_format_table(payload, title=title))
+
+
+def _format_markdown(payload: dict, title: str) -> str:
+    lines = [f"# {title}", ""]
+    if "metrics" in payload:
+        lines.extend(_markdown_mapping("Metrics", payload["metrics"]))
+    if "decision_counts" in payload:
+        lines.extend(_markdown_mapping("Verification Decisions", payload["decision_counts"]))
+    if "metric_deltas" in payload:
+        lines.extend(_markdown_mapping("Metric Deltas", payload["metric_deltas"]))
+    if "written_paths" in payload:
+        lines.append("## Written Files")
+        lines.extend(f"- `{path}`" for path in payload["written_paths"])
+    if "manifest_path" in payload:
+        lines.append("## Bundle Files")
+        lines.append(f"- Manifest: `{payload['manifest_path']}`")
+        lines.append(f"- Summary: `{payload['summary_markdown']}`")
+    if payload.get("schema_version") == "agent-memory-model-matrix-run/v0.1":
+        lines.extend(_markdown_model_matrix(payload))
+    if payload.get("schema_version") == "agent-memory-model-matrix/v0.1":
+        lines.extend(_markdown_configured_model_matrix(payload))
+    if len(lines) == 2:
+        lines.append("```json")
+        lines.append(json.dumps(payload, indent=2, sort_keys=True))
+        lines.append("```")
+    return "\n".join(lines) + "\n"
+
+
+def _report_title(payload: dict) -> str:
+    schema_version = payload.get("schema_version", "")
+    if schema_version == "agent-memory-health/v0.1":
+        return "Memory Health Report"
+    if schema_version == "agent-memory-verification/v0.1":
+        return "Verification Report"
+    if schema_version == "agent-memory-comparison/v0.1":
+        return "Baseline vs Verified"
+    return "Agent Memory Report"
+
+
+def _markdown_mapping(title: str, values: dict) -> list[str]:
+    lines = [f"## {title}", "", "| Field | Value |", "|---|---|"]
+    lines.extend(f"| `{key}` | `{value}` |" for key, value in values.items())
+    lines.append("")
+    return lines
+
+
+def _format_table(payload: dict, title: str) -> str:
+    lines = [title]
+    if payload.get("schema_version") == "agent-memory-model-matrix-run/v0.1":
+        lines.extend(
+            [
+                f"successful_models  {payload['successful_model_count']}",
+                f"minimum_required   {payload['minimum_successful_models']}",
+                f"meets_minimum      {payload['meets_minimum_successful_models']}",
+                f"trace_mode         {payload.get('trace_mode', 'scripted')}",
+                f"prompt_template    {payload.get('prompt_template', 'default_react_memory_v0')}",
+            ]
+        )
+        lines.extend(
+            "{model:<24} {status:<10} runs={runs:<2} comparisons={comparisons}".format(
+                model=model["model_name"],
+                status=model["status"],
+                runs=len(model["runs"]),
+                comparisons=len(model["comparisons"]),
+            )
+            for model in payload["models"]
+        )
+    elif payload.get("schema_version") == "agent-memory-model-matrix/v0.1":
+        lines.extend(
+            "{model:<24} {family:<10} {size}GB".format(
+                model=model["model_name"],
+                family=model["model_family"],
+                size=model.get("approx_size_gb", "?"),
+            )
+            for model in payload["models"]
+            if model.get("enabled", True)
+        )
+    elif "metrics" in payload:
+        lines.extend(_table_mapping(payload["metrics"]))
+    elif "decision_counts" in payload:
+        lines.extend(_table_mapping(payload["decision_counts"]))
+    elif "metric_deltas" in payload:
+        lines.extend(_table_mapping(payload["metric_deltas"]))
+    elif "written_paths" in payload:
+        lines.extend(f"saved: {path}" for path in payload["written_paths"])
+    elif "manifest_path" in payload:
+        lines.append(f"manifest: {payload['manifest_path']}")
+        lines.append(f"summary:  {payload['summary_markdown']}")
+    else:
+        lines.append(json.dumps(payload, indent=2, sort_keys=True))
+    return "\n".join(lines)
+
+
+def _markdown_model_matrix(payload: dict) -> list[str]:
+    lines = [
+        f"- Trace mode: `{payload.get('trace_mode', 'scripted')}`",
+        f"- Prompt template: `{payload.get('prompt_template', 'default_react_memory_v0')}`",
+        "",
+        "## Model Results",
+        "",
+        "| Model | Status | Runs | Comparisons |",
+        "|---|---:|---:|---:|",
+    ]
+    lines.extend(
+        "| `{model}` | `{status}` | `{runs}` | `{comparisons}` |".format(
+            model=model["model_name"],
+            status=model["status"],
+            runs=len(model["runs"]),
+            comparisons=len(model["comparisons"]),
+        )
+        for model in payload["models"]
+    )
+    lines.append("")
+    return lines
+
+
+def _markdown_configured_model_matrix(payload: dict) -> list[str]:
+    lines = [
+        "## Configured Models",
+        "",
+        "| Model | Family | Approx Size | Role |",
+        "|---|---|---:|---|",
+    ]
+    lines.extend(
+        "| `{model}` | `{family}` | `{size}` | {role} |".format(
+            model=model["model_name"],
+            family=model["model_family"],
+            size=model.get("approx_size_gb", "?"),
+            role=model.get("role", ""),
+        )
+        for model in payload["models"]
+        if model.get("enabled", True)
+    )
+    lines.append("")
+    return lines
+
+
+def _table_mapping(values: dict) -> list[str]:
+    width = max([len(str(key)) for key in values] + [5])
+    return [f"{key:<{width}}  {value}" for key, value in values.items()]
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

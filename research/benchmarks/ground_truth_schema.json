@@ -1,0 +1,58 @@
+{
+  "schema_version": "agent-memory-benchmark/v0.1",
+  "description": "Schema contract for long-horizon agent memory corruption benchmark tasks.",
+  "task_fields": [
+    "task_id",
+    "family",
+    "title",
+    "goal",
+    "horizon",
+    "open_source_constraints",
+    "drift_inducers",
+    "required_subtasks",
+    "ground_truth_checkpoints",
+    "high_risk_claims",
+    "success_criteria",
+    "failure_modes_targeted"
+  ],
+  "families": [
+    "coding",
+    "repo_audit",
+    "research_synthesis",
+    "data_analysis",
+    "web_investigation"
+  ],
+  "failure_modes": [
+    "semantic_drift",
+    "episodic_loss",
+    "source_confusion",
+    "temporal_disordering",
+    "tool_result_confabulation",
+    "false_completion",
+    "confabulated_continuity"
+  ],
+  "claim_support_labels": [
+    "supported",
+    "unsupported",
+    "stale",
+    "contradicted",
+    "inferred"
+  ],
+  "source_types": [
+    "user_instruction",
+    "tool_output",
+    "file_state",
+    "retrieved_source",
+    "agent_inference",
+    "agent_summary",
+    "ground_truth"
+  ],
+  "high_risk_claim_types": [
+    "tests_pass",
+    "task_complete",
+    "user_approved",
+    "file_changed",
+    "source_supports_claim",
+    "no_errors_present"
+  ]
+}

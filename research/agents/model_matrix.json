@@ -1,0 +1,80 @@
+{
+  "schema_version": "agent-memory-model-matrix/v0.1",
+  "hardware_profile": {
+    "name": "macbook_m4_air_24gb",
+    "memory_gb": 24,
+    "execution": "sequential",
+    "notes": [
+      "Run one model at a time on local Ollama.",
+      "Prefer 3B-8B quantized models for thermal and memory headroom.",
+      "Do not count skipped or deterministic-fallback runs as real-runtime evidence."
+    ]
+  },
+  "runtime": "ollama",
+  "trace_mode": "model_driven",
+  "prompt_template": "default_react_memory_v0",
+  "max_tokens": 256,
+  "minimum_successful_models": 5,
+  "models": [
+    {
+      "model_family": "qwen",
+      "model_name": "qwen2.5-coder:7b",
+      "display_name": "Qwen2.5 Coder 7B",
+      "approx_size_gb": 4.7,
+      "license_note": "Apache-2.0 family; code-specialized open-weight model.",
+      "role": "coding and tool-use baseline",
+      "pull_command": "ollama pull qwen2.5-coder:7b",
+      "enabled": true
+    },
+    {
+      "model_family": "llama",
+      "model_name": "llama3.2:3b",
+      "display_name": "Llama 3.2 3B",
+      "approx_size_gb": 2.0,
+      "license_note": "Meta Llama license; open-weight but not OSI open-source.",
+      "role": "small general instruction-following baseline",
+      "pull_command": "ollama pull llama3.2:3b",
+      "enabled": true
+    },
+    {
+      "model_family": "mistral",
+      "model_name": "mistral:7b",
+      "display_name": "Mistral 7B v0.3",
+      "approx_size_gb": 4.4,
+      "license_note": "Apache-2.0.",
+      "role": "general instruction and function-calling baseline",
+      "pull_command": "ollama pull mistral:7b",
+      "enabled": true
+    },
+    {
+      "model_family": "deepseek",
+      "model_name": "deepseek-r1:8b",
+      "display_name": "DeepSeek-R1 8B",
+      "approx_size_gb": 5.2,
+      "license_note": "MIT for DeepSeek-R1 weights; distilled lineage notes apply.",
+      "role": "reasoning-heavy baseline",
+      "pull_command": "ollama pull deepseek-r1:8b",
+      "enabled": true
+    },
+    {
+      "model_family": "gemma",
+      "model_name": "gemma3:4b",
+      "display_name": "Gemma 3 4B",
+      "approx_size_gb": 3.3,
+      "license_note": "Gemma terms; open-weight but not OSI open-source.",
+      "role": "compact multilingual reasoning baseline",
+      "pull_command": "ollama pull gemma3:4b",
+      "enabled": true
+    },
+    {
+      "model_family": "phi",
+      "model_name": "phi4-mini:latest",
+      "display_name": "Phi-4 Mini",
+      "approx_size_gb": 2.5,
+      "license_note": "Microsoft open model terms; verify exact tag license before publication.",
+      "role": "small reasoning-dense baseline",
+      "pull_command": "ollama pull phi4-mini",
+      "enabled": true
+    }
+  ]
+}

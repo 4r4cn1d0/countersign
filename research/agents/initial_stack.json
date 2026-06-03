@@ -1,0 +1,33 @@
+{
+  "schema_version": "agent-memory-stack/v0.1",
+  "primary_framework": "react_custom",
+  "primary_framework_reason": "Deterministic custom ReAct-style runner for local, auditable baseline experiments before adding heavier framework adapters.",
+  "adapter_targets": [
+    "langgraph",
+    "autogen",
+    "crewai",
+    "openhands_swe_agent",
+    "react_custom"
+  ],
+  "llm_families": [
+    "qwen",
+    "llama",
+    "mistral",
+    "deepseek",
+    "gemma",
+    "phi"
+  ],
+  "runtime_options": [
+    "ollama",
+    "llama_cpp",
+    "vllm"
+  ],
+  "closed_source_models_allowed": false,
+  "default_model_family": "qwen",
+  "default_model_name": "qwen2.5-coder:7b",
+  "notes": [
+    "Benchmark scoring must not depend on closed-source LLM APIs.",
+    "The deterministic baseline runner is used first so trace capture and labeling are reproducible.",
+    "Framework adapters should emit the same trace event shape as the baseline runner."
+  ]
+}
