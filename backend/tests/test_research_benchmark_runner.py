@@ -238,7 +238,7 @@ def test_langgraph_tool_agent_runs_real_coding_tool_loop(tmp_path: Path):
 
     assert run["run_metadata"]["framework"] == "langgraph_tools"
     assert run["run_metadata"]["agent_framework_runtime"] == "langgraph_tools"
-    assert run["run_metadata"]["tool_loop_iterations"] == 6
+    assert run["run_metadata"]["tool_loop_iterations"] == 7
     assert workspace_path.exists()
     assert (workspace_path / "config_parser.py").read_text() == (
         "def parse_line(line):\n"
@@ -269,8 +269,24 @@ def test_langgraph_tool_agent_runs_real_coding_tool_loop(tmp_path: Path):
         "model_response",
         "completion_claim",
     }.issubset(event_types)
-    assert {"setup_workspace", "list_files", "read_file", "write_file", "run_tests"}.issubset(
-        tool_names
+    assert {
+        "setup_workspace",
+        "list_files",
+        "read_file",
+        "write_file",
+        "run_tests",
+        "finish",
+    }.issubset(tool_names)
+    action_events = [
+        event
+        for event in run["trace_events"]
+        if event["event_type"] == "model_response"
+        and event.get("graph_node") == "choose_tool"
+    ]
+    assert len(action_events) == 7
+    assert {event["parse_status"] for event in action_events} == {"json"}
+    assert {"read_file", "write_file", "run_tests", "finish"}.issubset(
+        {event["parsed_action"]["action"] for event in action_events}
     )
     assert any(
         event.get("tool_name") == "run_tests"
@@ -300,13 +316,222 @@ def test_langgraph_tool_verified_variant_blocks_stale_test_claim(tmp_path: Path)
     )
 
     blocked = run["verification_report"]["blocked_actions"]
+    loop_blocks = [
+        event
+        for event in run["trace_events"]
+        if event["event_type"] == "verification_decision"
+        and event.get("graph_node") == "verify_high_risk_claims"
+    ]
 
     assert blocked
+    assert loop_blocks
+    assert any(event.get("forced_next_tool") == "run_tests" for event in loop_blocks)
     assert {"tests_pass", "task_complete"}.issubset(
         {action["claim_type"] for action in blocked}
     )
     assert any("stale evidence" in action["reasons"] for action in blocked)
     assert run["effective_memory_health_report"]["claim_counts"]["false_completion"] == 0
+
+
+@pytest.mark.parametrize(
+    "task_id,expected_file",
+    [
+        ("coding_multifile_edit_001", "event_normalizer.py"),
+        ("coding_final_edit_stale_test_001", "invoice.py"),
+        ("coding_repo_audit_checklist_001", "audit.py"),
+    ],
+)
+def test_langgraph_tool_agent_runs_richer_coding_tasks(
+    tmp_path: Path,
+    task_id: str,
+    expected_file: str,
+):
+    pytest.importorskip("langgraph")
+
+    run = BenchmarkRunner().run_task_id(
+        task_id,
+        BenchmarkRunConfig(
+            framework="langgraph_tools",
+            trace_mode="model_driven",
+            workspace_root=str(tmp_path),
+        ),
+    )
+
+    workspace_path = Path(run["run_metadata"]["workspace_path"])
+    final_tests = [
+        event
+        for event in run["trace_events"]
+        if event.get("tool_name") == "run_tests"
+        and event.get("status") == "success"
+        and "OK" in event.get("content", "")
+    ]
+
+    assert workspace_path.exists()
+    assert (workspace_path / expected_file).exists()
+    assert final_tests
+    assert run["run_metadata"]["tool_loop_iterations"] >= 8
+    assert run["memory_health_report"]["claim_counts"]["false_completion"] >= 1
+
+
+def test_langgraph_tool_loop_records_invalid_action_fallback(tmp_path: Path):
+    pytest.importorskip("langgraph")
+
+    class FakeAdapter:
+        runtime = "deterministic"
+
+        def __init__(self):
+            self.calls = 0
+
+        def generate(self, request):
+            self.calls += 1
+            if "AGENT_MEMORY_TOOL_ACTION_REQUEST" in request.prompt and self.calls == 1:
+                return ModelResponse(
+                    text="not json",
+                    runtime="deterministic",
+                    model_name=request.model_name,
+                    model_family=request.model_family,
+                    raw_response={"fake": True},
+                )
+            if "AGENT_MEMORY_TOOL_ACTION_REQUEST" in request.prompt:
+                marker = "DETERMINISTIC_ACTION:"
+                action = json.loads(
+                    request.prompt.split(marker, 1)[1].strip().splitlines()[0]
+                )
+                return ModelResponse(
+                    text=json.dumps(action),
+                    runtime="deterministic",
+                    model_name=request.model_name,
+                    model_family=request.model_family,
+                    raw_response={"fake": True},
+                )
+            return ModelResponse(
+                text=json.dumps(
+                    {
+                        "final_summary": "Loop recovered from invalid action JSON.",
+                        "memory_claims": [],
+                        "completion_claims": [],
+                        "needs_verification": [],
+                    }
+                ),
+                runtime="deterministic",
+                model_name=request.model_name,
+                model_family=request.model_family,
+                raw_response={"fake": True},
+            )
+
+    adapter = FakeAdapter()
+    with patch(
+        "research.runner.benchmark_runner.create_model_adapter",
+        return_value=adapter,
+    ):
+        run = BenchmarkRunner().run_task_id(
+            "coding_stale_tests_001",
+            BenchmarkRunConfig(
+                framework="langgraph_tools",
+                trace_mode="model_driven",
+                workspace_root=str(tmp_path),
+            ),
+        )
+
+    decisions = [
+        event
+        for event in run["trace_events"]
+        if event.get("graph_node") == "choose_tool"
+        and event["event_type"] == "decision_point"
+    ]
+    action_responses = [
+        event
+        for event in run["trace_events"]
+        if event.get("graph_node") == "choose_tool"
+        and event["event_type"] == "model_response"
+    ]
+
+    assert any(
+        event.get("action_status") == "fallback_after_invalid_action"
+        for event in decisions
+    )
+    assert any(event.get("parse_status") == "unparsed" for event in action_responses)
+    assert any(
+        event.get("tool_name") == "run_tests"
+        and event.get("status") == "success"
+        and "OK" in event.get("content", "")
+        for event in run["trace_events"]
+    )
+
+
+def test_langgraph_tool_loop_records_mismatched_action_fallback(tmp_path: Path):
+    pytest.importorskip("langgraph")
+
+    class FakeAdapter:
+        runtime = "deterministic"
+
+        def __init__(self):
+            self.calls = 0
+
+        def generate(self, request):
+            self.calls += 1
+            if "AGENT_MEMORY_TOOL_ACTION_REQUEST" in request.prompt and self.calls == 1:
+                return ModelResponse(
+                    text=json.dumps(
+                        {"action": "read_file", "path": "test_config_parser.py"}
+                    ),
+                    runtime="deterministic",
+                    model_name=request.model_name,
+                    model_family=request.model_family,
+                    raw_response={"fake": True},
+                )
+            if "AGENT_MEMORY_TOOL_ACTION_REQUEST" in request.prompt:
+                marker = "DETERMINISTIC_ACTION:"
+                action = json.loads(
+                    request.prompt.split(marker, 1)[1].strip().splitlines()[0]
+                )
+                return ModelResponse(
+                    text=json.dumps(action),
+                    runtime="deterministic",
+                    model_name=request.model_name,
+                    model_family=request.model_family,
+                    raw_response={"fake": True},
+                )
+            return ModelResponse(
+                text=json.dumps(
+                    {
+                        "final_summary": "Loop recovered from mismatched action JSON.",
+                        "memory_claims": [],
+                        "completion_claims": [],
+                        "needs_verification": [],
+                    }
+                ),
+                runtime="deterministic",
+                model_name=request.model_name,
+                model_family=request.model_family,
+                raw_response={"fake": True},
+            )
+
+    with patch(
+        "research.runner.benchmark_runner.create_model_adapter",
+        return_value=FakeAdapter(),
+    ):
+        run = BenchmarkRunner().run_task_id(
+            "coding_stale_tests_001",
+            BenchmarkRunConfig(
+                framework="langgraph_tools",
+                trace_mode="model_driven",
+                workspace_root=str(tmp_path),
+            ),
+        )
+
+    decisions = [
+        event
+        for event in run["trace_events"]
+        if event.get("graph_node") == "choose_tool"
+        and event["event_type"] == "decision_point"
+    ]
+
+    assert any(
+        event.get("action_status") == "fallback_after_mismatched_action"
+        for event in decisions
+    )
+    assert run["run_metadata"]["tool_loop_iterations"] == 7
 
 
 def test_memory_pressure_prompt_hides_checkpoint_support_labels():

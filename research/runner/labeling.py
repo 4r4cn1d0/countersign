@@ -52,6 +52,7 @@ def label_high_risk_claims(
                         "freshness_rule": claim_config.get("freshness_rule"),
                         "source_event_ids": event.get("source_event_ids", []),
                         "claim_text": text,
+                        "support_status": event.get("support_status"),
                     }
                 )
 

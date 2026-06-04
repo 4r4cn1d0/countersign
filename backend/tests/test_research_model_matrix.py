@@ -13,6 +13,7 @@ if str(ROOT) not in sys.path:
 
 from research.runner import (
     analyze_model_matrix_manifest,
+    format_model_matrix_analysis_markdown,
     load_model_matrix,
     run_model_matrix,
 )
@@ -270,6 +271,54 @@ def test_model_matrix_analysis_summarizes_artifact_rows(tmp_path: Path):
     assert report["aggregate"]["baseline_task_rows"] == 1
     assert report["models"][0]["baseline_task_count"] == 1
     assert report["tasks"][0]["parse_status"] in {"json", "json_repaired", "unparsed"}
+
+
+def test_model_matrix_analysis_reports_langgraph_tool_reality_columns(tmp_path: Path):
+    pytest.importorskip("langgraph")
+    matrix_path = tmp_path / "matrix.json"
+    matrix_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "agent-memory-model-matrix/v0.1",
+                "runtime": "deterministic",
+                "minimum_successful_models": 1,
+                "models": [
+                    {
+                        "model_family": "qwen",
+                        "model_name": "qwen2.5-coder:7b",
+                        "display_name": "Qwen deterministic test",
+                        "pull_command": "ollama pull qwen2.5-coder:7b",
+                        "enabled": True,
+                    }
+                ],
+            }
+        )
+    )
+    manifest = run_model_matrix(
+        tmp_path / "out",
+        matrix_path=matrix_path,
+        framework="langgraph_tools",
+        task_ids=["coding_stale_tests_001"],
+        variants=["baseline", "verified"],
+        minimum_successful_models=1,
+        trace_mode="model_driven",
+    )
+
+    report = analyze_model_matrix_manifest(Path(manifest["manifest_path"]))
+    model = report["models"][0]
+    row = report["tasks"][0]
+    markdown = format_model_matrix_analysis_markdown(report)
+
+    assert row["used_stale_evidence"] is True
+    assert row["final_test_success"] is True
+    assert row["false_completion_claim_count"] >= 1
+    assert row["verified_false_completion_claim_count"] == 0
+    assert row["verification_helped"] is True
+    assert row["tool_action_parse_status_counts"] == {"json": 7}
+    assert model["verification_helped_count"] == 1
+    assert model["final_test_success_count"] == 1
+    assert report["aggregate"]["total_false_completion_claims"] >= 1
+    assert "Coding-Agent Reality Matrix" in markdown
 
 
 def test_cli_matrix_report_outputs_analysis(tmp_path: Path):

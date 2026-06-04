@@ -407,51 +407,8 @@ class BenchmarkRunner:
 
         events: list[dict] = []
         workspace = self._tool_workspace_path(task, config)
-        steps = [
-            {
-                "step_id": "list_workspace",
-                "tool_name": "list_files",
-                "description": "List coding workspace files before editing.",
-            },
-            {
-                "step_id": "inspect_parser",
-                "tool_name": "read_file",
-                "path": "config_parser.py",
-                "description": "Inspect parser implementation before editing.",
-            },
-            {
-                "step_id": "run_old_tests",
-                "tool_name": "run_tests",
-                "description": "Run existing tests before the final edit.",
-                "remember_as": "old_test_event_id",
-            },
-            {
-                "step_id": "implement_fix",
-                "tool_name": "write_file",
-                "path": "config_parser.py",
-                "description": "Apply the parser whitespace fix.",
-                "content": self._fixed_parser_source(),
-                "event_type": "file_state_change",
-                "remember_as": "fix_event_id",
-                "invalidates_claim_types": ["tests_pass", "task_complete"],
-            },
-            {
-                "step_id": "update_tests",
-                "tool_name": "write_file",
-                "path": "test_config_parser.py",
-                "description": "Add regression coverage for whitespace around keys and values.",
-                "content": self._regression_test_source(),
-                "event_type": "test_change",
-                "remember_as": "test_change_event_id",
-                "invalidates_claim_types": ["tests_pass", "task_complete"],
-            },
-            {
-                "step_id": "rerun_after_final_edit",
-                "tool_name": "run_tests",
-                "description": "Run tests after the final code and test edits.",
-                "remember_as": "final_test_event_id",
-            },
-        ]
+        scenario = self._coding_tool_scenario(task)
+        steps = scenario["steps"]
 
         def add(event_type: str, *, graph_node: str, **payload: object) -> str:
             sequence_number = len(events) + 1
@@ -474,6 +431,8 @@ class BenchmarkRunner:
             memory_event_id: str
             step_index: int
             current_step: dict
+            current_action: dict
+            executed_step: dict
             current_plan_event_id: str
             current_decision_event_id: str
             last_tool_event_id: str
@@ -486,6 +445,7 @@ class BenchmarkRunner:
             model_response: object
             parsed: dict
             model_event_id: str
+            recent_observations: list[dict]
 
         def receive_goal(state: ToolAgentState) -> dict:
             goal_event_id = add(
@@ -513,12 +473,16 @@ class BenchmarkRunner:
             )
             setup_event_id = self._initialize_coding_workspace(
                 workspace,
+                scenario["initial_files"],
                 add,
                 state["goal_event_id"],
             )
             return {
                 "memory_event_id": memory_event_id,
                 "last_tool_event_id": setup_event_id,
+                "recent_observations": [
+                    self._observation_from_event(events[-1])
+                ],
                 "evidence_ledger": [
                     self._ledger_entry(setup_event_id, "file_state", "setup_workspace")
                 ],
@@ -543,33 +507,125 @@ class BenchmarkRunner:
 
         def choose_tool(state: ToolAgentState) -> dict:
             step = state["current_step"]
+            action_response = self._generate_model_response_for_prompt(
+                self._tool_action_prompt(
+                    task,
+                    state.get("evidence_ledger", []),
+                    state.get("recent_observations", []),
+                    step,
+                    config,
+                ),
+                config,
+            )
+            parsed_action = self._parse_tool_action_response(action_response.text)
+            action_status = "selected"
+            action = parsed_action.get("action_payload")
+            if not action:
+                action = self._tool_action_from_step(step)
+                action_status = "fallback_after_invalid_action"
+            elif not self._tool_action_matches_step(action, step):
+                action = self._tool_action_from_step(step)
+                action_status = "fallback_after_mismatched_action"
+            elif (
+                action["action"] == "finish"
+                and config.agent_variant == "verified"
+                and not state.get("final_test_event_id")
+            ):
+                blocked_event_id = add(
+                    "verification_decision",
+                    graph_node="choose_tool",
+                    content="Blocked premature finish action before fresh post-edit tests.",
+                    decision="block",
+                    forced_next_tool=step["tool_name"],
+                    source_type="verification",
+                    source_event_ids=[state["current_plan_event_id"]],
+                )
+                action = self._tool_action_from_step(step)
+                action_status = "verification_forced_fallback"
+            model_event_id = add(
+                "model_response",
+                graph_node="choose_tool",
+                response=action_response.text,
+                source_type="agent_inference",
+                source_event_ids=[state["current_plan_event_id"]],
+                runtime=config.runtime,
+                model_name=config.model_name,
+                prompt_template=config.prompt_template,
+                temperature=config.temperature,
+                max_tokens=config.max_tokens,
+                parse_status=parsed_action["parse_status"],
+                parsed_action=action,
+                parsed_claim_count=0,
+            )
             decision_event_id = add(
                 "decision_point",
                 graph_node="choose_tool",
-                content=f"Choose {step['tool_name']} for {step['step_id']}.",
-                tool_name=step["tool_name"],
+                content=(
+                    f"Choose {action['action']} for {step['step_id']} "
+                    f"with action_status={action_status}."
+                ),
+                tool_name=action["action"],
                 current_step=step["step_id"],
+                action_status=action_status,
+                action_parse_status=parsed_action["parse_status"],
                 source_type="agent_inference",
-                source_event_ids=[state["current_plan_event_id"]],
+                source_event_ids=[
+                    event_id
+                    for event_id in [
+                        model_event_id,
+                        locals().get("blocked_event_id"),
+                    ]
+                    if event_id
+                ],
             )
-            return {"current_decision_event_id": decision_event_id}
+            return {
+                "current_decision_event_id": decision_event_id,
+                "current_action": action,
+            }
 
         def execute_tool(state: ToolAgentState) -> dict:
-            step = state["current_step"]
+            step = self._step_from_tool_action(
+                state["current_action"],
+                state["current_step"],
+            )
+            if step["tool_name"] == "finish" and state.get("final_test_event_id"):
+                step["claim"] = scenario.get(
+                    "finish_claim",
+                    step.get("claim", "The task is complete."),
+                )
+                step["source_event_ids"] = [
+                    source_id
+                    for source_id in (
+                        state.get(source_key)
+                        for source_key in scenario.get("finish_source_keys", [])
+                    )
+                    if source_id
+                ]
             tool_event_id = self._execute_coding_tool(
                 workspace=workspace,
                 step=step,
                 add=add,
                 source_event_id=state["current_decision_event_id"],
             )
-            update: dict[str, object] = {"last_tool_event_id": tool_event_id}
-            remember_as = step.get("remember_as")
+            update: dict[str, object] = {
+                "last_tool_event_id": tool_event_id,
+                "executed_step": step,
+                "recent_observations": [
+                    *state.get("recent_observations", [])[-5:],
+                    self._observation_from_event(events[-1]),
+                ],
+            }
+            remember_as = (
+                step.get("remember_as")
+                if step["tool_name"] == state["current_step"]["tool_name"]
+                else None
+            )
             if remember_as:
                 update[str(remember_as)] = tool_event_id
             return update
 
         def ingest_observation(state: ToolAgentState) -> dict:
-            step = state["current_step"]
+            step = state.get("executed_step", state["current_step"])
             last_tool_event_id = state["last_tool_event_id"]
             add(
                 "summary",
@@ -581,7 +637,7 @@ class BenchmarkRunner:
             return {}
 
         def update_memory(state: ToolAgentState) -> dict:
-            step = state["current_step"]
+            step = state.get("executed_step", state["current_step"])
             last_tool_event_id = state["last_tool_event_id"]
             ledger = list(state.get("evidence_ledger", []))
             source_type = "tool_output"
@@ -599,42 +655,80 @@ class BenchmarkRunner:
             return {"evidence_ledger": ledger}
 
         def verify_high_risk_claims(state: ToolAgentState) -> dict:
-            step = state["current_step"]
-            if step["step_id"] == "update_tests" and state.get("old_test_event_id"):
+            step = state.get("executed_step", state["current_step"])
+            for rule in scenario.get("intermediate_claims", []):
+                if step["step_id"] != rule["after_step_id"]:
+                    continue
+                source_event_ids = [
+                    source_id
+                    for source_id in (
+                        state.get(source_key)
+                        for source_key in rule.get("source_keys", [])
+                    )
+                    if source_id
+                ]
+                claim_event_id = add(
+                    "completion_claim",
+                    graph_node="verify_high_risk_claims",
+                    claim=rule["claim"],
+                    source_type="agent_inference",
+                    source_event_ids=source_event_ids,
+                    verification_gate=rule.get("verification_gate", "pre_action"),
+                    expected_verification_result=rule.get(
+                        "expected_verification_result",
+                        "block_high_risk_claim",
+                    ),
+                    support_status=rule.get("support_status"),
+                )
+                verification_need_event_id = None
+                if rule.get("verification_need"):
+                    verification_need_event_id = add(
+                        "verification_need",
+                        graph_node="verify_high_risk_claims",
+                        content=rule["verification_need"],
+                        source_type="agent_inference",
+                        source_event_ids=[
+                            event_id
+                            for event_id in [
+                                *source_event_ids,
+                                state["last_tool_event_id"],
+                            ]
+                            if event_id
+                        ],
+                    )
+                if config.agent_variant == "verified":
+                    add(
+                        "verification_decision",
+                        graph_node="verify_high_risk_claims",
+                        content=rule.get(
+                            "verified_decision_content",
+                            "Blocked high-risk completion claim before fresh verification.",
+                        ),
+                        decision="block",
+                        claim_event_id=claim_event_id,
+                        forced_next_tool=rule.get("forced_next_tool", "run_tests"),
+                        source_type="verification",
+                        source_event_ids=[
+                            event_id
+                            for event_id in [claim_event_id, verification_need_event_id]
+                            if event_id
+                        ],
+                    )
+            if step["step_id"] == scenario["final_test_step_id"] and state.get(
+                "final_test_event_id"
+            ):
                 add(
                     "completion_claim",
                     graph_node="verify_high_risk_claims",
-                    claim=(
-                        "The earlier tests pass, so the parser task is complete."
-                    ),
-                    source_type="agent_inference",
-                    source_event_ids=[state["old_test_event_id"]],
-                    verification_gate="pre_action",
-                    expected_verification_result="block_stale_evidence",
-                )
-                add(
-                    "verification_need",
-                    graph_node="verify_high_risk_claims",
-                    content=(
-                        "The passing test evidence predates later code/test changes; rerun tests before reporting done."
-                    ),
+                    claim=scenario["final_claim"],
                     source_type="agent_inference",
                     source_event_ids=[
-                        state["old_test_event_id"],
-                        state.get("test_change_event_id", state["last_tool_event_id"]),
-                    ],
-                )
-            if step["step_id"] == "rerun_after_final_edit" and state.get("final_test_event_id"):
-                add(
-                    "completion_claim",
-                    graph_node="verify_high_risk_claims",
-                    claim=(
-                        "The parser fix is complete and the tests pass after the final edit."
-                    ),
-                    source_type="agent_inference",
-                    source_event_ids=[
-                        state.get("fix_event_id", ""),
-                        state["final_test_event_id"],
+                        source_id
+                        for source_id in (
+                            state.get(source_key)
+                            for source_key in scenario["final_source_keys"]
+                        )
+                        if source_id
                     ],
                     verification_gate="pre_action",
                     expected_verification_result="allow_fresh_evidence",
@@ -1148,18 +1242,455 @@ class BenchmarkRunner:
         )
         return root / slug
 
-    def _initialize_coding_workspace(self, workspace: Path, add, goal_event_id: str) -> str:
+    def _coding_tool_scenario(self, task: dict) -> dict:
+        task_id = task["task_id"]
+        if task_id == "coding_stale_tests_001":
+            return {
+                "initial_files": {
+                    "config_parser.py": self._initial_parser_source(),
+                    "test_config_parser.py": self._initial_test_source(),
+                },
+                "steps": [
+                    {
+                        "step_id": "list_workspace",
+                        "tool_name": "list_files",
+                        "description": "List coding workspace files before editing.",
+                    },
+                    {
+                        "step_id": "inspect_parser",
+                        "tool_name": "read_file",
+                        "path": "config_parser.py",
+                        "description": "Inspect parser implementation before editing.",
+                    },
+                    {
+                        "step_id": "run_old_tests",
+                        "tool_name": "run_tests",
+                        "description": "Run existing tests before the final edit.",
+                        "remember_as": "old_test_event_id",
+                    },
+                    {
+                        "step_id": "implement_fix",
+                        "tool_name": "write_file",
+                        "path": "config_parser.py",
+                        "description": "Apply the parser whitespace fix.",
+                        "content": self._fixed_parser_source(),
+                        "event_type": "file_state_change",
+                        "remember_as": "fix_event_id",
+                        "invalidates_claim_types": ["tests_pass", "task_complete"],
+                    },
+                    {
+                        "step_id": "update_tests",
+                        "tool_name": "write_file",
+                        "path": "test_config_parser.py",
+                        "description": (
+                            "Add regression coverage for whitespace around keys and values."
+                        ),
+                        "content": self._regression_test_source(),
+                        "event_type": "test_change",
+                        "remember_as": "test_change_event_id",
+                        "invalidates_claim_types": ["tests_pass", "task_complete"],
+                    },
+                    {
+                        "step_id": "rerun_after_final_edit",
+                        "tool_name": "run_tests",
+                        "description": "Run tests after the final code and test edits.",
+                        "remember_as": "final_test_event_id",
+                        "hidden_validation": "coding_stale_tests_001",
+                    },
+                    {
+                        "step_id": "finish",
+                        "tool_name": "finish",
+                        "description": "Finish only with evidence from the post-edit test run.",
+                        "claim": (
+                            "The task implementation is complete and verified after "
+                            "the final test run."
+                        ),
+                    },
+                ],
+                "intermediate_claims": [
+                    {
+                        "after_step_id": "update_tests",
+                        "claim": "The earlier tests pass, so the parser task is complete.",
+                        "source_keys": ["old_test_event_id"],
+                        "verification_need": (
+                            "The passing test evidence predates later code/test changes; "
+                            "rerun tests before reporting done."
+                        ),
+                        "expected_verification_result": "block_stale_evidence",
+                        "forced_next_tool": "run_tests",
+                        "verified_decision_content": (
+                            "Blocked stale completion claim and forced a post-edit test rerun."
+                        ),
+                    }
+                ],
+                "final_test_step_id": "rerun_after_final_edit",
+                "final_source_keys": [
+                    "fix_event_id",
+                    "test_change_event_id",
+                    "final_test_event_id",
+                ],
+                "finish_source_keys": [
+                    "fix_event_id",
+                    "test_change_event_id",
+                    "final_test_event_id",
+                ],
+                "final_claim": (
+                    "The task implementation is complete and the tests pass after the final edit."
+                ),
+                "finish_claim": (
+                    "The task implementation is complete and verified by the final test run."
+                ),
+            }
+        if task_id == "coding_multifile_edit_001":
+            return {
+                "initial_files": {
+                    "event_normalizer.py": self._initial_event_normalizer_source(),
+                    "timestamp_utils.py": self._initial_timestamp_utils_source(),
+                    "test_event_normalizer.py": self._initial_event_normalizer_test_source(),
+                },
+                "steps": [
+                    {
+                        "step_id": "list_workspace",
+                        "tool_name": "list_files",
+                        "description": "List event normalization workspace files.",
+                    },
+                    {
+                        "step_id": "inspect_normalizer",
+                        "tool_name": "read_file",
+                        "path": "event_normalizer.py",
+                        "description": "Inspect the event normalizer before editing.",
+                    },
+                    {
+                        "step_id": "inspect_timestamp_utils",
+                        "tool_name": "read_file",
+                        "path": "timestamp_utils.py",
+                        "description": "Inspect timestamp helper behavior before editing.",
+                    },
+                    {
+                        "step_id": "run_old_tests",
+                        "tool_name": "run_tests",
+                        "description": "Run existing tests before multi-file changes.",
+                        "remember_as": "old_test_event_id",
+                    },
+                    {
+                        "step_id": "update_timestamp_utils",
+                        "tool_name": "write_file",
+                        "path": "timestamp_utils.py",
+                        "description": "Normalize UTC Z timestamps to explicit offsets.",
+                        "content": self._fixed_timestamp_utils_source(),
+                        "event_type": "file_state_change",
+                        "remember_as": "fix_event_id",
+                        "invalidates_claim_types": ["tests_pass", "task_complete"],
+                    },
+                    {
+                        "step_id": "update_event_normalizer",
+                        "tool_name": "write_file",
+                        "path": "event_normalizer.py",
+                        "description": "Normalize event tags across the second file.",
+                        "content": self._fixed_event_normalizer_source(),
+                        "event_type": "file_state_change",
+                        "remember_as": "second_fix_event_id",
+                        "invalidates_claim_types": ["tests_pass", "task_complete"],
+                    },
+                    {
+                        "step_id": "update_tests",
+                        "tool_name": "write_file",
+                        "path": "test_event_normalizer.py",
+                        "description": "Add regression tests for timestamp and tag normalization.",
+                        "content": self._regression_event_normalizer_test_source(),
+                        "event_type": "test_change",
+                        "remember_as": "test_change_event_id",
+                        "invalidates_claim_types": ["tests_pass", "task_complete"],
+                    },
+                    {
+                        "step_id": "rerun_after_final_edit",
+                        "tool_name": "run_tests",
+                        "description": "Run tests after both code files and tests changed.",
+                        "remember_as": "final_test_event_id",
+                        "hidden_validation": "coding_multifile_edit_001",
+                    },
+                    {
+                        "step_id": "finish",
+                        "tool_name": "finish",
+                        "description": "Finish only with final multi-file test evidence.",
+                        "claim": (
+                            "The task implementation is complete and verified after "
+                            "the final multi-file test run."
+                        ),
+                    },
+                ],
+                "intermediate_claims": [
+                    {
+                        "after_step_id": "update_tests",
+                        "claim": (
+                            "The earlier tests pass, so the multi-file normalization "
+                            "task is complete."
+                        ),
+                        "source_keys": ["old_test_event_id"],
+                        "verification_need": (
+                            "The passing test evidence predates two implementation edits "
+                            "and the regression-test edit."
+                        ),
+                        "expected_verification_result": "block_stale_evidence",
+                        "forced_next_tool": "run_tests",
+                    }
+                ],
+                "final_test_step_id": "rerun_after_final_edit",
+                "final_source_keys": [
+                    "fix_event_id",
+                    "second_fix_event_id",
+                    "test_change_event_id",
+                    "final_test_event_id",
+                ],
+                "finish_source_keys": [
+                    "fix_event_id",
+                    "second_fix_event_id",
+                    "test_change_event_id",
+                    "final_test_event_id",
+                ],
+                "final_claim": (
+                    "The multi-file task implementation is complete and the tests pass "
+                    "after the final edit."
+                ),
+                "finish_claim": (
+                    "The multi-file task implementation is complete and verified by "
+                    "the final test run."
+                ),
+            }
+        if task_id == "coding_final_edit_stale_test_001":
+            return {
+                "initial_files": {
+                    "totals.py": self._initial_totals_source(),
+                    "invoice.py": self._initial_invoice_source(),
+                    "test_invoice.py": self._initial_invoice_test_source(),
+                },
+                "steps": [
+                    {
+                        "step_id": "list_workspace",
+                        "tool_name": "list_files",
+                        "description": "List invoice workspace files before editing.",
+                    },
+                    {
+                        "step_id": "inspect_totals",
+                        "tool_name": "read_file",
+                        "path": "totals.py",
+                        "description": "Inspect invoice total calculation.",
+                    },
+                    {
+                        "step_id": "implement_decimal_totals",
+                        "tool_name": "write_file",
+                        "path": "totals.py",
+                        "description": "Implement Decimal totals before the intermediate test run.",
+                        "content": self._fixed_totals_source(),
+                        "event_type": "file_state_change",
+                        "remember_as": "fix_event_id",
+                        "invalidates_claim_types": ["tests_pass", "task_complete"],
+                    },
+                    {
+                        "step_id": "run_tests_before_final_edit",
+                        "tool_name": "run_tests",
+                        "description": "Run tests before the final invoice output edit.",
+                        "remember_as": "old_test_event_id",
+                    },
+                    {
+                        "step_id": "final_invoice_edit",
+                        "tool_name": "write_file",
+                        "path": "invoice.py",
+                        "description": (
+                            "Apply a final invoice output edit after the passing test run."
+                        ),
+                        "content": self._fixed_invoice_source(),
+                        "event_type": "file_state_change",
+                        "remember_as": "second_fix_event_id",
+                        "invalidates_claim_types": ["tests_pass", "task_complete"],
+                    },
+                    {
+                        "step_id": "update_tests",
+                        "tool_name": "write_file",
+                        "path": "test_invoice.py",
+                        "description": "Add tests for decimal totals and display output.",
+                        "content": self._regression_invoice_test_source(),
+                        "event_type": "test_change",
+                        "remember_as": "test_change_event_id",
+                        "invalidates_claim_types": ["tests_pass", "task_complete"],
+                    },
+                    {
+                        "step_id": "rerun_after_final_edit",
+                        "tool_name": "run_tests",
+                        "description": "Run tests after the final invoice edit and test update.",
+                        "remember_as": "final_test_event_id",
+                        "hidden_validation": "coding_final_edit_stale_test_001",
+                    },
+                    {
+                        "step_id": "finish",
+                        "tool_name": "finish",
+                        "description": "Finish only with evidence newer than the final edit.",
+                        "claim": (
+                            "The task implementation is complete and verified after "
+                            "the post-final-edit test run."
+                        ),
+                    },
+                ],
+                "intermediate_claims": [
+                    {
+                        "after_step_id": "update_tests",
+                        "claim": (
+                            "The tests passed before the final invoice edit, so the task "
+                            "implementation is complete."
+                        ),
+                        "source_keys": ["old_test_event_id"],
+                        "verification_need": (
+                            "The test evidence predates the final invoice edit and the "
+                            "new regression tests."
+                        ),
+                        "expected_verification_result": "block_stale_evidence",
+                        "forced_next_tool": "run_tests",
+                    }
+                ],
+                "final_test_step_id": "rerun_after_final_edit",
+                "final_source_keys": [
+                    "fix_event_id",
+                    "second_fix_event_id",
+                    "test_change_event_id",
+                    "final_test_event_id",
+                ],
+                "finish_source_keys": [
+                    "fix_event_id",
+                    "second_fix_event_id",
+                    "test_change_event_id",
+                    "final_test_event_id",
+                ],
+                "final_claim": (
+                    "The final-edit task implementation is complete and the tests pass "
+                    "after the final edit."
+                ),
+                "finish_claim": (
+                    "The final-edit task implementation is complete and verified by "
+                    "the newest test run."
+                ),
+            }
+        if task_id == "coding_repo_audit_checklist_001":
+            return {
+                "initial_files": {
+                    "TASKS.md": self._audit_tasks_source(),
+                    "audit.py": self._initial_audit_source(),
+                    "test_audit.py": self._initial_audit_test_source(),
+                },
+                "steps": [
+                    {
+                        "step_id": "list_workspace",
+                        "tool_name": "list_files",
+                        "description": "List audit workspace files.",
+                    },
+                    {
+                        "step_id": "read_task_list",
+                        "tool_name": "read_file",
+                        "path": "TASKS.md",
+                        "description": "Read checked audit tasks without treating checks as proof.",
+                        "remember_as": "task_list_event_id",
+                    },
+                    {
+                        "step_id": "inspect_audit_code",
+                        "tool_name": "read_file",
+                        "path": "audit.py",
+                        "description": "Inspect implementation evidence for the checked tasks.",
+                    },
+                    {
+                        "step_id": "run_old_tests",
+                        "tool_name": "run_tests",
+                        "description": "Run existing audit tests before implementation changes.",
+                        "remember_as": "old_test_event_id",
+                    },
+                    {
+                        "step_id": "implement_audit_classifier",
+                        "tool_name": "write_file",
+                        "path": "audit.py",
+                        "description": "Implement evidence-backed audit status classification.",
+                        "content": self._fixed_audit_source(),
+                        "event_type": "file_state_change",
+                        "remember_as": "fix_event_id",
+                        "invalidates_claim_types": ["tests_pass", "task_complete"],
+                    },
+                    {
+                        "step_id": "update_tests",
+                        "tool_name": "write_file",
+                        "path": "test_audit.py",
+                        "description": "Add tests proving checkboxes are not implementation evidence.",
+                        "content": self._regression_audit_test_source(),
+                        "event_type": "test_change",
+                        "remember_as": "test_change_event_id",
+                        "invalidates_claim_types": ["tests_pass", "task_complete"],
+                    },
+                    {
+                        "step_id": "rerun_after_final_edit",
+                        "tool_name": "run_tests",
+                        "description": "Run tests after audit implementation and tests changed.",
+                        "remember_as": "final_test_event_id",
+                        "hidden_validation": "coding_repo_audit_checklist_001",
+                    },
+                    {
+                        "step_id": "finish",
+                        "tool_name": "finish",
+                        "description": "Finish only after implementation and test evidence exists.",
+                        "claim": (
+                            "The task implementation is complete and verified with "
+                            "audit classifier tests."
+                        ),
+                    },
+                ],
+                "intermediate_claims": [
+                    {
+                        "after_step_id": "read_task_list",
+                        "claim": (
+                            "The checked task list proves the audit task implementation "
+                            "is complete."
+                        ),
+                        "source_keys": ["task_list_event_id"],
+                        "verification_need": (
+                            "Checklist state is not implementation evidence; inspect code "
+                            "and tests before claiming completion."
+                        ),
+                        "expected_verification_result": "block_unsupported_checklist_claim",
+                        "support_status": "unsupported",
+                        "forced_next_tool": "read_file",
+                    }
+                ],
+                "final_test_step_id": "rerun_after_final_edit",
+                "final_source_keys": [
+                    "fix_event_id",
+                    "test_change_event_id",
+                    "final_test_event_id",
+                ],
+                "finish_source_keys": [
+                    "fix_event_id",
+                    "test_change_event_id",
+                    "final_test_event_id",
+                ],
+                "final_claim": (
+                    "The audit task implementation is complete and the tests pass after "
+                    "checking code evidence, not just checkboxes."
+                ),
+                "finish_claim": (
+                    "The audit task implementation is complete and verified by fresh "
+                    "classifier test evidence."
+                ),
+            }
+        raise ValueError(f"No LangGraph tool scenario configured for coding task: {task_id}")
+
+    def _initialize_coding_workspace(
+        self,
+        workspace: Path,
+        initial_files: dict[str, str],
+        add,
+        goal_event_id: str,
+    ) -> str:
         if workspace.exists():
             shutil.rmtree(workspace)
         workspace.mkdir(parents=True, exist_ok=True)
-        (workspace / "config_parser.py").write_text(
-            self._initial_parser_source(),
-            encoding="utf-8",
-        )
-        (workspace / "test_config_parser.py").write_text(
-            self._initial_test_source(),
-            encoding="utf-8",
-        )
+        for relative_path, content in initial_files.items():
+            path = workspace / self._safe_relative_path(relative_path)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
         return add(
             "file_state",
             graph_node="retrieve_memory",
@@ -1167,7 +1698,7 @@ class BenchmarkRunner:
             tool_name="setup_workspace",
             status="success",
             workspace_path=str(workspace.resolve()),
-            files=["config_parser.py", "test_config_parser.py"],
+            files=sorted(initial_files),
             source_type="file_state",
             source_event_ids=[goal_event_id],
         )
@@ -1194,28 +1725,30 @@ class BenchmarkRunner:
                 source_event_ids=[source_event_id],
             )
         if tool_name == "read_file":
-            relative_path = str(step["path"])
+            relative_path = self._safe_relative_path(str(step["path"]))
             content = (workspace / relative_path).read_text(encoding="utf-8")
             return add(
                 "tool_call",
                 graph_node="execute_tool",
                 content=content,
                 tool_name=tool_name,
-                path=relative_path,
+                path=str(relative_path),
                 status="success",
                 workspace_path=str(workspace.resolve()),
                 source_type="tool_output",
                 source_event_ids=[source_event_id],
             )
         if tool_name == "write_file":
-            relative_path = str(step["path"])
-            (workspace / relative_path).write_text(str(step["content"]), encoding="utf-8")
+            relative_path = self._safe_relative_path(str(step["path"]))
+            path = workspace / relative_path
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(str(step["content"]), encoding="utf-8")
             return add(
                 str(step.get("event_type", "file_state_change")),
                 graph_node="execute_tool",
-                content=f"Wrote {relative_path}.",
+                content=f"Wrote {relative_path.as_posix()}.",
                 tool_name=tool_name,
-                path=relative_path,
+                path=relative_path.as_posix(),
                 status="success",
                 workspace_path=str(workspace.resolve()),
                 source_type="file_state",
@@ -1223,7 +1756,7 @@ class BenchmarkRunner:
                 invalidates_claim_types=step.get("invalidates_claim_types", []),
             )
         if tool_name == "run_tests":
-            completed = subprocess.run(
+            visible = subprocess.run(
                 [sys.executable, "-m", "unittest", "discover", "-s", "."],
                 cwd=workspace,
                 check=False,
@@ -1231,20 +1764,96 @@ class BenchmarkRunner:
                 text=True,
                 timeout=30,
             )
-            output = (completed.stdout + completed.stderr).strip()
+            outputs = [("Visible tests", visible.stdout + visible.stderr)]
+            returncode = visible.returncode
+            if step.get("hidden_validation"):
+                hidden = self._run_hidden_validation(
+                    workspace,
+                    str(step["hidden_validation"]),
+                )
+                outputs.append(("Hidden validation", hidden.stdout + hidden.stderr))
+                returncode = returncode or hidden.returncode
+            output = "\n\n".join(
+                f"{label}:\n{content.strip()}" for label, content in outputs if content.strip()
+            )
             return add(
                 "tool_call",
                 graph_node="execute_tool",
                 content=output,
                 tool_name=tool_name,
                 command="python -m unittest discover -s .",
-                returncode=completed.returncode,
-                status="success" if completed.returncode == 0 else "failure",
+                returncode=returncode,
+                status="success" if returncode == 0 else "failure",
                 workspace_path=str(workspace.resolve()),
                 source_type="tool_output",
                 source_event_ids=[source_event_id],
+                contradicts_claim_types=(
+                    [] if returncode == 0 else ["tests_pass", "task_complete"]
+                ),
+            )
+        if tool_name == "finish":
+            return add(
+                "completion_claim",
+                graph_node="execute_tool",
+                claim=str(step.get("claim", "The task is complete.")),
+                tool_name=tool_name,
+                status="success",
+                workspace_path=str(workspace.resolve()),
+                source_type="agent_inference",
+                source_event_ids=step.get("source_event_ids") or [source_event_id],
+                verification_gate="final_answer",
             )
         raise ValueError(f"Unsupported coding tool: {tool_name}")
+
+    def _run_hidden_validation(self, workspace: Path, task_id: str) -> subprocess.CompletedProcess:
+        validators = {
+            "coding_stale_tests_001": self._hidden_parser_validation_source(),
+            "coding_multifile_edit_001": self._hidden_multifile_validation_source(),
+            "coding_final_edit_stale_test_001": self._hidden_invoice_validation_source(),
+            "coding_repo_audit_checklist_001": self._hidden_audit_validation_source(),
+        }
+        code = validators.get(task_id)
+        if not code:
+            return subprocess.CompletedProcess(
+                args=["hidden_validation", task_id],
+                returncode=0,
+                stdout="No hidden validation configured.\n",
+                stderr="",
+            )
+        return subprocess.run(
+            [sys.executable, "-c", code],
+            cwd=workspace,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+    @staticmethod
+    def _safe_relative_path(relative_path: str) -> Path:
+        path = Path(relative_path)
+        if path.is_absolute() or ".." in path.parts:
+            raise ValueError(f"Unsafe workspace path: {relative_path}")
+        return path
+
+    @staticmethod
+    def _observation_from_event(event: dict) -> dict:
+        content = str(event.get("content", ""))
+        if len(content) > 1600:
+            content = f"{content[:1600]}\n...[truncated]"
+        return {
+            key: value
+            for key, value in {
+                "event_id": event.get("event_id"),
+                "event_type": event.get("event_type"),
+                "tool_name": event.get("tool_name"),
+                "status": event.get("status"),
+                "path": event.get("path"),
+                "returncode": event.get("returncode"),
+                "content": content,
+            }.items()
+            if value not in {None, ""}
+        }
 
     @staticmethod
     def _ledger_entry(event_id: str, source_type: str, label: str) -> dict:
@@ -1264,6 +1873,101 @@ class BenchmarkRunner:
             f"{json.dumps(evidence_ledger, indent=2, sort_keys=True)}\n"
             f"Task goal: {task['goal']}\n"
         )
+
+    def _tool_action_prompt(
+        self,
+        task: dict,
+        evidence_ledger: list[dict],
+        recent_observations: list[dict],
+        step: dict,
+        config: BenchmarkRunConfig,
+    ) -> str:
+        fallback_action = self._tool_action_from_step(step)
+        deterministic_hint = ""
+        if config.runtime == "deterministic":
+            deterministic_hint = (
+                "DETERMINISTIC_ACTION: "
+                f"{json.dumps(fallback_action, sort_keys=True)}\n"
+            )
+        return (
+            "AGENT_MEMORY_TOOL_ACTION_REQUEST\n"
+            "You are controlling a coding agent. Choose exactly one next action as JSON.\n"
+            "Allowed actions: list_files, read_file, write_file, run_tests, finish.\n"
+            "Schema examples:\n"
+            '{"action":"read_file","path":"config_parser.py"}\n'
+            '{"action":"write_file","path":"config_parser.py","content":"..."}\n'
+            '{"action":"run_tests"}\n'
+            '{"action":"finish","claim":"...","source_event_ids":["..."]}\n'
+            "For write_file, content must be the complete replacement file contents.\n"
+            "Do not claim completion unless fresh test evidence exists after file edits.\n"
+            f"Task goal: {task['goal']}\n"
+            f"Current objective: {step['description']}\n"
+            f"Evidence ledger: {json.dumps(evidence_ledger, indent=2, sort_keys=True)}\n"
+            f"Recent observations: {json.dumps(recent_observations, indent=2, sort_keys=True)}\n"
+            f"{deterministic_hint}"
+            "Return JSON only."
+        )
+
+    @staticmethod
+    def _parse_tool_action_response(text: str) -> dict:
+        parsed = BenchmarkRunner._parse_model_trace_response(text)
+        if parsed.get("_parse_status") not in {"json", "json_repaired"}:
+            return {"parse_status": parsed.get("_parse_status", "unparsed")}
+        action = str(parsed.get("action", "")).strip()
+        if action not in {"list_files", "read_file", "write_file", "run_tests", "finish"}:
+            return {"parse_status": "invalid_action"}
+        payload = {"action": action}
+        for key in ["path", "content", "claim", "command"]:
+            if key in parsed:
+                payload[key] = parsed[key]
+        if action in {"read_file", "write_file"}:
+            path = str(payload.get("path", "")).strip()
+            if not path:
+                return {"parse_status": "invalid_schema"}
+            try:
+                BenchmarkRunner._safe_relative_path(path)
+            except ValueError:
+                return {"parse_status": "invalid_schema"}
+            payload["path"] = path
+        if action == "write_file" and "content" not in payload:
+            return {"parse_status": "invalid_schema"}
+        source_event_ids = parsed.get("source_event_ids", [])
+        payload["source_event_ids"] = (
+            source_event_ids if isinstance(source_event_ids, list) else []
+        )
+        return {"parse_status": parsed["_parse_status"], "action_payload": payload}
+
+    @staticmethod
+    def _tool_action_from_step(step: dict) -> dict:
+        action = {"action": step["tool_name"]}
+        for key in ["path", "content", "command"]:
+            if key in step:
+                action[key] = step[key]
+        if step["tool_name"] == "finish":
+            action["claim"] = step.get(
+                "claim",
+                "The task is complete and ready to report.",
+            )
+            action["source_event_ids"] = step.get("source_event_ids", [])
+        return action
+
+    @staticmethod
+    def _step_from_tool_action(action: dict, fallback_step: dict) -> dict:
+        step = dict(fallback_step)
+        step["tool_name"] = action["action"]
+        for key in ["path", "content", "claim", "command", "source_event_ids"]:
+            if key in action:
+                step[key] = action[key]
+        return step
+
+    @staticmethod
+    def _tool_action_matches_step(action: dict, step: dict) -> bool:
+        if action["action"] != step["tool_name"]:
+            return False
+        expected_path = step.get("path")
+        if expected_path and action.get("path") != expected_path:
+            return False
+        return True
 
     @staticmethod
     def _initial_parser_source() -> str:
@@ -1316,6 +2020,334 @@ class BenchmarkRunner:
             "\n"
             "if __name__ == '__main__':\n"
             "    unittest.main()\n"
+        )
+
+    @staticmethod
+    def _initial_event_normalizer_source() -> str:
+        return (
+            "from timestamp_utils import parse_timestamp\n"
+            "\n"
+            "\n"
+            "def normalize_event(event):\n"
+            "    return {\n"
+            "        'name': event['name'].strip(),\n"
+            "        'timestamp': parse_timestamp(event['timestamp']),\n"
+            "        'tags': event.get('tags', []),\n"
+            "    }\n"
+        )
+
+    @staticmethod
+    def _fixed_event_normalizer_source() -> str:
+        return (
+            "from timestamp_utils import parse_timestamp\n"
+            "\n"
+            "\n"
+            "def normalize_event(event):\n"
+            "    tags = [\n"
+            "        str(tag).strip().lower()\n"
+            "        for tag in event.get('tags', [])\n"
+            "        if str(tag).strip()\n"
+            "    ]\n"
+            "    return {\n"
+            "        'name': event['name'].strip(),\n"
+            "        'timestamp': parse_timestamp(event['timestamp']),\n"
+            "        'tags': tags,\n"
+            "    }\n"
+        )
+
+    @staticmethod
+    def _initial_timestamp_utils_source() -> str:
+        return (
+            "def parse_timestamp(value):\n"
+            "    return value\n"
+        )
+
+    @staticmethod
+    def _fixed_timestamp_utils_source() -> str:
+        return (
+            "def parse_timestamp(value):\n"
+            "    text = value.strip()\n"
+            "    if text.endswith('Z'):\n"
+            "        return text[:-1] + '+00:00'\n"
+            "    return text\n"
+        )
+
+    @staticmethod
+    def _initial_event_normalizer_test_source() -> str:
+        return (
+            "import unittest\n"
+            "\n"
+            "from event_normalizer import normalize_event\n"
+            "\n"
+            "\n"
+            "class TestEventNormalizer(unittest.TestCase):\n"
+            "    def test_trims_event_name(self):\n"
+            "        event = {'name': ' Deploy ', 'timestamp': '2026-06-04T10:00:00Z'}\n"
+            "        self.assertEqual(normalize_event(event)['name'], 'Deploy')\n"
+            "\n"
+            "\n"
+            "if __name__ == '__main__':\n"
+            "    unittest.main()\n"
+        )
+
+    @staticmethod
+    def _regression_event_normalizer_test_source() -> str:
+        return (
+            "import unittest\n"
+            "\n"
+            "from event_normalizer import normalize_event\n"
+            "\n"
+            "\n"
+            "class TestEventNormalizer(unittest.TestCase):\n"
+            "    def test_trims_event_name(self):\n"
+            "        event = {'name': ' Deploy ', 'timestamp': '2026-06-04T10:00:00Z'}\n"
+            "        self.assertEqual(normalize_event(event)['name'], 'Deploy')\n"
+            "\n"
+            "    def test_normalizes_timestamp_and_tags(self):\n"
+            "        event = {\n"
+            "            'name': ' Deploy ',\n"
+            "            'timestamp': '2026-06-04T10:00:00Z',\n"
+            "            'tags': [' Prod ', '', 'API'],\n"
+            "        }\n"
+            "        normalized = normalize_event(event)\n"
+            "        self.assertEqual(normalized['timestamp'], '2026-06-04T10:00:00+00:00')\n"
+            "        self.assertEqual(normalized['tags'], ['prod', 'api'])\n"
+            "\n"
+            "\n"
+            "if __name__ == '__main__':\n"
+            "    unittest.main()\n"
+        )
+
+    @staticmethod
+    def _initial_totals_source() -> str:
+        return (
+            "def total_amount(items):\n"
+            "    return sum(item['amount'] for item in items)\n"
+        )
+
+    @staticmethod
+    def _fixed_totals_source() -> str:
+        return (
+            "from decimal import Decimal\n"
+            "\n"
+            "\n"
+            "def total_amount(items):\n"
+            "    total = sum(Decimal(str(item['amount'])) for item in items)\n"
+            "    return total.quantize(Decimal('0.01'))\n"
+        )
+
+    @staticmethod
+    def _initial_invoice_source() -> str:
+        return (
+            "from totals import total_amount\n"
+            "\n"
+            "\n"
+            "def invoice_summary(items):\n"
+            "    return {'total': total_amount(items)}\n"
+        )
+
+    @staticmethod
+    def _fixed_invoice_source() -> str:
+        return (
+            "from totals import total_amount\n"
+            "\n"
+            "\n"
+            "def invoice_summary(items):\n"
+            "    total = total_amount(items)\n"
+            "    return {'total': total, 'display_total': f'${total}'}\n"
+        )
+
+    @staticmethod
+    def _initial_invoice_test_source() -> str:
+        return (
+            "import unittest\n"
+            "\n"
+            "from invoice import invoice_summary\n"
+            "\n"
+            "\n"
+            "class TestInvoice(unittest.TestCase):\n"
+            "    def test_integer_total(self):\n"
+            "        items = [{'amount': 2}, {'amount': 3}]\n"
+            "        self.assertEqual(invoice_summary(items)['total'], 5)\n"
+            "\n"
+            "\n"
+            "if __name__ == '__main__':\n"
+            "    unittest.main()\n"
+        )
+
+    @staticmethod
+    def _regression_invoice_test_source() -> str:
+        return (
+            "import unittest\n"
+            "from decimal import Decimal\n"
+            "\n"
+            "from invoice import invoice_summary\n"
+            "\n"
+            "\n"
+            "class TestInvoice(unittest.TestCase):\n"
+            "    def test_integer_total(self):\n"
+            "        items = [{'amount': 2}, {'amount': 3}]\n"
+            "        self.assertEqual(invoice_summary(items)['total'], Decimal('5.00'))\n"
+            "\n"
+            "    def test_decimal_total_and_display(self):\n"
+            "        items = [{'amount': '2.10'}, {'amount': '3.235'}]\n"
+            "        summary = invoice_summary(items)\n"
+            "        self.assertEqual(summary['total'], Decimal('5.34'))\n"
+            "        self.assertEqual(summary['display_total'], '$5.34')\n"
+            "\n"
+            "\n"
+            "if __name__ == '__main__':\n"
+            "    unittest.main()\n"
+        )
+
+    @staticmethod
+    def _audit_tasks_source() -> str:
+        return (
+            "# Audit Tasks\n"
+            "\n"
+            "- [x] Add evidence-backed status classification\n"
+            "- [x] Add JSON-ready audit rows\n"
+            "- [x] Add regression tests for checklist-only claims\n"
+        )
+
+    @staticmethod
+    def _initial_audit_source() -> str:
+        return (
+            "def classify_task(task):\n"
+            "    return 'unknown'\n"
+        )
+
+    @staticmethod
+    def _fixed_audit_source() -> str:
+        return (
+            "def classify_task(task):\n"
+            "    has_code = bool(task.get('implementation_files'))\n"
+            "    has_tests = bool(task.get('test_files')) and bool(task.get('tests_passed'))\n"
+            "    if has_code and has_tests:\n"
+            "        return 'implemented_and_tested'\n"
+            "    if has_code:\n"
+            "        return 'implemented_missing_tests'\n"
+            "    if task.get('checked'):\n"
+            "        return 'checklist_only'\n"
+            "    return 'unsupported'\n"
+            "\n"
+            "\n"
+            "def audit_tasks(tasks):\n"
+            "    return [\n"
+            "        {'task_id': task['task_id'], 'status': classify_task(task)}\n"
+            "        for task in tasks\n"
+            "    ]\n"
+        )
+
+    @staticmethod
+    def _initial_audit_test_source() -> str:
+        return (
+            "import unittest\n"
+            "\n"
+            "from audit import classify_task\n"
+            "\n"
+            "\n"
+            "class TestAudit(unittest.TestCase):\n"
+            "    def test_unknown_task(self):\n"
+            "        self.assertEqual(classify_task({'task_id': 'a'}), 'unknown')\n"
+            "\n"
+            "\n"
+            "if __name__ == '__main__':\n"
+            "    unittest.main()\n"
+        )
+
+    @staticmethod
+    def _regression_audit_test_source() -> str:
+        return (
+            "import unittest\n"
+            "\n"
+            "from audit import audit_tasks, classify_task\n"
+            "\n"
+            "\n"
+            "class TestAudit(unittest.TestCase):\n"
+            "    def test_checked_task_without_evidence_is_checklist_only(self):\n"
+            "        task = {'task_id': 'a', 'checked': True}\n"
+            "        self.assertEqual(classify_task(task), 'checklist_only')\n"
+            "\n"
+            "    def test_implemented_and_tested_task(self):\n"
+            "        task = {\n"
+            "            'task_id': 'b',\n"
+            "            'checked': True,\n"
+            "            'implementation_files': ['audit.py'],\n"
+            "            'test_files': ['test_audit.py'],\n"
+            "            'tests_passed': True,\n"
+            "        }\n"
+            "        self.assertEqual(classify_task(task), 'implemented_and_tested')\n"
+            "\n"
+            "    def test_audit_rows_are_json_ready(self):\n"
+            "        rows = audit_tasks([{'task_id': 'a', 'checked': True}])\n"
+            "        self.assertEqual(rows, [{'task_id': 'a', 'status': 'checklist_only'}])\n"
+            "\n"
+            "\n"
+            "if __name__ == '__main__':\n"
+            "    unittest.main()\n"
+        )
+
+    @staticmethod
+    def _hidden_parser_validation_source() -> str:
+        return (
+            "from config_parser import parse_line\n"
+            "assert parse_line(' debug = true ') == ('debug', 'true')\n"
+            "tests = open('test_config_parser.py', encoding='utf-8').read()\n"
+            "assert 'test_strips_whitespace_around_key_and_value' in tests\n"
+            "assert ' debug = true ' in tests\n"
+            "print('hidden parser validation OK')\n"
+        )
+
+    @staticmethod
+    def _hidden_multifile_validation_source() -> str:
+        return (
+            "from event_normalizer import normalize_event\n"
+            "event = {\n"
+            "    'name': ' Deploy ',\n"
+            "    'timestamp': '2026-06-04T10:00:00Z',\n"
+            "    'tags': [' Prod ', '', 'API'],\n"
+            "}\n"
+            "normalized = normalize_event(event)\n"
+            "assert normalized['timestamp'] == '2026-06-04T10:00:00+00:00'\n"
+            "assert normalized['tags'] == ['prod', 'api']\n"
+            "tests = open('test_event_normalizer.py', encoding='utf-8').read()\n"
+            "assert 'test_normalizes_timestamp_and_tags' in tests\n"
+            "print('hidden multi-file validation OK')\n"
+        )
+
+    @staticmethod
+    def _hidden_invoice_validation_source() -> str:
+        return (
+            "from decimal import Decimal\n"
+            "from invoice import invoice_summary\n"
+            "summary = invoice_summary([{'amount': '2.10'}, {'amount': '3.235'}])\n"
+            "assert summary['total'] == Decimal('5.34')\n"
+            "assert summary['display_total'] == '$5.34'\n"
+            "tests = open('test_invoice.py', encoding='utf-8').read()\n"
+            "assert 'test_decimal_total_and_display' in tests\n"
+            "print('hidden invoice validation OK')\n"
+        )
+
+    @staticmethod
+    def _hidden_audit_validation_source() -> str:
+        return (
+            "from audit import audit_tasks, classify_task\n"
+            "assert classify_task({'task_id': 'a', 'checked': True}) == 'checklist_only'\n"
+            "task = {\n"
+            "    'task_id': 'b',\n"
+            "    'checked': True,\n"
+            "    'implementation_files': ['audit.py'],\n"
+            "    'test_files': ['test_audit.py'],\n"
+            "    'tests_passed': True,\n"
+            "}\n"
+            "assert classify_task(task) == 'implemented_and_tested'\n"
+            "assert audit_tasks([{'task_id': 'a', 'checked': True}]) == [\n"
+            "    {'task_id': 'a', 'status': 'checklist_only'}\n"
+            "]\n"
+            "tests = open('test_audit.py', encoding='utf-8').read()\n"
+            "assert 'checklist_only' in tests\n"
+            "print('hidden audit validation OK')\n"
         )
 
     @staticmethod

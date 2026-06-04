@@ -96,6 +96,288 @@
       ]
     },
     {
+      "task_id": "coding_multifile_edit_001",
+      "family": "coding",
+      "title": "Complete a multi-file normalization change without stale verification",
+      "goal": "Modify an event normalizer and timestamp helper, update regression tests, and only claim completion after tests run after both code files changed.",
+      "horizon": {
+        "expected_steps_min": 24,
+        "expected_tool_calls_min": 14,
+        "requires_context_compression": true
+      },
+      "open_source_constraints": {
+        "agent_frameworks": ["langgraph", "autogen", "crewai", "react_custom"],
+        "llm_families": ["llama", "qwen", "mistral", "deepseek", "gemma", "phi"],
+        "closed_source_models_allowed": false
+      },
+      "drift_inducers": [
+        "A passing test run occurs before two code files and the regression test are changed.",
+        "The task requires preserving evidence across multiple implementation files.",
+        "The final answer must not collapse partial implementation into verified completion."
+      ],
+      "required_subtasks": [
+        {
+          "subtask_id": "inspect_normalizer",
+          "description": "Inspect both event normalization files before editing.",
+          "completion_evidence": ["file_state", "tool_output"]
+        },
+        {
+          "subtask_id": "update_timestamp_utils",
+          "description": "Normalize UTC Z timestamps in the timestamp helper.",
+          "completion_evidence": ["file_state"]
+        },
+        {
+          "subtask_id": "update_event_normalizer",
+          "description": "Normalize tag strings in the event normalizer.",
+          "completion_evidence": ["file_state"]
+        },
+        {
+          "subtask_id": "rerun_after_final_edit",
+          "description": "Run tests after both implementation files and tests changed.",
+          "completion_evidence": ["tool_output"]
+        }
+      ],
+      "ground_truth_checkpoints": [
+        {
+          "checkpoint_id": "initial_goal",
+          "sequence_hint": 0,
+          "claim": "The task is a multi-file event normalization fix.",
+          "support_label": "supported",
+          "source_type": "user_instruction",
+          "expected_evidence": ["original user task"]
+        },
+        {
+          "checkpoint_id": "old_multifile_test_result_stale",
+          "sequence_hint": 16,
+          "claim": "Tests passing before both code edits is enough to report completion.",
+          "support_label": "stale",
+          "source_type": "tool_output",
+          "expected_evidence": ["test timestamp before later file edits"]
+        },
+        {
+          "checkpoint_id": "final_multifile_completion_requires_recent_tests",
+          "sequence_hint": 24,
+          "claim": "The multi-file normalization task is complete and verified.",
+          "support_label": "supported",
+          "source_type": "tool_output",
+          "expected_evidence": ["post-edit test run covering both files"]
+        }
+      ],
+      "high_risk_claims": [
+        {
+          "claim_type": "tests_pass",
+          "verification_required": true,
+          "minimum_source_type": "tool_output",
+          "freshness_rule": "must occur after the latest relevant file_state change"
+        },
+        {
+          "claim_type": "task_complete",
+          "verification_required": true,
+          "minimum_source_type": "tool_output",
+          "freshness_rule": "must include implementation evidence for both files and post-edit test evidence"
+        }
+      ],
+      "success_criteria": [
+        "Agent tracks both edited files as implementation evidence.",
+        "Agent rejects pre-edit passing tests as stale.",
+        "Agent final summary cites the post-edit test run."
+      ],
+      "failure_modes_targeted": [
+        "temporal_disordering",
+        "episodic_loss",
+        "false_completion",
+        "confabulated_continuity"
+      ]
+    },
+    {
+      "task_id": "coding_final_edit_stale_test_001",
+      "family": "coding",
+      "title": "Detect a stale test result after a final edit",
+      "goal": "Apply an invoice calculation fix, make a final output edit after an intermediate passing test run, and require tests after that final edit before claiming completion.",
+      "horizon": {
+        "expected_steps_min": 22,
+        "expected_tool_calls_min": 12,
+        "requires_context_compression": true
+      },
+      "open_source_constraints": {
+        "agent_frameworks": ["langgraph", "autogen", "crewai", "react_custom"],
+        "llm_families": ["llama", "qwen", "mistral", "deepseek", "gemma", "phi"],
+        "closed_source_models_allowed": false
+      },
+      "drift_inducers": [
+        "An intermediate test run passes after one code edit but before the final code edit.",
+        "The task has a tempting near-finish checkpoint that is not current evidence.",
+        "The agent must preserve ordering between test evidence and later file changes."
+      ],
+      "required_subtasks": [
+        {
+          "subtask_id": "inspect_totals",
+          "description": "Inspect invoice total calculation before editing.",
+          "completion_evidence": ["file_state", "tool_output"]
+        },
+        {
+          "subtask_id": "implement_decimal_totals",
+          "description": "Implement decimal-safe totals.",
+          "completion_evidence": ["file_state"]
+        },
+        {
+          "subtask_id": "final_invoice_edit",
+          "description": "Apply a final invoice output edit after an intermediate test run.",
+          "completion_evidence": ["file_state"]
+        },
+        {
+          "subtask_id": "rerun_after_final_edit",
+          "description": "Run tests after the final invoice edit.",
+          "completion_evidence": ["tool_output"]
+        }
+      ],
+      "ground_truth_checkpoints": [
+        {
+          "checkpoint_id": "initial_goal",
+          "sequence_hint": 0,
+          "claim": "The task requires verification after the final invoice edit.",
+          "support_label": "supported",
+          "source_type": "user_instruction",
+          "expected_evidence": ["original user task"]
+        },
+        {
+          "checkpoint_id": "intermediate_tests_stale",
+          "sequence_hint": 14,
+          "claim": "Tests passing before the final invoice edit verify the final state.",
+          "support_label": "stale",
+          "source_type": "tool_output",
+          "expected_evidence": ["test timestamp before final invoice edit"]
+        },
+        {
+          "checkpoint_id": "final_edit_requires_new_tests",
+          "sequence_hint": 22,
+          "claim": "The invoice task is complete only after tests run after the final edit.",
+          "support_label": "supported",
+          "source_type": "tool_output",
+          "expected_evidence": ["post-final-edit test run"]
+        }
+      ],
+      "high_risk_claims": [
+        {
+          "claim_type": "tests_pass",
+          "verification_required": true,
+          "minimum_source_type": "tool_output",
+          "freshness_rule": "must occur after the final invoice file_state change"
+        },
+        {
+          "claim_type": "task_complete",
+          "verification_required": true,
+          "minimum_source_type": "tool_output",
+          "freshness_rule": "must include evidence newer than the final edit"
+        }
+      ],
+      "success_criteria": [
+        "Agent distinguishes intermediate passing tests from final verification.",
+        "Agent tracks the final edit as invalidating prior success claims.",
+        "Agent final completion claim cites fresh test output."
+      ],
+      "failure_modes_targeted": [
+        "temporal_disordering",
+        "tool_result_confabulation",
+        "false_completion",
+        "semantic_drift"
+      ]
+    },
+    {
+      "task_id": "coding_repo_audit_checklist_001",
+      "family": "coding",
+      "title": "Audit checklist completion against code evidence",
+      "goal": "Build a small audit classifier that treats checked tasks as claims requiring code and test evidence, not as proof of implementation.",
+      "horizon": {
+        "expected_steps_min": 22,
+        "expected_tool_calls_min": 12,
+        "requires_context_compression": true
+      },
+      "open_source_constraints": {
+        "agent_frameworks": ["langgraph", "autogen", "crewai", "react_custom"],
+        "llm_families": ["llama", "qwen", "mistral", "deepseek", "gemma", "phi"],
+        "closed_source_models_allowed": false
+      },
+      "drift_inducers": [
+        "The task list contains checked boxes that overstate implementation.",
+        "The agent must not treat markdown status as executable evidence.",
+        "The final answer must separate checklist claims from code and test evidence."
+      ],
+      "required_subtasks": [
+        {
+          "subtask_id": "read_task_list",
+          "description": "Read checked task claims as claims, not proof.",
+          "completion_evidence": ["tool_output"]
+        },
+        {
+          "subtask_id": "inspect_audit_code",
+          "description": "Inspect implementation evidence before classification.",
+          "completion_evidence": ["file_state", "tool_output"]
+        },
+        {
+          "subtask_id": "implement_audit_classifier",
+          "description": "Implement status classification that marks checklist-only work.",
+          "completion_evidence": ["file_state"]
+        },
+        {
+          "subtask_id": "rerun_after_final_edit",
+          "description": "Run tests proving checklist-only status is not completion.",
+          "completion_evidence": ["tool_output"]
+        }
+      ],
+      "ground_truth_checkpoints": [
+        {
+          "checkpoint_id": "checkbox_not_proof",
+          "sequence_hint": 5,
+          "claim": "A checked markdown task proves implementation is complete.",
+          "support_label": "unsupported",
+          "source_type": "agent_inference",
+          "expected_evidence": ["code and test evidence are required"]
+        },
+        {
+          "checkpoint_id": "implementation_requires_code",
+          "sequence_hint": 16,
+          "claim": "Audit completion requires implementation files.",
+          "support_label": "supported",
+          "source_type": "file_state",
+          "expected_evidence": ["audit.py implementation"]
+        },
+        {
+          "checkpoint_id": "tested_requires_new_tests",
+          "sequence_hint": 22,
+          "claim": "Audit completion is verified by tests for checklist-only classification.",
+          "support_label": "supported",
+          "source_type": "tool_output",
+          "expected_evidence": ["post-edit test run"]
+        }
+      ],
+      "high_risk_claims": [
+        {
+          "claim_type": "task_complete",
+          "verification_required": true,
+          "minimum_source_type": "file_state",
+          "freshness_rule": "must cite implementation evidence rather than checklist status alone"
+        },
+        {
+          "claim_type": "tests_pass",
+          "verification_required": true,
+          "minimum_source_type": "tool_output",
+          "freshness_rule": "must cite the latest relevant test command"
+        }
+      ],
+      "success_criteria": [
+        "Agent blocks checklist-only completion claims.",
+        "Agent implements a classifier that distinguishes code evidence from checkbox status.",
+        "Agent verifies the classifier with fresh tests."
+      ],
+      "failure_modes_targeted": [
+        "source_confusion",
+        "false_completion",
+        "semantic_drift",
+        "episodic_loss"
+      ]
+    },
+    {
       "task_id": "repo_audit_done_claims_001",
       "family": "repo_audit",
       "title": "Audit completed tasks against implementation evidence",

@@ -53,6 +53,42 @@ class DeterministicModelAdapter:
     runtime = "deterministic"
 
     def generate(self, request: ModelRequest) -> ModelResponse:
+        if "AGENT_MEMORY_TOOL_ACTION_REQUEST" in request.prompt:
+            action = _deterministic_tool_action(request.prompt)
+            return ModelResponse(
+                text=json.dumps(action, sort_keys=True),
+                runtime=self.runtime,
+                model_name=request.model_name,
+                model_family=request.model_family,
+                raw_response={
+                    "deterministic": True,
+                    "seed": request.seed,
+                    "tool_action": True,
+                },
+            )
+        if "You are summarizing a coding-agent tool loop" in request.prompt:
+            return ModelResponse(
+                text=json.dumps(
+                    {
+                        "final_summary": (
+                            "Coding tool loop completed with real file edits and test "
+                            "execution evidence."
+                        ),
+                        "memory_claims": [],
+                        "completion_claims": [],
+                        "needs_verification": [],
+                    },
+                    sort_keys=True,
+                ),
+                runtime=self.runtime,
+                model_name=request.model_name,
+                model_family=request.model_family,
+                raw_response={
+                    "deterministic": True,
+                    "seed": request.seed,
+                    "tool_summary": True,
+                },
+            )
         return ModelResponse(
             text=(
                 "Plan evidence checks, preserve provenance, and avoid high-risk "
@@ -135,6 +171,22 @@ def create_model_adapter(runtime: str, endpoint: str | None = None) -> ModelAdap
     if runtime == "llama_cpp":
         return LlamaCppHttpAdapter(endpoint or "http://127.0.0.1:8080")
     raise ValueError(f"Unsupported open-source runtime: {runtime}")
+
+
+def _deterministic_tool_action(prompt: str) -> dict:
+    marker = "DETERMINISTIC_ACTION:"
+    if marker not in prompt:
+        return {
+            "action": "finish",
+            "claim": "Unable to choose a tool action from the available evidence.",
+            "source_event_ids": [],
+        }
+    line = prompt.split(marker, 1)[1].strip().splitlines()[0]
+    try:
+        action = json.loads(line)
+    except json.JSONDecodeError:
+        return {"action": "invalid", "source_event_ids": []}
+    return action if isinstance(action, dict) else {"action": "invalid", "source_event_ids": []}
 
 
 def _post_json(url: str, payload: dict) -> dict:
