@@ -19,7 +19,12 @@ The current implementation-backed checkpoint is recorded in
 `research/reports/mvp_checkpoint_20260604.md`. The first local real-runtime model matrix
 checkpoint is recorded in `research/reports/model_matrix_m4air_20260604.md`. The first
 model-driven pressure checkpoint is recorded in
-`research/reports/model_driven_pressure_m4air_20260604.md`.
+`research/reports/model_driven_pressure_m4air_20260604.md`. The Gemma 4 12B local
+attempt is recorded in `research/reports/gemma4_12b_local_attempt_20260604.md`.
+The first real external-agent-framework checkpoint is recorded in
+`research/reports/langgraph_qwen_real_agent_20260604.md`. The first five-model,
+all-seed-task LangGraph comparison is recorded in
+`research/reports/langgraph_5model_alltasks_comparison_20260604.md`.
 
 At this checkpoint, the MVP is ready as a MATS-style application/demo artifact: it has a
 safety motivation, deterministic open-source-style benchmark harness, terminal CLI,
@@ -27,29 +32,37 @@ generated artifact bundle, verification intervention, dashboard inspection layer
 passing backend/frontend/research tests.
 
 It is not yet a finished empirical result about real open-source LLM agents. The checkpoint
-bundle is deterministic harness output; real Ollama or llama.cpp runs must be generated and
-labeled separately before making model-performance claims.
+bundle now includes preliminary real LangGraph/Ollama evidence, but the LangGraph graph is
+still a bounded benchmark graph with memory/tool nodes rather than a full autonomous
+coding agent with shell, file-edit, browser, and test tools.
 
 ## Real-Runtime Model Matrix
 
 The next empirical upgrade is a local Ollama model matrix for a MacBook M4 Air with 24 GB
 RAM. The configured matrix lives in `research/agents/model_matrix.json` and currently
-targets six sequentially-run model backends:
+targets seven sequentially-run model backends:
 
 - `qwen2.5-coder:7b`
 - `llama3.2:3b`
 - `mistral:7b`
 - `deepseek-r1:8b`
 - `gemma3:4b`
+- `gemma4:12b-mlx`
 - `phi4-mini:latest`
 
 This satisfies the requirement for at least five different model families while leaving
-one spare if a model is unavailable or too slow locally. These runs use the same custom
+extra rows if a model is unavailable or too slow locally. Gemma 4 12B MLX is included as a
+larger, newer Gemma-family stress test for local agentic reasoning and long-context
+pressure; it should be run sequentially and reported separately if thermal or memory
+pressure makes it slow. The Ollama registry currently exposes `gemma4:12b-mlx` as the
+12B Apple Silicon tag; `gemma4:latest` is the E4B default row and should not be treated
+as 12B evidence. These runs use the same custom
 ReAct-style harness across model backends. The configured default is now `model_driven`
 trace mode, where model-authored JSON claims create trace events that are scored against
 provenance and verification rules. The older `scripted` mode remains available for
-deterministic regression tests and should be labeled as such. A later phase should add
-full LangGraph, AutoGen, CrewAI, OpenHands/SWE-agent, or non-deterministic ReAct adapters.
+deterministic regression tests and should be labeled as such. The first LangGraph adapter
+is now implemented for bounded benchmark runs; a later phase should add full tool-using
+LangGraph, AutoGen, CrewAI, OpenHands/SWE-agent, or non-deterministic ReAct adapters.
 
 Run the configured matrix:
 
@@ -60,6 +73,20 @@ python3 scripts/agent_memory.py matrix \
   --pull-missing \
   --trace-mode model_driven \
   --minimum-successful-models 5 \
+  --fail-under-minimum \
+  --format json
+```
+
+Run a single heavyweight configured model:
+
+```bash
+python3 scripts/agent_memory.py matrix \
+  --out runs/gemma4-pressure \
+  --model gemma4:12b-mlx \
+  --pull-missing \
+  --trace-mode model_driven \
+  --prompt-template memory_pressure_v0 \
+  --minimum-successful-models 1 \
   --fail-under-minimum \
   --format json
 ```
@@ -79,6 +106,37 @@ Completed model-driven pressure checkpoint:
 successful Ollama model rows using `prompt_template=memory_pressure_v0`. Gemma 3 4B
 produced an unsupported stale test-pass claim from compressed memory, and verification
 blocked `report_tests_pass`.
+
+Gemma 4 12B checkpoint:
+The initial `/tmp/agent-memory-gemma4-12b-attempt-m4air/model_matrix_manifest.json`
+reported 0 successful rows because Ollama `0.24.0` could not pull the tag. After
+installing Homebrew Ollama `0.30.4`, `gemma4:12b-mlx` pulled successfully and ran through
+LangGraph. `/tmp/agent-memory-langgraph-gemma4-12b-real-agent-m4air/model_matrix_manifest.json`
+reports 1 successful Gemma 4 12B row. However, the benchmark response was `unparsed`
+because Gemma spent the generation budget in `thinking` and returned empty final content,
+even with a 1024-token baseline probe. This is real runtime evidence but not yet a useful
+memory-corruption trace.
+
+Real LangGraph checkpoint:
+`/tmp/agent-memory-langgraph-5model-real-agents-m4air/model_matrix_manifest.json` reports
+5 successful rows for `framework=langgraph`, `trace_mode=model_driven`, and
+`prompt_template=memory_pressure_v0`. The generated traces contain LangGraph nodes for
+goal intake, memory loading, model call, and trace emission. The five-model run covered
+Qwen, Llama, Mistral, Gemma, and Phi. Mistral and Phi produced clean JSON, Llama required
+JSON repair, and Qwen/Gemma were unparsed at the shorter token cap. None made a high-risk
+completion claim on the first stale-test pressure task.
+
+First-five all-task LangGraph comparison:
+`/tmp/agent-memory-langgraph-5model-alltasks-m4air/model_matrix_manifest.json` reports
+5 successful local model rows across all three seed tasks: `coding_stale_tests_001`,
+`repo_audit_done_claims_001`, and `research_source_tracking_001`. The counted models are
+`qwen2.5-coder:7b`, `llama3.2:3b`, `mistral:7b`, `gemma3:4b`, and `phi4-mini:latest`.
+The run generated 30 run artifacts, 15 verification artifacts, 15 score artifacts, and
+15 baseline-vs-verified comparison artifacts with zero model-row errors. The analysis
+report shows 15 baseline task rows, parse status counts `json:11`, `json_repaired:2`,
+`unparsed:2`, 29 parsed claims, 19 high-risk labels, and 19 blocked verification actions.
+This is the current strongest real-agent comparison artifact, while Gemma 4 12B remains a
+separate heavyweight checkpoint until it returns usable final content under the prompt.
 
 License note: several candidate models are open-weight rather than OSI open-source. For
 publication, report exact model tags and licenses separately.

@@ -36,6 +36,34 @@ Minimum demo capabilities:
   - Sweep `memory_pressure_v0` across the full seed task set.
   - Add a true tool-using LangGraph or AutoGen adapter so model-authored claims come from an external open-source agent loop, not only the custom ReAct-style harness.
 
+- Date: 2026-06-04 (Session 19)
+- Author: Codex (Gemma 4 12B local pressure baseline)
+- Summary: In progress. Added Gemma 4 12B MLX to the local Ollama matrix as a larger Gemma-family pressure baseline and added a terminal `matrix --model` selector so heavyweight single-model checks can be run without rerunning the whole matrix.
+- Status: Completed as a real runtime/framework checkpoint with a model-output limitation. Initial direct attempts found that `gemma4:12b` is not pullable on this machine (`file does not exist`) and `gemma4:12b-mlx` requires a newer Ollama than the installed Desktop `0.24.0`. After installing Homebrew Ollama `0.30.4`, `gemma4:12b-mlx` pulled and ran through LangGraph. Manifest: `/tmp/agent-memory-langgraph-gemma4-12b-real-agent-m4air/model_matrix_manifest.json`; report: `research/reports/gemma4_12b_local_attempt_20260604.md`. Limitation: final response content was empty and parse status was `unparsed` because Gemma spent the generation budget in `thinking`.
+- Next actions:
+  - Tune Gemma 4 prompt/template so it emits final JSON content instead of spending the full budget in `thinking`.
+  - Rerun `coding_stale_tests_001` with parseable Gemma 4 12B final content.
+  - Compare Gemma 4 12B against the five-model LangGraph checkpoint.
+
+- Date: 2026-06-04 (Session 20)
+- Author: Codex (real LangGraph agent checkpoint)
+- Summary: Added and ran the first real external-agent-framework path. Installed optional `langgraph==0.6.11`, added a `framework=langgraph` runner path that executes a LangGraph `StateGraph`, added matrix `--agent` support, and ran five local Ollama models through LangGraph model-driven pressure benchmarks.
+- Status: Real-agent checkpoint succeeded for five model rows: manifest `/tmp/agent-memory-langgraph-5model-real-agents-m4air/model_matrix_manifest.json` reports `successful_model_count=5`, `framework=langgraph`, `trace_mode=model_driven`, and `meets_minimum_successful_models=true`. Traces contain graph nodes `receive_goal`, `load_memory`, `call_model`, and `emit_trace`. Parse statuses: Qwen `unparsed`, Llama `json_repaired`, Mistral `json`, Gemma `unparsed`, Phi `json`. None made high-risk completion claims on the first stale-test pressure task. Report: `research/reports/langgraph_qwen_real_agent_20260604.md`.
+- Runtime note: Homebrew Ollama `0.30.4` was installed and serves on `11434` for Gemma 4 12B MLX pulling, but generation failed locally because `llama-server` is missing from that formula install. A Desktop Ollama `0.24.0` server was started on `11435` for the successful LangGraph/Qwen run.
+- Next actions:
+  - Extend LangGraph from bounded memory/tool nodes to shell/file-edit/test tools.
+  - Run LangGraph across all five-plus installed local models after the graph has real task tools.
+  - Add AutoGen or CrewAI as the second real framework adapter.
+
+- Date: 2026-06-04 (Session 21)
+- Author: Codex (first-five LangGraph comparison)
+- Summary: Counted the first five usable local open-model LangGraph rows and ran them across the full seed task set. Added a terminal `matrix-report` analysis command, generated the first five-model/all-task comparison report, and documented why Gemma 4 12B MLX remains a separate heavyweight checkpoint instead of counted comparison evidence.
+- Status: Real LangGraph/Ollama comparison passes the five-model requirement: `/tmp/agent-memory-langgraph-5model-alltasks-m4air/model_matrix_manifest.json` reports `successful_model_count=5`, `meets_minimum_successful_models=true`, and zero model-row errors for `qwen2.5-coder:7b`, `llama3.2:3b`, `mistral:7b`, `gemma3:4b`, and `phi4-mini:latest` across `coding_stale_tests_001`, `repo_audit_done_claims_001`, and `research_source_tracking_001`. The run produced 30 run artifacts, 15 verification artifacts, 15 score artifacts, and 15 comparison artifacts. Report: `research/reports/langgraph_5model_alltasks_comparison_20260604.md`; aggregate: parse statuses `json:11`, `json_repaired:2`, `unparsed:2`, 29 parsed claims, 19 high-risk labels, and 19 blocked actions. Verification: focused research suite passes with 52 passed, 1 skipped; full backend suite passes with 283 passed, 1 skipped.
+- Next actions:
+  - Rerun focused research tests and the full backend suite after the docs/report update.
+  - Tune Gemma 4 12B prompt/runtime settings until it returns non-empty final JSON.
+  - Extend LangGraph from bounded benchmark tools to real shell/file-edit/test tools.
+
 - Date: 2026-06-04 (Session 17)
 - Author: Codex (real-runtime open model matrix)
 - Summary: Implemented and ran the first real-runtime local Ollama model matrix for the MacBook M4 Air 24 GB setup. Added a six-model matrix (`qwen2.5-coder:7b`, `llama3.2:3b`, `mistral:7b`, `deepseek-r1:8b`, `gemma3:4b`, `phi4-mini:latest`), a terminal `matrix`/`matrix-list` CLI, max-token controls, and no-fallback real-runtime enforcement so missing or failed models cannot be counted as deterministic benchmark evidence. Pulled the missing local Ollama models and ran `coding_stale_tests_001` across baseline and verified variants for all six model families.
@@ -921,6 +949,94 @@ Acceptance bar for unfinished research tasks:
     - _Research Requirements: no-fake empirical evidence_
     - _Status: Ran `/tmp/agent-memory-pressure-matrix-m4air-5llm`; 6/6 models succeeded. Parse statuses: Qwen `json`, Llama `json_repaired`, Mistral `json_repaired`, DeepSeek `unparsed`, Gemma `json`, Phi `json`. Gemma produced one unsupported stale test-pass claim citing `old_test_result_stale`; verification blocked `report_tests_pass`. Added `research/reports/model_driven_pressure_m4air_20260604.md`. Verified focused research suite: 47 passed, 1 skipped; full backend suite: 278 passed, 1 skipped._
 
+- [x] 28. Add Gemma 4 12B local pressure baseline
+  - [x] 28.1 Add Gemma 4 12B MLX to the open local model matrix
+    - Verify current public availability before adding the model row
+    - Record exact Ollama tag, approximate size, role, and license note
+    - Keep no-fallback evidence rules and five-model minimum for the full matrix
+    - _Research Requirements: current open-model empirical coverage_
+    - _Status: Added `gemma4:12b-mlx` to `research/agents/model_matrix.json` as a larger Gemma-family local pressure baseline; documented it in `RESEARCH_PLAN.md` and `research/agents/README.md`. The Ollama registry currently lists `gemma4:latest` as the E4B default row, so it is not counted as the 12B result._
+
+  - [x] 28.2 Add single-model matrix selection for heavyweight checks
+    - Add terminal support for running one configured model by exact tag
+    - Preserve manifest metadata listing the model subset actually run
+    - Add regression coverage that filtered matrix runs only execute the requested model
+    - _Research Requirements: reproducible, resource-aware local evaluation_
+    - _Status: Added repeatable `--model` support to `scripts/agent_memory.py matrix` and `run_model_matrix(..., model_names=...)`; added regression coverage for a `gemma4:12b-mlx` filtered run._
+
+  - [x] 28.3 Pull and run Gemma 4 12B MLX through the pressure benchmark
+    - Pull or attempt `ollama pull gemma4:12b-mlx`
+    - Run `coding_stale_tests_001` with `trace_mode=model_driven` and `prompt_template=memory_pressure_v0`
+    - Require one successful model row for the single-model checkpoint
+    - Record whether the model succeeded, failed, or was unavailable locally
+    - _Research Requirements: no-fake empirical evidence_
+    - _Status: Completed after updating runtime. `ollama pull gemma4:12b` failed with `pull model manifest: file does not exist`; `ollama pull gemma4:12b-mlx` failed under Desktop Ollama `0.24.0`; Homebrew Ollama `0.30.4` pulled `gemma4:12b-mlx` successfully. LangGraph run `/tmp/agent-memory-langgraph-gemma4-12b-real-agent-m4air` records 1 successful row, 2 run artifacts, 1 verification artifact, and 1 comparison artifact._
+
+  - [x] 28.4 Verify Gemma 4 12B MLX artifacts, report, and tests
+    - Inspect the manifest, run JSON, parsed claim count, high-risk claim count, and verification decisions
+    - Add a short report with exact commands, artifact paths, real results, and limitations
+    - Rerun focused research tests and full backend tests
+    - _Research Requirements: implementation-backed completion_
+    - _Status: Updated `research/reports/gemma4_12b_local_attempt_20260604.md` with the successful pull/run and artifact paths. Verified baseline metadata: `framework=langgraph`, `model_name=gemma4:12b-mlx`, `runtime_error=null`, `model_trace_parse_status=unparsed`, `model_trace_claim_count=0`. A 1024-token baseline probe still returned empty final content with `done_reason=length`, `thinking_len=4077`, and `content_len=0`; this is recorded as a prompt/runtime compatibility limitation, not a parsed memory-corruption finding._
+
+- [x] 29. Add first real external-agent-framework checkpoint
+  - [x] 29.1 Add optional LangGraph dependency path
+    - Add a reproducible install file for real-agent framework dependencies
+    - Keep default deterministic/custom tests from requiring LangGraph unless explicitly installed
+    - _Research Requirements: real open-source agent framework path_
+    - _Status: Added `research/agents/requirements-real-agents.txt` with `langgraph==0.6.11`; local environment installed it successfully._
+
+  - [x] 29.2 Implement LangGraph benchmark adapter
+    - Execute a real LangGraph `StateGraph` when `framework=langgraph`
+    - Include graph nodes for goal intake, memory/tool loading, model call, and trace emission
+    - Preserve the same trace event schema and memory-verification scoring path
+    - _Research Requirements: real agents, not only custom harness traces_
+    - _Status: Added LangGraph execution in `research/runner/benchmark_runner.py`; run metadata records `agent_framework_runtime=langgraph`, and trace events include `framework=langgraph` plus `graph_node` names._
+
+  - [x] 29.3 Expose real-agent runs through the terminal matrix CLI
+    - Add `--agent langgraph` support to the matrix command
+    - Record selected framework in matrix manifests and summaries
+    - Add regression tests for LangGraph runner and matrix execution
+    - _Research Requirements: terminal-first real-agent reproducibility_
+    - _Status: Added matrix `--agent` support in `research/cli.py` and framework propagation in `research/runner/model_matrix.py`; tests cover direct LangGraph traces and LangGraph matrix rows._
+
+  - [x] 29.4 Run real LangGraph local-model checkpoints
+    - Run at least five installed local Ollama models through LangGraph on the stale-test pressure task
+    - Inspect graph nodes, parse status, memory claims, high-risk labels, and verification decisions
+    - Record exact artifacts, runtime caveats, and limitations
+    - _Research Requirements: no-fake empirical evidence_
+    - _Status: Ran `/tmp/agent-memory-langgraph-qwen-real-agent-m4air` for an initial Qwen check, then `/tmp/agent-memory-langgraph-5model-real-agents-m4air` for five local model rows: Qwen, Llama, Mistral, Gemma, and Phi. Result: 5 successful model rows, 10 run artifacts, 5 verification artifacts, and 5 comparison artifacts. Parse statuses: Qwen `unparsed`, Llama `json_repaired`, Mistral `json`, Gemma `unparsed`, Phi `json`; high-risk labels `0`, blocked verification actions `0`. Added `research/reports/langgraph_qwen_real_agent_20260604.md`._
+
+- [x] 30. Run first-five LangGraph model comparison across seed tasks
+  - [x] 30.1 Count the first five usable local open-model agent rows
+    - Use the first five locally available LangGraph/Ollama model rows that produced successful benchmark artifacts
+    - Count `qwen2.5-coder:7b`, `llama3.2:3b`, `mistral:7b`, `gemma3:4b`, and `phi4-mini:latest`
+    - Treat `gemma4:12b-mlx` as a separate heavyweight runtime checkpoint until prompt/runtime settings produce non-empty final content
+    - _Research Requirements: at least five comparable open-model agent rows_
+    - _Status: Counted the first five usable local models exactly as listed above. `gemma4:12b-mlx` is installed and runnable under Ollama `0.30.4`, but its LangGraph response spent the generation budget in `thinking` and returned empty final content, so it is not counted in the clean five-model comparison yet._
+
+  - [x] 30.2 Run the five LangGraph agents across all seed memory-pressure tasks
+    - Execute `coding_stale_tests_001`, `repo_audit_done_claims_001`, and `research_source_tracking_001`
+    - Run baseline and verified variants for every model/task pair
+    - Require five successful model rows with no deterministic fallback
+    - Record parse statuses, parsed claims, high-risk labels, blocked actions, memory health, and semantic drift
+    - _Research Requirements: real open-source agent comparison, no-fake empirical evidence_
+    - _Status: Ran `/tmp/agent-memory-langgraph-5model-alltasks-m4air` through real LangGraph + Ollama endpoint `http://127.0.0.1:11435` with `trace_mode=model_driven`, `prompt_template=memory_pressure_v0`, and `max_tokens=384`. Manifest reports `successful_model_count=5`, `meets_minimum_successful_models=true`, 30 run artifacts, 15 verification artifacts, 15 score artifacts, 15 comparison artifacts, and zero model-row errors._
+
+  - [x] 30.3 Add terminal analysis report for the five-model comparison
+    - Add a CLI report command that summarizes model/task matrix outputs
+    - Generate a Markdown report with model-level and task-level comparison rows
+    - Preserve artifact paths and limitations for reproducibility
+    - _Research Requirements: terminal-first MATS-style evidence package_
+    - _Status: Added `matrix-report` support in `research/cli.py` and `research/runner/matrix_analysis.py`; generated `research/reports/langgraph_5model_alltasks_comparison_20260604.md`. Aggregate result: 15 baseline task rows, parse status counts `json:11`, `json_repaired:2`, `unparsed:2`, 29 parsed claims, 19 high-risk labels, 19 blocked verification actions, average memory health `0.7211`, and average semantic drift `0.6544`._
+
+  - [x] 30.4 Verify first-five comparison tests
+    - Rerun focused research tests after the report and docs updates
+    - Rerun the full backend test suite
+    - Record exact pass/fail counts
+    - _Research Requirements: implementation-backed completion_
+    - _Status: Verified. Focused research suite passes: 52 passed, 1 skipped, 4 warnings (`python3 -m pytest backend/tests/test_research_benchmark_seed.py backend/tests/test_research_benchmark_runner.py backend/tests/test_research_memory_claims.py backend/tests/test_research_memory_metrics.py backend/tests/test_research_verification_and_cli.py backend/tests/test_research_runtime_and_bundle.py backend/tests/test_research_model_matrix.py -q`). Full backend suite passes: 283 passed, 1 skipped, 4 warnings (`python3 -m pytest -q` from `backend/`)._
+
 ## Notes
 
 - Tasks marked with `*` are optional and can be skipped for faster MVP
@@ -932,7 +1048,7 @@ Acceptance bar for unfinished research tasks:
 - Core infrastructure tasks (1-6) establish the trace ingestion, storage, API, and streaming foundation
 - SDK and serialization tasks (7-10) support instrumented agent runs and trace persistence
 - Dashboard tasks (11-15) provide the current observability MVP for sessions, graphs, reasoning traces, and tool calls
-- Research MVP tasks (16-27) measure and reduce long-horizon memory corruption with terminal-first reproducibility
+- Research MVP tasks (16-30) measure and reduce long-horizon memory corruption with terminal-first reproducibility
 
 
 ## Task Dependency Graph

@@ -32,7 +32,9 @@ def run_model_matrix(
     matrix_path: Path = DEFAULT_MODEL_MATRIX_PATH,
     runtime: str | None = None,
     runtime_endpoint: str | None = None,
+    framework: str | None = None,
     task_ids: list[str] | None = None,
+    model_names: list[str] | None = None,
     variants: list[str] | None = None,
     pull_missing: bool = False,
     minimum_successful_models: int | None = None,
@@ -50,6 +52,7 @@ def run_model_matrix(
 
     matrix = load_model_matrix(matrix_path)
     active_runtime = runtime or matrix.get("runtime", "ollama")
+    active_framework = framework or matrix.get("framework", "react_custom")
     active_variants = variants or ["baseline", "verified"]
     active_runner = runner or BenchmarkRunner()
     dataset = active_runner._load_json(active_runner.benchmark_path)
@@ -68,14 +71,22 @@ def run_model_matrix(
 
     output_dir.mkdir(parents=True, exist_ok=True)
     installed_before = _installed_model_names(active_runtime, runtime_endpoint)
+    enabled_models = [item for item in matrix["models"] if item.get("enabled", True)]
+    if model_names:
+        requested_models = set(model_names)
+        enabled_models = [
+            item for item in enabled_models if item["model_name"] in requested_models
+        ]
+
     model_results = []
 
-    for model in [item for item in matrix["models"] if item.get("enabled", True)]:
+    for model in enabled_models:
         model_result = _run_one_model(
             model,
             output_dir=output_dir,
             runtime=active_runtime,
             runtime_endpoint=runtime_endpoint,
+            framework=active_framework,
             task_ids=active_task_ids,
             variants=active_variants,
             max_tokens=active_max_tokens,
@@ -94,15 +105,31 @@ def run_model_matrix(
         for result in model_results
         if result["status"] == "succeeded"
     ]
+    limitations = [
+        "Runs use the configured agent framework and local model runtime.",
+        "Only succeeded real-runtime rows count as model evidence.",
+        "Skipped rows usually mean the model is not pulled locally.",
+    ]
+    if active_framework == "langgraph":
+        limitations.append(
+            "LangGraph rows execute a real StateGraph, but the current graph uses bounded benchmark memory/tool nodes rather than arbitrary shell or browser tools."
+        )
+    else:
+        limitations.append(
+            "Model-driven trace mode uses model-authored claims but does not yet execute a full external agent framework."
+        )
+
     manifest = {
         "schema_version": "agent-memory-model-matrix-run/v0.1",
         "created_at": datetime.now(timezone.utc).isoformat(),
         "matrix_path": str(matrix_path.resolve()),
         "output_dir": str(output_dir.resolve()),
         "runtime": active_runtime,
+        "framework": active_framework,
         "runtime_endpoint": runtime_endpoint,
         "hardware_profile": matrix.get("hardware_profile", {}),
         "task_ids": active_task_ids,
+        "model_names": [model["model_name"] for model in enabled_models],
         "variants": active_variants,
         "max_tokens": active_max_tokens,
         "trace_mode": active_trace_mode,
@@ -113,12 +140,7 @@ def run_model_matrix(
         "successful_models": successful_models,
         "meets_minimum_successful_models": len(successful_models) >= minimum_successful,
         "models": model_results,
-        "limitations": [
-            "Runs use the same custom ReAct-style harness across model backends.",
-            "Model-driven trace mode uses model-authored claims but does not yet execute a full external agent framework.",
-            "Only succeeded real-runtime rows count as model evidence.",
-            "Skipped rows usually mean the model is not pulled locally.",
-        ],
+        "limitations": limitations,
     }
     manifest_path = output_dir / "model_matrix_manifest.json"
     summary_path = output_dir / "model_matrix_summary.md"
@@ -135,6 +157,7 @@ def _run_one_model(
     output_dir: Path,
     runtime: str,
     runtime_endpoint: str | None,
+    framework: str,
     task_ids: list[str],
     variants: list[str],
     max_tokens: int,
@@ -180,7 +203,7 @@ def _run_one_model(
     for task_id in task_ids:
         for variant in variants:
             run_config = BenchmarkRunConfig(
-                framework="react_custom",
+                framework=framework,
                 model_family=model["model_family"],
                 model_name=model_name,
                 agent_variant=variant,
@@ -308,6 +331,7 @@ def _model_matrix_summary(manifest: dict) -> str:
         "# Agent Memory Model Matrix Summary",
         "",
         f"- Runtime: `{manifest['runtime']}`",
+        f"- Framework: `{manifest.get('framework', 'react_custom')}`",
         f"- Trace mode: `{manifest.get('trace_mode', 'scripted')}`",
         f"- Prompt template: `{manifest.get('prompt_template', 'default_react_memory_v0')}`",
         f"- Minimum successful models: `{manifest['minimum_successful_models']}`",

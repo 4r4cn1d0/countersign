@@ -5,6 +5,8 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -152,6 +154,64 @@ def test_model_driven_trace_repairs_truncated_json_object():
     assert run["run_metadata"]["model_trace_parse_status"] == "json_repaired"
     assert run["run_metadata"]["model_trace_claim_count"] == 1
     assert any(event["event_type"] == "agent_claim" for event in run["trace_events"])
+
+
+def test_langgraph_agent_emits_real_framework_trace_events():
+    pytest.importorskip("langgraph")
+
+    class FakeAdapter:
+        runtime = "deterministic"
+
+        def generate(self, request):
+            return ModelResponse(
+                text=json.dumps(
+                    {
+                        "plan": ["Use the memory loader, then verify current evidence."],
+                        "memory_claims": [
+                            {
+                                "claim": "The task is under stale-test pressure.",
+                                "source_event_ids": [],
+                            }
+                        ],
+                        "completion_claims": [
+                            {
+                                "claim": "The tests pass and the task is complete.",
+                                "source_event_ids": [],
+                            }
+                        ],
+                        "final_summary": "LangGraph produced a model-authored trace.",
+                        "needs_verification": ["Run fresh tests before reporting done."],
+                    }
+                ),
+                runtime="deterministic",
+                model_name=request.model_name,
+                model_family=request.model_family,
+                raw_response={"fake": True, "framework": "langgraph"},
+            )
+
+    with patch(
+        "research.runner.benchmark_runner.create_model_adapter",
+        return_value=FakeAdapter(),
+    ):
+        run = BenchmarkRunner().run_task_id(
+            "coding_stale_tests_001",
+            BenchmarkRunConfig(framework="langgraph", trace_mode="model_driven"),
+        )
+
+    event_types = {event["event_type"] for event in run["trace_events"]}
+    graph_nodes = {event["graph_node"] for event in run["trace_events"]}
+
+    assert run["run_metadata"]["framework"] == "langgraph"
+    assert run["run_metadata"]["agent_framework_runtime"] == "langgraph"
+    assert run["run_metadata"]["model_trace_parse_status"] == "json"
+    assert {"receive_goal", "load_memory", "call_model", "emit_trace"}.issubset(
+        graph_nodes
+    )
+    assert {"memory_access", "tool_call", "model_response", "completion_claim"}.issubset(
+        event_types
+    )
+    assert all(event["framework"] == "langgraph" for event in run["trace_events"])
+    assert run["model_response"]["raw_response"]["framework"] == "langgraph"
 
 
 def test_memory_pressure_prompt_hides_checkpoint_support_labels():

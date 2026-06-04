@@ -13,6 +13,11 @@ from .metrics import (
     compute_task_state_accuracy,
     compute_temporal_accuracy,
 )
+from .matrix_analysis import (
+    analyze_model_matrix_manifest,
+    format_model_matrix_analysis_markdown,
+    write_model_matrix_analysis,
+)
 from .model_adapters import (
     DeterministicModelAdapter,
     LlamaCppHttpAdapter,
@@ -47,6 +52,9 @@ __all__ = [
     "generate_artifact_bundle",
     "generate_artifact_summary",
     "label_high_risk_claims",
+    "analyze_model_matrix_manifest",
+    "format_model_matrix_analysis_markdown",
+    "write_model_matrix_analysis",
     "load_model_matrix",
     "compare_runs",
     "build_memory_health_report",

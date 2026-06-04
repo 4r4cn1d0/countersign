@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TypedDict
 from uuid import NAMESPACE_URL, uuid5
 
 from .claims import extract_memory_claims
@@ -57,8 +58,11 @@ class BenchmarkRunner:
         stack = self._load_json(self.stack_path)
         self._validate_open_source_stack(stack, run_config)
 
-        model_response = self._generate_model_response(task, run_config)
-        trace_events = self._build_trace(task, run_config, model_response)
+        if run_config.framework == "langgraph":
+            model_response, trace_events = self._run_langgraph_agent(task, run_config)
+        else:
+            model_response = self._generate_model_response(task, run_config)
+            trace_events = self._build_trace(task, run_config, model_response)
         labels = label_high_risk_claims(trace_events, task["high_risk_claims"])
         model_trace_event = next(
             (
@@ -95,6 +99,9 @@ class BenchmarkRunner:
                 "temperature": run_config.temperature,
                 "max_tokens": run_config.max_tokens,
                 "trace_mode": run_config.trace_mode,
+                "agent_framework_runtime": (
+                    run_config.framework if run_config.framework != "react_custom" else None
+                ),
                 "model_trace_parse_status": model_trace_event.get("parse_status"),
                 "model_trace_claim_count": model_trace_event.get("parsed_claim_count"),
                 "runtime_error": model_response.error,
@@ -135,8 +142,11 @@ class BenchmarkRunner:
         raise ValueError(f"Unknown benchmark task: {task_id}")
 
     def _generate_model_response(self, task: dict, config: BenchmarkRunConfig):
-        adapter = create_model_adapter(config.runtime, config.runtime_endpoint)
         prompt = self._model_prompt(task, config)
+        return self._generate_model_response_for_prompt(prompt, config)
+
+    def _generate_model_response_for_prompt(self, prompt: str, config: BenchmarkRunConfig):
+        adapter = create_model_adapter(config.runtime, config.runtime_endpoint)
         try:
             return adapter.generate(
                 ModelRequest(
@@ -170,6 +180,197 @@ class BenchmarkRunner:
                 raw_response={"fallback": "deterministic_trace_shape"},
                 error=str(exc),
             )
+
+    def _run_langgraph_agent(
+        self,
+        task: dict,
+        config: BenchmarkRunConfig,
+    ):
+        if config.trace_mode != "model_driven":
+            raise ValueError("LangGraph runs currently require trace_mode=model_driven")
+        try:
+            from langgraph.graph import END, StateGraph
+        except ModuleNotFoundError as exc:
+            raise RuntimeError(
+                "LangGraph is not installed. Install langgraph to run --agent langgraph."
+            ) from exc
+
+        events: list[dict] = []
+
+        def add(event_type: str, *, graph_node: str, **payload: object) -> str:
+            sequence_number = len(events) + 1
+            event_id = f"{task['task_id']}:event:{sequence_number:03d}"
+            events.append(
+                {
+                    "event_id": event_id,
+                    "event_type": event_type,
+                    "sequence_number": sequence_number,
+                    "framework": "langgraph",
+                    "graph_node": graph_node,
+                    **payload,
+                }
+            )
+            return event_id
+
+        class AgentState(TypedDict, total=False):
+            prompt: str
+            goal_event_id: str
+            memory_event_id: str
+            model_event_id: str
+            model_response: object
+            parsed: dict
+
+        def receive_goal(state: AgentState) -> dict:
+            goal_event_id = add(
+                "prompt",
+                graph_node="receive_goal",
+                prompt=task["goal"],
+                source_type="user_instruction",
+                source_event_ids=[],
+            )
+            return {"goal_event_id": goal_event_id}
+
+        def load_memory(state: AgentState) -> dict:
+            memory_event_id = add(
+                "memory_access",
+                graph_node="load_memory",
+                content="Load compressed benchmark memory and known drift inducers.",
+                retrieved_items=task["drift_inducers"],
+                source_type="ground_truth",
+                source_event_ids=[state["goal_event_id"]],
+            )
+            tool_event_id = add(
+                "tool_call",
+                graph_node="load_memory",
+                content="LangGraph memory node supplied compressed task context.",
+                tool_name="langgraph_memory_loader",
+                status="success",
+                source_type="tool_output",
+                source_event_ids=[memory_event_id],
+            )
+            return {"memory_event_id": tool_event_id}
+
+        def call_model(state: AgentState) -> dict:
+            response = self._generate_model_response_for_prompt(state["prompt"], config)
+            parsed = self._parse_model_trace_response(response.text)
+            parsed_claims = self._claim_items(parsed.get("memory_claims"))
+            parsed_completion_claims = self._claim_items(parsed.get("completion_claims"))
+            parsed_claim_count = len(parsed_claims) + len(parsed_completion_claims)
+            model_event_id = add(
+                "model_response",
+                graph_node="call_model",
+                response=response.text,
+                source_type="agent_inference",
+                source_event_ids=[state["goal_event_id"], state["memory_event_id"]],
+                runtime=config.runtime,
+                model_name=config.model_name,
+                prompt_template=config.prompt_template,
+                temperature=config.temperature,
+                max_tokens=config.max_tokens,
+                parse_status=parsed.get("_parse_status", "unknown"),
+                parsed_claim_count=parsed_claim_count,
+            )
+            return {
+                "model_response": response,
+                "parsed": parsed,
+                "model_event_id": model_event_id,
+            }
+
+        def emit_trace(state: AgentState) -> dict:
+            parsed = state["parsed"]
+            model_event_id = state["model_event_id"]
+            parsed_claims = self._claim_items(parsed.get("memory_claims"))
+            parsed_completion_claims = self._claim_items(parsed.get("completion_claims"))
+
+            plan_items = self._string_items(parsed.get("plan"))
+            plan_summary = (
+                "; ".join(plan_items)
+                if plan_items
+                else "LangGraph model node did not provide a parseable plan."
+            )
+            add(
+                "plan",
+                graph_node="emit_trace",
+                summary=plan_summary,
+                subtask_ids=[
+                    subtask["subtask_id"] for subtask in task["required_subtasks"]
+                ],
+                source_type="agent_inference",
+                source_event_ids=[model_event_id],
+                runtime=config.runtime,
+                model_name=config.model_name,
+                prompt_template=config.prompt_template,
+                temperature=config.temperature,
+                max_tokens=config.max_tokens,
+            )
+
+            for index, item in enumerate(parsed_claims, start=1):
+                add(
+                    "agent_claim",
+                    graph_node="emit_trace",
+                    claim=item["claim"],
+                    source_type="agent_inference",
+                    source_event_ids=item["source_event_ids"],
+                    model_response_event_id=model_event_id,
+                    model_claim_index=index,
+                )
+
+            for index, item in enumerate(parsed_completion_claims, start=1):
+                add(
+                    "completion_claim",
+                    graph_node="emit_trace",
+                    claim=item["claim"],
+                    source_type="agent_inference",
+                    source_event_ids=item["source_event_ids"],
+                    model_response_event_id=model_event_id,
+                    model_claim_index=index,
+                )
+
+            final_summary = str(parsed.get("final_summary") or "").strip()
+            if final_summary:
+                add(
+                    "summary",
+                    graph_node="emit_trace",
+                    summary=final_summary,
+                    source_type="agent_summary",
+                    source_event_ids=[model_event_id],
+                    model_response_event_id=model_event_id,
+                )
+
+            needs_verification = self._string_items(parsed.get("needs_verification"))
+            for index, item in enumerate(needs_verification, start=1):
+                add(
+                    "verification_need",
+                    graph_node="emit_trace",
+                    content=item,
+                    source_type="agent_inference",
+                    source_event_ids=[model_event_id],
+                    model_claim_index=index,
+                )
+
+            if parsed.get("_parse_status") != "json":
+                add(
+                    "parse_error",
+                    graph_node="emit_trace",
+                    content="Model response was not parseable as the requested JSON schema.",
+                    source_type="parser",
+                    source_event_ids=[model_event_id],
+                )
+            return {}
+
+        builder = StateGraph(AgentState)
+        builder.add_node("receive_goal", receive_goal)
+        builder.add_node("load_memory", load_memory)
+        builder.add_node("call_model", call_model)
+        builder.add_node("emit_trace", emit_trace)
+        builder.set_entry_point("receive_goal")
+        builder.add_edge("receive_goal", "load_memory")
+        builder.add_edge("load_memory", "call_model")
+        builder.add_edge("call_model", "emit_trace")
+        builder.add_edge("emit_trace", END)
+        graph = builder.compile()
+        final_state = graph.invoke({"prompt": self._model_prompt(task, config)})
+        return final_state["model_response"], events
 
     def _model_prompt(self, task: dict, config: BenchmarkRunConfig) -> str:
         if config.trace_mode == "model_driven":

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import socket
 import urllib.error
 import urllib.request
 from dataclasses import asdict, dataclass
@@ -79,7 +80,7 @@ class OllamaModelAdapter:
     def generate(self, request: ModelRequest) -> ModelResponse:
         payload = {
             "model": request.model_name,
-            "prompt": request.prompt,
+            "messages": [{"role": "user", "content": request.prompt}],
             "stream": False,
             "options": {
                 "temperature": request.temperature,
@@ -87,9 +88,10 @@ class OllamaModelAdapter:
                 "num_predict": request.max_tokens,
             },
         }
-        response = _post_json(f"{self.endpoint}/api/generate", payload)
+        response = _post_json(f"{self.endpoint}/api/chat", payload)
+        message = response.get("message", {})
         return ModelResponse(
-            text=str(response.get("response", "")),
+            text=str(message.get("content") or response.get("response", "")),
             runtime=self.runtime,
             model_name=request.model_name,
             model_family=request.model_family,
@@ -143,7 +145,12 @@ def _post_json(url: str, payload: dict) -> dict:
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=60) as response:
+        with urllib.request.urlopen(request, timeout=300) as response:
             return json.loads(response.read().decode("utf-8"))
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+    except (
+        urllib.error.URLError,
+        TimeoutError,
+        socket.timeout,
+        json.JSONDecodeError,
+    ) as exc:
         raise RuntimeError(f"Local model runtime request failed: {url}") from exc

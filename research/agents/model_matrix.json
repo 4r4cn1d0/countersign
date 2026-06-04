@@ -6,7 +6,8 @@
     "execution": "sequential",
     "notes": [
       "Run one model at a time on local Ollama.",
-      "Prefer 3B-8B quantized models for thermal and memory headroom.",
+      "Prefer 3B-12B quantized models for thermal and memory headroom.",
+      "Run Gemma 4 12B MLX as a single-model check when thermal throttling or memory pressure is a concern.",
       "Do not count skipped or deterministic-fallback runs as real-runtime evidence."
     ]
   },
@@ -64,6 +65,16 @@
       "license_note": "Gemma terms; open-weight but not OSI open-source.",
       "role": "compact multilingual reasoning baseline",
       "pull_command": "ollama pull gemma3:4b",
+      "enabled": true
+    },
+    {
+      "model_family": "gemma",
+      "model_name": "gemma4:12b-mlx",
+      "display_name": "Gemma 4 12B MLX",
+      "approx_size_gb": 10.0,
+      "license_note": "Apache-2.0; verify exact Ollama tag/license before publication.",
+      "role": "larger local agentic reasoning and long-context pressure baseline",
+      "pull_command": "ollama pull gemma4:12b-mlx",
       "enabled": true
     },
     {

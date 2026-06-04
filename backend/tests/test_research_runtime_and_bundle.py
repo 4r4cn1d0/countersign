@@ -45,7 +45,10 @@ def test_deterministic_model_adapter_contract():
 
 
 def test_ollama_adapter_contract_without_network():
-    with patch("research.runner.model_adapters._post_json", return_value={"response": "ok"}):
+    with patch(
+        "research.runner.model_adapters._post_json",
+        return_value={"message": {"content": "ok"}},
+    ) as post_json:
         adapter = create_model_adapter("ollama", "http://127.0.0.1:11434")
         response = adapter.generate(
             ModelRequest(
@@ -60,6 +63,7 @@ def test_ollama_adapter_contract_without_network():
 
     assert response.runtime == "ollama"
     assert response.text == "ok"
+    assert post_json.call_args.args[0].endswith("/api/chat")
 
 
 def test_runner_records_runtime_metadata_and_model_response():
