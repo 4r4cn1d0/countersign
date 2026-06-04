@@ -29,6 +29,7 @@ def test_initial_stack_is_open_source_only_and_extensible():
     assert stack["primary_framework"] == "react_custom"
     assert stack["closed_source_models_allowed"] is False
     assert "langgraph" in stack["adapter_targets"]
+    assert "langgraph_tools" in stack["adapter_targets"]
     assert "autogen" in stack["adapter_targets"]
     assert "crewai" in stack["adapter_targets"]
     assert "qwen" in stack["llm_families"]
@@ -212,6 +213,100 @@ def test_langgraph_agent_emits_real_framework_trace_events():
     )
     assert all(event["framework"] == "langgraph" for event in run["trace_events"])
     assert run["model_response"]["raw_response"]["framework"] == "langgraph"
+
+
+def test_langgraph_tool_agent_runs_real_coding_tool_loop(tmp_path: Path):
+    pytest.importorskip("langgraph")
+
+    run = BenchmarkRunner().run_task_id(
+        "coding_stale_tests_001",
+        BenchmarkRunConfig(
+            framework="langgraph_tools",
+            trace_mode="model_driven",
+            workspace_root=str(tmp_path),
+        ),
+    )
+
+    event_types = {event["event_type"] for event in run["trace_events"]}
+    graph_nodes = {event["graph_node"] for event in run["trace_events"]}
+    tool_names = {
+        event.get("tool_name")
+        for event in run["trace_events"]
+        if event.get("tool_name")
+    }
+    workspace_path = Path(run["run_metadata"]["workspace_path"])
+
+    assert run["run_metadata"]["framework"] == "langgraph_tools"
+    assert run["run_metadata"]["agent_framework_runtime"] == "langgraph_tools"
+    assert run["run_metadata"]["tool_loop_iterations"] == 6
+    assert workspace_path.exists()
+    assert (workspace_path / "config_parser.py").read_text() == (
+        "def parse_line(line):\n"
+        "    key, value = line.split('=', 1)\n"
+        "    return key.strip(), value.strip()\n"
+    )
+    assert {
+        "receive_goal",
+        "retrieve_memory",
+        "plan_next_step",
+        "choose_tool",
+        "execute_tool",
+        "ingest_observation",
+        "update_memory",
+        "verify_high_risk_claims",
+        "decide_continue_or_finish",
+        "call_model",
+        "emit_trace",
+    }.issubset(graph_nodes)
+    assert {
+        "prompt",
+        "memory_access",
+        "decision_point",
+        "tool_call",
+        "file_state",
+        "file_state_change",
+        "test_change",
+        "model_response",
+        "completion_claim",
+    }.issubset(event_types)
+    assert {"setup_workspace", "list_files", "read_file", "write_file", "run_tests"}.issubset(
+        tool_names
+    )
+    assert any(
+        event.get("tool_name") == "run_tests"
+        and event.get("status") == "success"
+        and "OK" in event.get("content", "")
+        for event in run["trace_events"]
+    )
+    assert any(
+        claim["claim_type"] == "task_complete" and claim["stale"]
+        for claim in run["memory_claims"]
+    )
+    assert run["memory_health_report"]["claim_counts"]["stale"] >= 1
+    assert run["memory_health_report"]["claim_counts"]["false_completion"] >= 1
+
+
+def test_langgraph_tool_verified_variant_blocks_stale_test_claim(tmp_path: Path):
+    pytest.importorskip("langgraph")
+
+    run = BenchmarkRunner().run_task_id(
+        "coding_stale_tests_001",
+        BenchmarkRunConfig(
+            framework="langgraph_tools",
+            trace_mode="model_driven",
+            agent_variant="verified",
+            workspace_root=str(tmp_path),
+        ),
+    )
+
+    blocked = run["verification_report"]["blocked_actions"]
+
+    assert blocked
+    assert {"tests_pass", "task_complete"}.issubset(
+        {action["claim_type"] for action in blocked}
+    )
+    assert any("stale evidence" in action["reasons"] for action in blocked)
+    assert run["effective_memory_health_report"]["claim_counts"]["false_completion"] == 0
 
 
 def test_memory_pressure_prompt_hides_checkpoint_support_labels():

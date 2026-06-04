@@ -4,6 +4,7 @@
   "primary_framework_reason": "Deterministic custom ReAct-style runner for local, auditable baseline experiments before adding heavier framework adapters.",
   "adapter_targets": [
     "langgraph",
+    "langgraph_tools",
     "autogen",
     "crewai",
     "openhands_swe_agent",

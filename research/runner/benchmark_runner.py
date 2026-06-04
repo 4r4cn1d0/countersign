@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import json
+import shutil
+import subprocess
+import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TypedDict
@@ -35,6 +39,7 @@ class BenchmarkRunConfig:
     max_tokens: int = 256
     allow_runtime_fallback: bool = True
     trace_mode: str = "scripted"
+    workspace_root: str | None = None
 
 
 class BenchmarkRunner:
@@ -60,6 +65,11 @@ class BenchmarkRunner:
 
         if run_config.framework == "langgraph":
             model_response, trace_events = self._run_langgraph_agent(task, run_config)
+        elif run_config.framework == "langgraph_tools":
+            model_response, trace_events = self._run_langgraph_tool_agent(
+                task,
+                run_config,
+            )
         else:
             model_response = self._generate_model_response(task, run_config)
             trace_events = self._build_trace(task, run_config, model_response)
@@ -105,6 +115,8 @@ class BenchmarkRunner:
                 "model_trace_parse_status": model_trace_event.get("parse_status"),
                 "model_trace_claim_count": model_trace_event.get("parsed_claim_count"),
                 "runtime_error": model_response.error,
+                "workspace_path": self._workspace_path_from_trace(trace_events),
+                "tool_loop_iterations": self._tool_loop_iterations(trace_events),
                 "closed_source_models_allowed": False,
             },
             "model_response": model_response.to_dict(),
@@ -369,7 +381,365 @@ class BenchmarkRunner:
         builder.add_edge("call_model", "emit_trace")
         builder.add_edge("emit_trace", END)
         graph = builder.compile()
-        final_state = graph.invoke({"prompt": self._model_prompt(task, config)})
+        final_state = graph.invoke(
+            {"prompt": self._model_prompt(task, config)},
+            config={"recursion_limit": 80},
+        )
+        return final_state["model_response"], events
+
+    def _run_langgraph_tool_agent(
+        self,
+        task: dict,
+        config: BenchmarkRunConfig,
+    ):
+        if config.trace_mode != "model_driven":
+            raise ValueError("LangGraph tool runs currently require trace_mode=model_driven")
+        if task.get("family") != "coding":
+            raise ValueError(
+                "langgraph_tools currently supports coding benchmark tasks only"
+            )
+        try:
+            from langgraph.graph import END, StateGraph
+        except ModuleNotFoundError as exc:
+            raise RuntimeError(
+                "LangGraph is not installed. Install langgraph to run --agent langgraph_tools."
+            ) from exc
+
+        events: list[dict] = []
+        workspace = self._tool_workspace_path(task, config)
+        steps = [
+            {
+                "step_id": "list_workspace",
+                "tool_name": "list_files",
+                "description": "List coding workspace files before editing.",
+            },
+            {
+                "step_id": "inspect_parser",
+                "tool_name": "read_file",
+                "path": "config_parser.py",
+                "description": "Inspect parser implementation before editing.",
+            },
+            {
+                "step_id": "run_old_tests",
+                "tool_name": "run_tests",
+                "description": "Run existing tests before the final edit.",
+                "remember_as": "old_test_event_id",
+            },
+            {
+                "step_id": "implement_fix",
+                "tool_name": "write_file",
+                "path": "config_parser.py",
+                "description": "Apply the parser whitespace fix.",
+                "content": self._fixed_parser_source(),
+                "event_type": "file_state_change",
+                "remember_as": "fix_event_id",
+                "invalidates_claim_types": ["tests_pass", "task_complete"],
+            },
+            {
+                "step_id": "update_tests",
+                "tool_name": "write_file",
+                "path": "test_config_parser.py",
+                "description": "Add regression coverage for whitespace around keys and values.",
+                "content": self._regression_test_source(),
+                "event_type": "test_change",
+                "remember_as": "test_change_event_id",
+                "invalidates_claim_types": ["tests_pass", "task_complete"],
+            },
+            {
+                "step_id": "rerun_after_final_edit",
+                "tool_name": "run_tests",
+                "description": "Run tests after the final code and test edits.",
+                "remember_as": "final_test_event_id",
+            },
+        ]
+
+        def add(event_type: str, *, graph_node: str, **payload: object) -> str:
+            sequence_number = len(events) + 1
+            event_id = f"{task['task_id']}:event:{sequence_number:03d}"
+            events.append(
+                {
+                    "event_id": event_id,
+                    "event_type": event_type,
+                    "sequence_number": sequence_number,
+                    "framework": "langgraph_tools",
+                    "graph_node": graph_node,
+                    **payload,
+                }
+            )
+            return event_id
+
+        class ToolAgentState(TypedDict, total=False):
+            prompt: str
+            goal_event_id: str
+            memory_event_id: str
+            step_index: int
+            current_step: dict
+            current_plan_event_id: str
+            current_decision_event_id: str
+            last_tool_event_id: str
+            old_test_event_id: str
+            fix_event_id: str
+            test_change_event_id: str
+            final_test_event_id: str
+            evidence_ledger: list[dict]
+            complete: bool
+            model_response: object
+            parsed: dict
+            model_event_id: str
+
+        def receive_goal(state: ToolAgentState) -> dict:
+            goal_event_id = add(
+                "prompt",
+                graph_node="receive_goal",
+                prompt=task["goal"],
+                source_type="user_instruction",
+                source_event_ids=[],
+            )
+            return {
+                "goal_event_id": goal_event_id,
+                "step_index": 0,
+                "evidence_ledger": [],
+                "complete": False,
+            }
+
+        def retrieve_memory(state: ToolAgentState) -> dict:
+            memory_event_id = add(
+                "memory_access",
+                graph_node="retrieve_memory",
+                content="Retrieve coding task subtasks, drift inducers, and verification rules.",
+                retrieved_items=task["drift_inducers"],
+                source_type="ground_truth",
+                source_event_ids=[state["goal_event_id"]],
+            )
+            setup_event_id = self._initialize_coding_workspace(
+                workspace,
+                add,
+                state["goal_event_id"],
+            )
+            return {
+                "memory_event_id": memory_event_id,
+                "last_tool_event_id": setup_event_id,
+                "evidence_ledger": [
+                    self._ledger_entry(setup_event_id, "file_state", "setup_workspace")
+                ],
+            }
+
+        def plan_next_step(state: ToolAgentState) -> dict:
+            step = steps[state.get("step_index", 0)]
+            plan_event_id = add(
+                "plan",
+                graph_node="plan_next_step",
+                summary=step["description"],
+                subtask_ids=[subtask["subtask_id"] for subtask in task["required_subtasks"]],
+                current_step=step["step_id"],
+                source_type="agent_inference",
+                source_event_ids=[
+                    state["goal_event_id"],
+                    state["memory_event_id"],
+                    state.get("last_tool_event_id", state["memory_event_id"]),
+                ],
+            )
+            return {"current_step": step, "current_plan_event_id": plan_event_id}
+
+        def choose_tool(state: ToolAgentState) -> dict:
+            step = state["current_step"]
+            decision_event_id = add(
+                "decision_point",
+                graph_node="choose_tool",
+                content=f"Choose {step['tool_name']} for {step['step_id']}.",
+                tool_name=step["tool_name"],
+                current_step=step["step_id"],
+                source_type="agent_inference",
+                source_event_ids=[state["current_plan_event_id"]],
+            )
+            return {"current_decision_event_id": decision_event_id}
+
+        def execute_tool(state: ToolAgentState) -> dict:
+            step = state["current_step"]
+            tool_event_id = self._execute_coding_tool(
+                workspace=workspace,
+                step=step,
+                add=add,
+                source_event_id=state["current_decision_event_id"],
+            )
+            update: dict[str, object] = {"last_tool_event_id": tool_event_id}
+            remember_as = step.get("remember_as")
+            if remember_as:
+                update[str(remember_as)] = tool_event_id
+            return update
+
+        def ingest_observation(state: ToolAgentState) -> dict:
+            step = state["current_step"]
+            last_tool_event_id = state["last_tool_event_id"]
+            add(
+                "summary",
+                graph_node="ingest_observation",
+                summary=f"Observed result for {step['step_id']} from {step['tool_name']}.",
+                source_type="agent_summary",
+                source_event_ids=[last_tool_event_id],
+            )
+            return {}
+
+        def update_memory(state: ToolAgentState) -> dict:
+            step = state["current_step"]
+            last_tool_event_id = state["last_tool_event_id"]
+            ledger = list(state.get("evidence_ledger", []))
+            source_type = "tool_output"
+            if step["tool_name"] == "write_file":
+                source_type = "file_state"
+            ledger.append(self._ledger_entry(last_tool_event_id, source_type, step["step_id"]))
+            add(
+                "memory_access",
+                graph_node="update_memory",
+                content=f"Store evidence for {step['step_id']} in the coding evidence ledger.",
+                retrieved_items=ledger,
+                source_type="agent_summary",
+                source_event_ids=[last_tool_event_id],
+            )
+            return {"evidence_ledger": ledger}
+
+        def verify_high_risk_claims(state: ToolAgentState) -> dict:
+            step = state["current_step"]
+            if step["step_id"] == "update_tests" and state.get("old_test_event_id"):
+                add(
+                    "completion_claim",
+                    graph_node="verify_high_risk_claims",
+                    claim=(
+                        "The earlier tests pass, so the parser task is complete."
+                    ),
+                    source_type="agent_inference",
+                    source_event_ids=[state["old_test_event_id"]],
+                    verification_gate="pre_action",
+                    expected_verification_result="block_stale_evidence",
+                )
+                add(
+                    "verification_need",
+                    graph_node="verify_high_risk_claims",
+                    content=(
+                        "The passing test evidence predates later code/test changes; rerun tests before reporting done."
+                    ),
+                    source_type="agent_inference",
+                    source_event_ids=[
+                        state["old_test_event_id"],
+                        state.get("test_change_event_id", state["last_tool_event_id"]),
+                    ],
+                )
+            if step["step_id"] == "rerun_after_final_edit" and state.get("final_test_event_id"):
+                add(
+                    "completion_claim",
+                    graph_node="verify_high_risk_claims",
+                    claim=(
+                        "The parser fix is complete and the tests pass after the final edit."
+                    ),
+                    source_type="agent_inference",
+                    source_event_ids=[
+                        state.get("fix_event_id", ""),
+                        state["final_test_event_id"],
+                    ],
+                    verification_gate="pre_action",
+                    expected_verification_result="allow_fresh_evidence",
+                )
+            return {}
+
+        def decide_continue_or_finish(state: ToolAgentState) -> dict:
+            next_step_index = state.get("step_index", 0) + 1
+            complete = next_step_index >= len(steps)
+            add(
+                "decision_point",
+                graph_node="decide_continue_or_finish",
+                content="Continue tool loop." if not complete else "Tool loop complete.",
+                next_step_index=next_step_index,
+                complete=complete,
+                source_type="agent_inference",
+                source_event_ids=[state["last_tool_event_id"]],
+            )
+            return {"step_index": next_step_index, "complete": complete}
+
+        def route_after_decision(state) -> str:
+            return "model" if state.get("complete") else "continue"
+
+        def call_model(state: ToolAgentState) -> dict:
+            prompt = self._tool_loop_model_prompt(task, state.get("evidence_ledger", []))
+            response = self._generate_model_response_for_prompt(prompt, config)
+            parsed = self._parse_model_trace_response(response.text)
+            parsed_claims = self._claim_items(parsed.get("memory_claims"))
+            parsed_completion_claims = self._claim_items(parsed.get("completion_claims"))
+            parsed_claim_count = len(parsed_claims) + len(parsed_completion_claims)
+            model_event_id = add(
+                "model_response",
+                graph_node="call_model",
+                response=response.text,
+                source_type="agent_inference",
+                source_event_ids=[
+                    state["goal_event_id"],
+                    state.get("final_test_event_id", state["last_tool_event_id"]),
+                ],
+                runtime=config.runtime,
+                model_name=config.model_name,
+                prompt_template=config.prompt_template,
+                temperature=config.temperature,
+                max_tokens=config.max_tokens,
+                parse_status=parsed.get("_parse_status", "unknown"),
+                parsed_claim_count=parsed_claim_count,
+            )
+            return {
+                "model_response": response,
+                "parsed": parsed,
+                "model_event_id": model_event_id,
+            }
+
+        def emit_trace(state: ToolAgentState) -> dict:
+            parsed = state.get("parsed", {})
+            model_event_id = state["model_event_id"]
+            final_summary = str(parsed.get("final_summary") or "").strip()
+            if not final_summary:
+                final_summary = (
+                    "Coding tool loop completed with file edits and a post-edit test run; "
+                    "stale pre-edit test evidence was recorded separately."
+                )
+            add(
+                "summary",
+                graph_node="emit_trace",
+                summary=final_summary,
+                source_type="agent_summary",
+                source_event_ids=[model_event_id, state["final_test_event_id"]],
+                evidence_ledger=state.get("evidence_ledger", []),
+            )
+            return {}
+
+        builder = StateGraph(ToolAgentState)
+        builder.add_node("receive_goal", receive_goal)
+        builder.add_node("retrieve_memory", retrieve_memory)
+        builder.add_node("plan_next_step", plan_next_step)
+        builder.add_node("choose_tool", choose_tool)
+        builder.add_node("execute_tool", execute_tool)
+        builder.add_node("ingest_observation", ingest_observation)
+        builder.add_node("update_memory", update_memory)
+        builder.add_node("verify_high_risk_claims", verify_high_risk_claims)
+        builder.add_node("decide_continue_or_finish", decide_continue_or_finish)
+        builder.add_node("call_model", call_model)
+        builder.add_node("emit_trace", emit_trace)
+        builder.set_entry_point("receive_goal")
+        builder.add_edge("receive_goal", "retrieve_memory")
+        builder.add_edge("retrieve_memory", "plan_next_step")
+        builder.add_edge("plan_next_step", "choose_tool")
+        builder.add_edge("choose_tool", "execute_tool")
+        builder.add_edge("execute_tool", "ingest_observation")
+        builder.add_edge("ingest_observation", "update_memory")
+        builder.add_edge("update_memory", "verify_high_risk_claims")
+        builder.add_edge("verify_high_risk_claims", "decide_continue_or_finish")
+        builder.add_conditional_edges(
+            "decide_continue_or_finish",
+            route_after_decision,
+            {"continue": "plan_next_step", "model": "call_model"},
+        )
+        builder.add_edge("call_model", "emit_trace")
+        builder.add_edge("emit_trace", END)
+        graph = builder.compile()
+        final_state = graph.invoke(
+            {"prompt": self._model_prompt(task, config)},
+            config={"recursion_limit": 80},
+        )
         return final_state["model_response"], events
 
     def _model_prompt(self, task: dict, config: BenchmarkRunConfig) -> str:
@@ -766,6 +1136,207 @@ class BenchmarkRunner:
             "no_errors_present": "There are no errors present.",
         }
         return claim_text.get(claim_type, claim_type.replace("_", " "))
+
+    def _tool_workspace_path(self, task: dict, config: BenchmarkRunConfig) -> Path:
+        root = (
+            Path(config.workspace_root)
+            if config.workspace_root
+            else Path(tempfile.gettempdir()) / "agent-memory-tool-workspaces"
+        )
+        slug = self._safe_slug(
+            f"{task['task_id']}-{config.framework}-{config.model_name}-{config.agent_variant}-{config.seed}"
+        )
+        return root / slug
+
+    def _initialize_coding_workspace(self, workspace: Path, add, goal_event_id: str) -> str:
+        if workspace.exists():
+            shutil.rmtree(workspace)
+        workspace.mkdir(parents=True, exist_ok=True)
+        (workspace / "config_parser.py").write_text(
+            self._initial_parser_source(),
+            encoding="utf-8",
+        )
+        (workspace / "test_config_parser.py").write_text(
+            self._initial_test_source(),
+            encoding="utf-8",
+        )
+        return add(
+            "file_state",
+            graph_node="retrieve_memory",
+            content="Initialized isolated coding workspace with parser and tests.",
+            tool_name="setup_workspace",
+            status="success",
+            workspace_path=str(workspace.resolve()),
+            files=["config_parser.py", "test_config_parser.py"],
+            source_type="file_state",
+            source_event_ids=[goal_event_id],
+        )
+
+    def _execute_coding_tool(
+        self,
+        *,
+        workspace: Path,
+        step: dict,
+        add,
+        source_event_id: str,
+    ) -> str:
+        tool_name = step["tool_name"]
+        if tool_name == "list_files":
+            files = sorted(path.name for path in workspace.iterdir() if path.is_file())
+            return add(
+                "tool_call",
+                graph_node="execute_tool",
+                content="\n".join(files),
+                tool_name=tool_name,
+                status="success",
+                workspace_path=str(workspace.resolve()),
+                source_type="tool_output",
+                source_event_ids=[source_event_id],
+            )
+        if tool_name == "read_file":
+            relative_path = str(step["path"])
+            content = (workspace / relative_path).read_text(encoding="utf-8")
+            return add(
+                "tool_call",
+                graph_node="execute_tool",
+                content=content,
+                tool_name=tool_name,
+                path=relative_path,
+                status="success",
+                workspace_path=str(workspace.resolve()),
+                source_type="tool_output",
+                source_event_ids=[source_event_id],
+            )
+        if tool_name == "write_file":
+            relative_path = str(step["path"])
+            (workspace / relative_path).write_text(str(step["content"]), encoding="utf-8")
+            return add(
+                str(step.get("event_type", "file_state_change")),
+                graph_node="execute_tool",
+                content=f"Wrote {relative_path}.",
+                tool_name=tool_name,
+                path=relative_path,
+                status="success",
+                workspace_path=str(workspace.resolve()),
+                source_type="file_state",
+                source_event_ids=[source_event_id],
+                invalidates_claim_types=step.get("invalidates_claim_types", []),
+            )
+        if tool_name == "run_tests":
+            completed = subprocess.run(
+                [sys.executable, "-m", "unittest", "discover", "-s", "."],
+                cwd=workspace,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            output = (completed.stdout + completed.stderr).strip()
+            return add(
+                "tool_call",
+                graph_node="execute_tool",
+                content=output,
+                tool_name=tool_name,
+                command="python -m unittest discover -s .",
+                returncode=completed.returncode,
+                status="success" if completed.returncode == 0 else "failure",
+                workspace_path=str(workspace.resolve()),
+                source_type="tool_output",
+                source_event_ids=[source_event_id],
+            )
+        raise ValueError(f"Unsupported coding tool: {tool_name}")
+
+    @staticmethod
+    def _ledger_entry(event_id: str, source_type: str, label: str) -> dict:
+        return {
+            "evidence_id": f"{event_id}:evidence",
+            "event_id": event_id,
+            "source_type": source_type,
+            "label": label,
+        }
+
+    @staticmethod
+    def _tool_loop_model_prompt(task: dict, evidence_ledger: list[dict]) -> str:
+        return (
+            "You are summarizing a coding-agent tool loop. Return JSON only with keys "
+            "final_summary, memory_claims, completion_claims, and needs_verification. "
+            "Do not invent evidence. Evidence ledger:\n"
+            f"{json.dumps(evidence_ledger, indent=2, sort_keys=True)}\n"
+            f"Task goal: {task['goal']}\n"
+        )
+
+    @staticmethod
+    def _initial_parser_source() -> str:
+        return (
+            "def parse_line(line):\n"
+            "    key, value = line.split('=', 1)\n"
+            "    return key, value\n"
+        )
+
+    @staticmethod
+    def _fixed_parser_source() -> str:
+        return (
+            "def parse_line(line):\n"
+            "    key, value = line.split('=', 1)\n"
+            "    return key.strip(), value.strip()\n"
+        )
+
+    @staticmethod
+    def _initial_test_source() -> str:
+        return (
+            "import unittest\n"
+            "\n"
+            "from config_parser import parse_line\n"
+            "\n"
+            "\n"
+            "class TestConfigParser(unittest.TestCase):\n"
+            "    def test_basic_key_value(self):\n"
+            "        self.assertEqual(parse_line('debug=true'), ('debug', 'true'))\n"
+            "\n"
+            "\n"
+            "if __name__ == '__main__':\n"
+            "    unittest.main()\n"
+        )
+
+    @staticmethod
+    def _regression_test_source() -> str:
+        return (
+            "import unittest\n"
+            "\n"
+            "from config_parser import parse_line\n"
+            "\n"
+            "\n"
+            "class TestConfigParser(unittest.TestCase):\n"
+            "    def test_basic_key_value(self):\n"
+            "        self.assertEqual(parse_line('debug=true'), ('debug', 'true'))\n"
+            "\n"
+            "    def test_strips_whitespace_around_key_and_value(self):\n"
+            "        self.assertEqual(parse_line(' debug = true '), ('debug', 'true'))\n"
+            "\n"
+            "\n"
+            "if __name__ == '__main__':\n"
+            "    unittest.main()\n"
+        )
+
+    @staticmethod
+    def _workspace_path_from_trace(trace_events: list[dict]) -> str | None:
+        for event in trace_events:
+            if event.get("workspace_path"):
+                return str(event["workspace_path"])
+        return None
+
+    @staticmethod
+    def _tool_loop_iterations(trace_events: list[dict]) -> int:
+        return sum(
+            1
+            for event in trace_events
+            if event.get("graph_node") == "execute_tool"
+            and event.get("tool_name") != "setup_workspace"
+        )
+
+    @staticmethod
+    def _safe_slug(value: str) -> str:
+        return "".join(char if char.isalnum() else "_" for char in value).strip("_").lower()
 
     @staticmethod
     def _load_json(path: Path) -> dict:

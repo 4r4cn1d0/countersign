@@ -114,6 +114,10 @@ def run_model_matrix(
         limitations.append(
             "LangGraph rows execute a real StateGraph, but the current graph uses bounded benchmark memory/tool nodes rather than arbitrary shell or browser tools."
         )
+    elif active_framework == "langgraph_tools":
+        limitations.append(
+            "LangGraph tool rows execute a real StateGraph loop with coding workspace file and test tools; current tool support is coding-task focused."
+        )
     else:
         limitations.append(
             "Model-driven trace mode uses model-authored claims but does not yet execute a full external agent framework."
@@ -212,6 +216,7 @@ def _run_one_model(
                 max_tokens=max_tokens,
                 trace_mode=trace_mode,
                 prompt_template=prompt_template,
+                workspace_root=str(output_dir / "workspaces"),
                 allow_runtime_fallback=False,
             )
             run_path = output_dir / "runs" / model_slug / variant / f"{task_id}.json"

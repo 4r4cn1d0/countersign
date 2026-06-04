@@ -44,6 +44,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     run_parser.add_argument("--seed", type=int, default=0)
     run_parser.add_argument("--out", default="runs")
+    run_parser.add_argument("--workspace-root")
     run_parser.add_argument("--format", choices=["table", "json", "markdown"], default="table")
     run_parser.set_defaults(handler=_run_command)
 
@@ -82,6 +83,7 @@ def main(argv: list[str] | None = None) -> int:
         default="scripted",
     )
     bundle_parser.add_argument("--seed", type=int, default=0)
+    bundle_parser.add_argument("--workspace-root")
     bundle_parser.add_argument("--test-status", default="not_run")
     bundle_parser.add_argument("--format", choices=["table", "json", "markdown"], default="table")
     bundle_parser.set_defaults(handler=_bundle_command)
@@ -142,6 +144,7 @@ def _run_command(args: argparse.Namespace) -> None:
         temperature=args.temperature,
         max_tokens=args.max_tokens,
         trace_mode=args.trace_mode,
+        workspace_root=args.workspace_root or str(Path(args.out) / "workspaces"),
     )
     runs = [runner.run_task_id(args.task, config)] if args.task else runner.run_all(config)
     written_paths = _write_runs(runs, Path(args.out))
@@ -189,6 +192,7 @@ def _bundle_command(args: argparse.Namespace) -> None:
         temperature=args.temperature,
         max_tokens=args.max_tokens,
         trace_mode=args.trace_mode,
+        workspace_root=args.workspace_root or str(Path(args.out) / "workspaces"),
     )
     manifest = generate_artifact_bundle(
         Path(args.out),
