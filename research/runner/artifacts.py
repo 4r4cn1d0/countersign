@@ -141,20 +141,30 @@ def generate_artifact_summary(manifest: dict) -> str:
         "",
         "## Tasks",
         "",
-        "| Task | False Completion Delta | Memory Health Delta | Blocked Actions |",
-        "|---|---:|---:|---:|",
+        "| Task | Baseline Accepted False | Verified Accepted False | Blocked False | Recovered | Extra Actions |",
+        "|---|---:|---:|---:|---:|---:|",
     ]
 
     for task in manifest["tasks"]:
         comparison = json.loads(Path(task["comparison_json"]).read_text())
-        deltas = comparison["metric_deltas"]
+        outcomes = comparison["behavioral_outcomes"]
         overhead = comparison["verification_overhead"]
         lines.append(
-            "| `{task}` | `{false_completion}` | `{memory_health}` | `{blocked}` |".format(
+            "| `{task}` | `{baseline_false}` | `{verified_false}` | `{blocked_false}` | `{recovered}` | `{extra_actions}` |".format(
                 task=task["task_id"],
-                false_completion=deltas.get("false_completion_rate", 0.0),
-                memory_health=deltas.get("memory_health_score", 0.0),
-                blocked=overhead.get("blocked_actions", 0),
+                baseline_false=outcomes.get(
+                    "baseline_accepted_false_finishes", "n/a"
+                ),
+                verified_false=outcomes.get(
+                    "verified_accepted_false_finishes", "n/a"
+                ),
+                blocked_false=outcomes.get(
+                    "verified_blocked_false_finishes", "n/a"
+                ),
+                recovered=outcomes.get(
+                    "verified_recovery_after_block", "n/a"
+                ),
+                extra_actions=overhead.get("extra_model_actions", "n/a"),
             )
         )
 
@@ -171,6 +181,7 @@ def generate_artifact_summary(manifest: dict) -> str:
             "",
             "- Deterministic harness results are not real open-source LLM agent results.",
             "- Real-runtime runs must be labeled separately in the manifest.",
+            "- Raw false-proposal counts are not reduced by filtering blocked claims.",
             "- This summary only reports values present in generated artifacts.",
             "",
         ]

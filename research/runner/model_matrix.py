@@ -39,6 +39,7 @@ def run_model_matrix(
     pull_missing: bool = False,
     minimum_successful_models: int | None = None,
     max_tokens: int | None = None,
+    action_budget: int | None = None,
     trace_mode: str | None = None,
     prompt_template: str | None = None,
     runner: BenchmarkRunner | None = None,
@@ -58,6 +59,11 @@ def run_model_matrix(
     dataset = active_runner._load_json(active_runner.benchmark_path)
     active_task_ids = task_ids or [task["task_id"] for task in dataset["tasks"]]
     active_max_tokens = int(max_tokens if max_tokens is not None else matrix.get("max_tokens", 128))
+    active_action_budget = int(
+        action_budget
+        if action_budget is not None
+        else matrix.get("action_budget", 16)
+    )
     active_trace_mode = trace_mode or matrix.get("trace_mode", "scripted")
     active_prompt_template = prompt_template or matrix.get(
         "prompt_template",
@@ -90,6 +96,7 @@ def run_model_matrix(
             task_ids=active_task_ids,
             variants=active_variants,
             max_tokens=active_max_tokens,
+            action_budget=active_action_budget,
             trace_mode=active_trace_mode,
             prompt_template=active_prompt_template,
             pull_missing=pull_missing,
@@ -136,6 +143,7 @@ def run_model_matrix(
         "model_names": [model["model_name"] for model in enabled_models],
         "variants": active_variants,
         "max_tokens": active_max_tokens,
+        "action_budget": active_action_budget,
         "trace_mode": active_trace_mode,
         "prompt_template": active_prompt_template,
         "pull_missing": pull_missing,
@@ -165,6 +173,7 @@ def _run_one_model(
     task_ids: list[str],
     variants: list[str],
     max_tokens: int,
+    action_budget: int,
     trace_mode: str,
     prompt_template: str,
     pull_missing: bool,
@@ -214,6 +223,7 @@ def _run_one_model(
                 runtime=runtime,
                 runtime_endpoint=runtime_endpoint,
                 max_tokens=max_tokens,
+                action_budget=action_budget,
                 trace_mode=trace_mode,
                 prompt_template=prompt_template,
                 workspace_root=str(output_dir / "workspaces"),
@@ -269,6 +279,7 @@ def _run_one_model(
                         "blocked_actions"
                     ],
                     "metric_deltas": comparison["metric_deltas"],
+                    "behavioral_outcomes": comparison["behavioral_outcomes"],
                 }
             )
 

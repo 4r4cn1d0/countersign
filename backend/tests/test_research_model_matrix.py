@@ -310,15 +310,22 @@ def test_model_matrix_analysis_reports_langgraph_tool_reality_columns(tmp_path: 
     markdown = format_model_matrix_analysis_markdown(report)
 
     assert row["used_stale_evidence"] is True
-    assert row["final_test_success"] is True
+    assert row["baseline_evaluator_success"] is True
+    assert row["verified_evaluator_success"] is True
     assert row["false_completion_claim_count"] >= 1
-    assert row["verified_false_completion_claim_count"] == 0
-    assert row["verification_helped"] is True
-    assert row["tool_action_parse_status_counts"] == {"json": 7}
-    assert model["verification_helped_count"] == 1
-    assert model["final_test_success_count"] == 1
+    assert row["baseline_false_finish_proposals"] == 1
+    assert row["baseline_accepted_false_finishes"] == 1
+    assert row["verified_false_finish_proposals"] == 1
+    assert row["verified_blocked_false_finishes"] == 1
+    assert row["verified_accepted_false_finishes"] == 0
+    assert row["verified_recovery_after_block"] is True
+    assert row["tool_action_parse_status_counts"] == {"json": 6}
+    assert model["verified_recovery_count"] == 1
+    assert model["baseline_evaluator_success_count"] == 1
+    assert model["verified_evaluator_success_count"] == 1
     assert report["aggregate"]["total_false_completion_claims"] >= 1
-    assert "Coding-Agent Reality Matrix" in markdown
+    assert report["aggregate"]["verified_blocked_false_finishes"] == 1
+    assert "Coding-Agent Intervention Matrix" in markdown
 
 
 def test_cli_matrix_report_outputs_analysis(tmp_path: Path):

@@ -199,6 +199,14 @@ def _post_json(url: str, payload: dict) -> dict:
     try:
         with urllib.request.urlopen(request, timeout=300) as response:
             return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace").strip()
+        detail = f"HTTP {exc.code}"
+        if body:
+            detail += f": {body[:1000]}"
+        raise RuntimeError(
+            f"Local model runtime request failed: {url} ({detail})"
+        ) from exc
     except (
         urllib.error.URLError,
         TimeoutError,

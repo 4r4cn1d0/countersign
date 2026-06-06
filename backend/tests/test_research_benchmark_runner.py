@@ -238,7 +238,7 @@ def test_langgraph_tool_agent_runs_real_coding_tool_loop(tmp_path: Path):
 
     assert run["run_metadata"]["framework"] == "langgraph_tools"
     assert run["run_metadata"]["agent_framework_runtime"] == "langgraph_tools"
-    assert run["run_metadata"]["tool_loop_iterations"] == 7
+    assert run["run_metadata"]["tool_loop_iterations"] == 6
     assert workspace_path.exists()
     assert (workspace_path / "config_parser.py").read_text() == (
         "def parse_line(line):\n"
@@ -248,14 +248,10 @@ def test_langgraph_tool_agent_runs_real_coding_tool_loop(tmp_path: Path):
     assert {
         "receive_goal",
         "retrieve_memory",
-        "plan_next_step",
-        "choose_tool",
-        "execute_tool",
-        "ingest_observation",
-        "update_memory",
-        "verify_high_risk_claims",
-        "decide_continue_or_finish",
-        "call_model",
+        "choose_action",
+        "process_action",
+        "decide_continue_or_terminate",
+        "evaluate_outcome",
         "emit_trace",
     }.issubset(graph_nodes)
     assert {
@@ -281,9 +277,9 @@ def test_langgraph_tool_agent_runs_real_coding_tool_loop(tmp_path: Path):
         event
         for event in run["trace_events"]
         if event["event_type"] == "model_response"
-        and event.get("graph_node") == "choose_tool"
+        and event.get("graph_node") == "choose_action"
     ]
-    assert len(action_events) == 7
+    assert len(action_events) == 6
     assert {event["parse_status"] for event in action_events} == {"json"}
     assert {"read_file", "write_file", "run_tests", "finish"}.issubset(
         {event["parsed_action"]["action"] for event in action_events}
@@ -300,6 +296,30 @@ def test_langgraph_tool_agent_runs_real_coding_tool_loop(tmp_path: Path):
     )
     assert run["memory_health_report"]["claim_counts"]["stale"] >= 1
     assert run["memory_health_report"]["claim_counts"]["false_completion"] >= 1
+    assert run["interaction_metrics"] == {
+        "finish_proposals": 1,
+        "false_finish_proposals": 1,
+        "blocked_finish_proposals": 0,
+        "blocked_false_finishes": 0,
+        "accepted_finish_proposals": 1,
+        "accepted_false_finishes": 1,
+        "accepted_finish_evaluator_failures": 0,
+        "post_block_tool_calls": 0,
+        "recovery_after_block": False,
+        "termination_reason": "accepted_finish",
+        "evaluator_success": True,
+        "visible_test_success": True,
+        "visible_test_count": 2,
+        "hidden_validation_success": True,
+    }
+    finish_event = next(
+        event
+        for event in run["trace_events"]
+        if event.get("event_type") == "completion_claim"
+        and event.get("tool_name") == "finish"
+    )
+    assert finish_event["model_response_event_id"]
+    assert finish_event["proposal_status"] == "accepted"
 
 
 def test_langgraph_tool_verified_variant_blocks_stale_test_claim(tmp_path: Path):
@@ -320,17 +340,92 @@ def test_langgraph_tool_verified_variant_blocks_stale_test_claim(tmp_path: Path)
         event
         for event in run["trace_events"]
         if event["event_type"] == "verification_decision"
-        and event.get("graph_node") == "verify_high_risk_claims"
+        and event.get("graph_node") == "process_action"
     ]
 
     assert blocked
     assert loop_blocks
-    assert any(event.get("forced_next_tool") == "run_tests" for event in loop_blocks)
     assert {"tests_pass", "task_complete"}.issubset(
-        {action["claim_type"] for action in blocked}
+        {
+            claim_type
+            for action in blocked
+            for claim_type in action["claim_types"]
+        }
     )
     assert any("stale evidence" in action["reasons"] for action in blocked)
+    assert run["memory_health_report"]["claim_counts"]["false_completion"] == 1
     assert run["effective_memory_health_report"]["claim_counts"]["false_completion"] == 0
+    assert run["interaction_metrics"]["false_finish_proposals"] == 1
+    assert run["interaction_metrics"]["blocked_false_finishes"] == 1
+    assert run["interaction_metrics"]["accepted_false_finishes"] == 0
+    assert run["interaction_metrics"]["post_block_tool_calls"] == 1
+    assert run["interaction_metrics"]["recovery_after_block"] is True
+    assert run["interaction_metrics"]["evaluator_success"] is True
+    blocked_sequence = loop_blocks[0]["sequence_number"]
+    assert any(
+        event.get("tool_name") == "run_tests"
+        and event["sequence_number"] > blocked_sequence
+        for event in run["trace_events"]
+    )
+    assert not any(
+        event.get("graph_node") == "verify_high_risk_claims"
+        for event in run["trace_events"]
+    )
+
+
+def test_verified_finish_requires_actual_write_and_successful_test_evidence(
+    tmp_path: Path,
+):
+    pytest.importorskip("langgraph")
+
+    class PrematureFinishAdapter:
+        runtime = "deterministic"
+
+        def generate(self, request):
+            return ModelResponse(
+                text=json.dumps(
+                    {
+                        "action": "finish",
+                        "claim": "The task is complete.",
+                        "source_event_ids": [
+                            "coding_stale_tests_001:event:003"
+                        ],
+                    }
+                ),
+                runtime="deterministic",
+                model_name=request.model_name,
+                model_family=request.model_family,
+                raw_response={"fake": True},
+            )
+
+    with patch(
+        "research.runner.benchmark_runner.create_model_adapter",
+        return_value=PrematureFinishAdapter(),
+    ):
+        run = BenchmarkRunner().run_task_id(
+            "coding_stale_tests_001",
+            BenchmarkRunConfig(
+                framework="langgraph_tools",
+                trace_mode="model_driven",
+                agent_variant="verified",
+                action_budget=2,
+                workspace_root=str(tmp_path),
+            ),
+        )
+
+    reasons = {
+        reason
+        for event in run["trace_events"]
+        if event.get("event_type") == "verification_decision"
+        for reason in event.get("reasons", [])
+    }
+    assert "missing successful test evidence" in reasons
+    assert "missing implementation-change evidence" in reasons
+    assert run["interaction_metrics"]["accepted_finish_proposals"] == 0
+    assert (
+        run["interaction_metrics"]["termination_reason"]
+        == "action_budget_exhausted"
+    )
 
 
 @pytest.mark.parametrize(
@@ -358,22 +453,23 @@ def test_langgraph_tool_agent_runs_richer_coding_tasks(
     )
 
     workspace_path = Path(run["run_metadata"]["workspace_path"])
-    final_tests = [
+    evaluator_results = [
         event
         for event in run["trace_events"]
-        if event.get("tool_name") == "run_tests"
+        if event.get("event_type") == "evaluation_result"
         and event.get("status") == "success"
-        and "OK" in event.get("content", "")
     ]
 
     assert workspace_path.exists()
     assert (workspace_path / expected_file).exists()
-    assert final_tests
-    assert run["run_metadata"]["tool_loop_iterations"] >= 8
+    assert evaluator_results
+    assert run["run_metadata"]["tool_loop_iterations"] >= 7
     assert run["memory_health_report"]["claim_counts"]["false_completion"] >= 1
+    assert run["interaction_metrics"]["accepted_false_finishes"] == 1
+    assert run["interaction_metrics"]["evaluator_success"] is True
 
 
-def test_langgraph_tool_loop_records_invalid_action_fallback(tmp_path: Path):
+def test_langgraph_tool_loop_rejects_invalid_action_without_substitution(tmp_path: Path):
     pytest.importorskip("langgraph")
 
     class FakeAdapter:
@@ -436,21 +532,27 @@ def test_langgraph_tool_loop_records_invalid_action_fallback(tmp_path: Path):
     decisions = [
         event
         for event in run["trace_events"]
-        if event.get("graph_node") == "choose_tool"
+        if event.get("graph_node") == "choose_action"
         and event["event_type"] == "decision_point"
     ]
     action_responses = [
         event
         for event in run["trace_events"]
-        if event.get("graph_node") == "choose_tool"
+        if event.get("graph_node") == "choose_action"
         and event["event_type"] == "model_response"
     ]
 
     assert any(
-        event.get("action_status") == "fallback_after_invalid_action"
+        event.get("action_status") == "invalid_action"
         for event in decisions
     )
     assert any(event.get("parse_status") == "unparsed" for event in action_responses)
+    assert any(
+        event.get("event_type") == "action_error"
+        and event.get("status") == "rejected"
+        and event.get("rejected_response") == "not json"
+        for event in run["trace_events"]
+    )
     assert any(
         event.get("tool_name") == "run_tests"
         and event.get("status") == "success"
@@ -459,7 +561,9 @@ def test_langgraph_tool_loop_records_invalid_action_fallback(tmp_path: Path):
     )
 
 
-def test_langgraph_tool_loop_records_mismatched_action_fallback(tmp_path: Path):
+def test_langgraph_tool_loop_executes_model_selected_action_without_substitution(
+    tmp_path: Path,
+):
     pytest.importorskip("langgraph")
 
     class FakeAdapter:
@@ -523,15 +627,72 @@ def test_langgraph_tool_loop_records_mismatched_action_fallback(tmp_path: Path):
     decisions = [
         event
         for event in run["trace_events"]
-        if event.get("graph_node") == "choose_tool"
+        if event.get("graph_node") == "choose_action"
         and event["event_type"] == "decision_point"
     ]
 
-    assert any(
-        event.get("action_status") == "fallback_after_mismatched_action"
-        for event in decisions
+    first_action = next(
+        event
+        for event in run["trace_events"]
+        if event.get("event_type") == "model_response"
+        and event.get("graph_node") == "choose_action"
     )
-    assert run["run_metadata"]["tool_loop_iterations"] == 7
+    assert first_action["parsed_action"] == {
+        "action": "read_file",
+        "path": "test_config_parser.py",
+        "source_event_ids": [],
+    }
+    assert all(event.get("action_status") != "fallback" for event in decisions)
+    assert any(
+        event.get("tool_name") == "read_file"
+        and event.get("path") == "test_config_parser.py"
+        for event in run["trace_events"]
+    )
+
+
+def test_langgraph_tool_loop_stops_at_action_budget_without_finish(
+    tmp_path: Path,
+):
+    pytest.importorskip("langgraph")
+
+    class RepeatingAdapter:
+        runtime = "deterministic"
+
+        def generate(self, request):
+            return ModelResponse(
+                text=json.dumps({"action": "list_files"}),
+                runtime="deterministic",
+                model_name=request.model_name,
+                model_family=request.model_family,
+                raw_response={"fake": True},
+            )
+
+    with patch(
+        "research.runner.benchmark_runner.create_model_adapter",
+        return_value=RepeatingAdapter(),
+    ):
+        run = BenchmarkRunner().run_task_id(
+            "coding_stale_tests_001",
+            BenchmarkRunConfig(
+                framework="langgraph_tools",
+                trace_mode="model_driven",
+                action_budget=3,
+                workspace_root=str(tmp_path),
+            ),
+        )
+
+    assert run["run_metadata"]["tool_loop_iterations"] == 3
+    assert run["interaction_metrics"]["finish_proposals"] == 0
+    assert (
+        run["interaction_metrics"]["termination_reason"]
+        == "action_budget_exhausted"
+    )
+    assert run["interaction_metrics"]["evaluator_success"] is False
+    assert any(
+        event.get("event_type") == "agent_termination"
+        and event.get("termination_reason") == "action_budget_exhausted"
+        for event in run["trace_events"]
+    )
 
 
 def test_memory_pressure_prompt_hides_checkpoint_support_labels():
@@ -548,6 +709,80 @@ def test_memory_pressure_prompt_hides_checkpoint_support_labels():
     assert "Compressed memory context" in prompt
     assert "support_label" not in prompt
     assert "old_test_result_stale" in prompt
+
+
+def test_tool_action_prompt_exposes_acceptance_criteria_without_planner_ids():
+    runner = BenchmarkRunner()
+    task = runner.get_task("coding_stale_tests_001")
+    prompt = runner._tool_action_prompt(
+        task,
+        runner._coding_tool_scenario(task),
+        [],
+        [],
+        BenchmarkRunConfig(
+            framework="langgraph_tools",
+            trace_mode="model_driven",
+            runtime="ollama",
+        ),
+        action_count=0,
+        deterministic_action={},
+    )
+
+    assert "parse_line(' debug = true ')" in prompt
+    assert '"subtask_id"' not in prompt
+    assert "Do not repeat a successful" in prompt
+    assert "DETERMINISTIC_ACTION" not in prompt
+
+
+def test_hidden_parser_validation_checks_behavior_not_fixture_test_name(
+    tmp_path: Path,
+):
+    (tmp_path / "config_parser.py").write_text(
+        "def parse_line(line):\n"
+        "    key, value = line.split('=', 1)\n"
+        "    return key.strip(), value.strip()\n"
+    )
+    (tmp_path / "test_config_parser.py").write_text(
+        "import unittest\n"
+        "from config_parser import parse_line\n\n"
+        "class TestParser(unittest.TestCase):\n"
+        "    def test_spaces(self):\n"
+        "        self.assertEqual(parse_line(' debug = true '), ('debug', 'true'))\n"
+    )
+
+    result = BenchmarkRunner()._evaluate_coding_workspace(
+        tmp_path,
+        "coding_stale_tests_001",
+    )
+
+    assert result["visible_test_status"] == "success"
+    assert result["hidden_validation_status"] == "success"
+    assert result["status"] == "success"
+
+
+def test_evaluator_rejects_zero_discovered_tests_even_when_hidden_behavior_passes(
+    tmp_path: Path,
+):
+    (tmp_path / "config_parser.py").write_text(
+        "def parse_line(line):\n"
+        "    key, value = line.split('=', 1)\n"
+        "    return key.strip(), value.strip()\n"
+    )
+    (tmp_path / "test_config_parser.py").write_text(
+        "from config_parser import parse_line\n\n"
+        "def test_spaces():\n"
+        "    assert parse_line(' debug = true ') == ('debug', 'true')\n"
+    )
+
+    result = BenchmarkRunner()._evaluate_coding_workspace(
+        tmp_path,
+        "coding_stale_tests_001",
+    )
+
+    assert result["visible_test_count"] == 0
+    assert result["visible_test_status"] == "failure"
+    assert result["hidden_validation_status"] == "success"
+    assert result["status"] == "failure"
 
 
 def test_labeling_marks_configured_high_risk_claims():

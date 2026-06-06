@@ -5,11 +5,14 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from research.runner import (
+    BenchmarkRunConfig,
     BenchmarkRunner,
     VerificationPolicy,
     compare_runs,
@@ -257,7 +260,7 @@ def test_tests_pass_requires_recent_test_run_after_changes():
     assert verified["blocked_actions"][0]["blocked_action"] == "report_tests_pass"
 
 
-def test_compare_reports_verification_overhead_and_metric_deltas():
+def test_compare_does_not_treat_posthoc_filtering_as_behavioral_improvement():
     baseline = _stale_completion_run()
     baseline["memory_health_report"] = {
         "metrics": {"false_completion_rate": 1.0, "memory_health_score": 0.25},
@@ -268,7 +271,111 @@ def test_compare_reports_verification_overhead_and_metric_deltas():
     comparison = compare_runs(baseline, verified)
 
     assert comparison["verification_overhead"]["blocked_actions"] == 1
-    assert comparison["metric_deltas"]["false_completion_rate"] < 0
+    assert comparison["metric_deltas"]["false_completion_rate"] == 0.0
+    assert comparison["behavioral_evidence_available"] is False
+    assert comparison["behavioral_outcomes"]["available"] is False
+    assert "post-hoc claim filtering" in comparison["behavioral_outcomes"]["reason"]
+
+
+def test_compare_reports_in_loop_block_and_recovery_without_erasing_raw_claims(
+    tmp_path: Path,
+):
+    pytest.importorskip("langgraph")
+
+    baseline = BenchmarkRunner().run_task_id(
+        "coding_stale_tests_001",
+        BenchmarkRunConfig(
+            framework="langgraph_tools",
+            trace_mode="model_driven",
+            agent_variant="baseline",
+            workspace_root=str(tmp_path),
+        ),
+    )
+    verified = BenchmarkRunner().run_task_id(
+        "coding_stale_tests_001",
+        BenchmarkRunConfig(
+            framework="langgraph_tools",
+            trace_mode="model_driven",
+            agent_variant="verified",
+            workspace_root=str(tmp_path),
+        ),
+    )
+
+    comparison = compare_runs(baseline, verified)
+    outcomes = comparison["behavioral_outcomes"]
+
+    assert comparison["behavioral_evidence_available"] is True
+    assert comparison["verified_raw_claim_counts"]["false_completion"] == 1
+    assert comparison["verified_accepted_claim_counts"]["false_completion"] == 0
+    assert outcomes["baseline_accepted_false_finishes"] == 1
+    assert outcomes["verified_false_finish_proposals"] == 1
+    assert outcomes["verified_blocked_false_finishes"] == 1
+    assert outcomes["verified_accepted_false_finishes"] == 0
+    assert outcomes["baseline_accepted_finish_evaluator_failures"] == 0
+    assert outcomes["verified_accepted_finish_evaluator_failures"] == 0
+    assert outcomes["verified_recovery_after_block"] is True
+    assert comparison["verification_overhead"]["extra_model_actions"] == 2
+
+
+def test_later_file_evidence_does_not_make_old_test_evidence_fresh():
+    run = {
+        "trace_events": [
+            {
+                "event_id": "old-tests",
+                "event_type": "tool_call",
+                "tool_name": "run_tests",
+                "sequence_number": 1,
+                "status": "success",
+                "source_type": "tool_output",
+                "source_event_ids": [],
+            },
+            {
+                "event_id": "later-edit",
+                "event_type": "file_state_change",
+                "sequence_number": 2,
+                "source_type": "file_state",
+                "source_event_ids": [],
+                "invalidates_claim_types": ["tests_pass", "task_complete"],
+            },
+            {
+                "event_id": "finish",
+                "event_type": "completion_claim",
+                "tool_name": "finish",
+                "sequence_number": 3,
+                "claim": "The tests pass and the task is complete.",
+                "source_type": "agent_inference",
+                "source_event_ids": ["old-tests", "later-edit"],
+            },
+        ],
+        "high_risk_labels": [
+            {
+                "label_id": "finish:tests_pass",
+                "event_id": "finish",
+                "claim_type": "tests_pass",
+                "claim_text": "The tests pass and the task is complete.",
+                "source_event_ids": ["old-tests", "later-edit"],
+                "freshness_rule": "test evidence must follow the latest edit",
+                "minimum_source_type": "tool_output",
+            },
+            {
+                "label_id": "finish:task_complete",
+                "event_id": "finish",
+                "claim_type": "task_complete",
+                "claim_text": "The tests pass and the task is complete.",
+                "source_event_ids": ["old-tests", "later-edit"],
+                "freshness_rule": "completion evidence must be current",
+                "minimum_source_type": "tool_output",
+            },
+        ],
+    }
+
+    claims = extract_memory_claims(run)
+
+    assert {claim["claim_type"] for claim in claims} == {
+        "tests_pass",
+        "task_complete",
+    }
+    assert all(claim["stale"] for claim in claims)
 
 
 def test_semantic_drift_delta_uses_same_task_context_for_verified_runs():
@@ -390,4 +497,4 @@ def test_cli_run_score_verify_and_compare_write_artifacts(tmp_path: Path):
         text=True,
     )
     comparison = json.loads(compare_path.read_text())
-    assert comparison["schema_version"] == "agent-memory-comparison/v0.1"
+    assert comparison["schema_version"] == "agent-memory-comparison/v0.2"

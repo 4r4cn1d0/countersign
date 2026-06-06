@@ -38,7 +38,10 @@ def label_high_risk_claims(
             continue
 
         for claim_type, claim_config in configured_claims.items():
-            if _matches_claim_type(text, claim_type):
+            if (
+                claim_type == "task_complete"
+                and event.get("tool_name") == "finish"
+            ) or _matches_claim_type(text, claim_type):
                 labels.append(
                     {
                         "label_id": f"{event['event_id']}:{claim_type}",

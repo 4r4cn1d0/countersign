@@ -44,6 +44,17 @@ def test_deterministic_model_adapter_contract():
     assert response.raw_response["seed"] == 123
 
 
+def test_real_runtime_fallback_is_opt_in():
+    assert BenchmarkRunConfig(runtime="ollama").allow_runtime_fallback is False
+    assert (
+        BenchmarkRunConfig(
+            runtime="ollama",
+            allow_runtime_fallback=True,
+        ).allow_runtime_fallback
+        is True
+    )
+
+
 def test_ollama_adapter_contract_without_network():
     with patch(
         "research.runner.model_adapters._post_json",
@@ -121,7 +132,7 @@ def test_artifact_bundle_generation_creates_reloadable_outputs(tmp_path: Path):
         assert Path(task["verified_run"]).exists()
         assert Path(task["comparison_json"]).exists()
         comparison = json.loads(Path(task["comparison_json"]).read_text())
-        assert comparison["schema_version"] == "agent-memory-comparison/v0.1"
+        assert comparison["schema_version"] == "agent-memory-comparison/v0.2"
 
 
 def test_artifact_bundle_manifest_records_commands_and_regenerates_comparisons(

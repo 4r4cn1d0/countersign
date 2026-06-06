@@ -92,7 +92,18 @@ def _is_stale_claim(
 
     claim_type = label["claim_type"]
     claim_sequence = event["sequence_number"]
-    latest_source_sequence = max(source_event["sequence_number"] for source_event in source_events)
+    freshness_sources = source_events
+    if claim_type in {"tests_pass", "task_complete", "no_errors_present"}:
+        cited_test_events = [
+            source_event
+            for source_event in source_events
+            if source_event.get("tool_name") == "run_tests"
+        ]
+        if cited_test_events:
+            freshness_sources = cited_test_events
+    latest_source_sequence = max(
+        source_event["sequence_number"] for source_event in freshness_sources
+    )
 
     for candidate in trace_events:
         candidate_sequence = candidate["sequence_number"]

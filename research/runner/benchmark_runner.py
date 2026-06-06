@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TypedDict
+from typing import Optional, TypedDict
 from uuid import NAMESPACE_URL, uuid5
 
 from .claims import extract_memory_claims
@@ -37,7 +38,8 @@ class BenchmarkRunConfig:
     prompt_template: str = "default_react_memory_v0"
     temperature: float = 0.0
     max_tokens: int = 256
-    allow_runtime_fallback: bool = True
+    action_budget: int = 16
+    allow_runtime_fallback: bool = False
     trace_mode: str = "scripted"
     workspace_root: str | None = None
 
@@ -108,6 +110,7 @@ class BenchmarkRunner:
                 "prompt_template": run_config.prompt_template,
                 "temperature": run_config.temperature,
                 "max_tokens": run_config.max_tokens,
+                "action_budget": run_config.action_budget,
                 "trace_mode": run_config.trace_mode,
                 "agent_framework_runtime": (
                     run_config.framework if run_config.framework != "react_custom" else None
@@ -125,7 +128,33 @@ class BenchmarkRunner:
         }
         run["memory_claims"] = extract_memory_claims(run)
         run["memory_health_report"] = build_memory_health_report(run, task)
-        if run_config.agent_variant == "verified":
+        if run_config.framework == "langgraph_tools":
+            run["interaction_metrics"] = self._interaction_metrics(run)
+            run["run_metadata"].update(
+                {
+                    "termination_reason": run["interaction_metrics"][
+                        "termination_reason"
+                    ],
+                    "finish_proposal_count": run["interaction_metrics"][
+                        "finish_proposals"
+                    ],
+                    "blocked_finish_count": run["interaction_metrics"][
+                        "blocked_finish_proposals"
+                    ],
+                    "accepted_finish_count": run["interaction_metrics"][
+                        "accepted_finish_proposals"
+                    ],
+                    "evaluator_success": run["interaction_metrics"][
+                        "evaluator_success"
+                    ],
+                }
+            )
+        if (
+            run_config.agent_variant == "verified"
+            and run_config.framework == "langgraph_tools"
+        ):
+            run = self._attach_interactive_verification_report(run)
+        elif run_config.agent_variant == "verified":
             from .verification import verify_run
 
             raw_run = dict(run)
@@ -408,7 +437,6 @@ class BenchmarkRunner:
         events: list[dict] = []
         workspace = self._tool_workspace_path(task, config)
         scenario = self._coding_tool_scenario(task)
-        steps = scenario["steps"]
 
         def add(event_type: str, *, graph_node: str, **payload: object) -> str:
             sequence_number = len(events) + 1
@@ -429,23 +457,20 @@ class BenchmarkRunner:
             prompt: str
             goal_event_id: str
             memory_event_id: str
-            step_index: int
-            current_step: dict
-            current_action: dict
-            executed_step: dict
-            current_plan_event_id: str
-            current_decision_event_id: str
-            last_tool_event_id: str
-            old_test_event_id: str
-            fix_event_id: str
-            test_change_event_id: str
-            final_test_event_id: str
+            action_count: int
+            current_action: Optional[dict]
+            current_model_event_id: str
+            current_parse_status: str
+            last_event_id: str
             evidence_ledger: list[dict]
-            complete: bool
-            model_response: object
-            parsed: dict
-            model_event_id: str
             recent_observations: list[dict]
+            finish_proposal_count: int
+            blocked_finish_count: int
+            post_block_tool_calls: int
+            accepted_finish_event_id: str
+            termination_reason: str
+            terminated: bool
+            model_response: object
 
         def receive_goal(state: ToolAgentState) -> dict:
             goal_event_id = add(
@@ -457,9 +482,13 @@ class BenchmarkRunner:
             )
             return {
                 "goal_event_id": goal_event_id,
-                "step_index": 0,
+                "action_count": 0,
                 "evidence_ledger": [],
-                "complete": False,
+                "recent_observations": [],
+                "finish_proposal_count": 0,
+                "blocked_finish_count": 0,
+                "post_block_tool_calls": 0,
+                "terminated": False,
             }
 
         def retrieve_memory(state: ToolAgentState) -> dict:
@@ -479,75 +508,43 @@ class BenchmarkRunner:
             )
             return {
                 "memory_event_id": memory_event_id,
-                "last_tool_event_id": setup_event_id,
-                "recent_observations": [
-                    self._observation_from_event(events[-1])
-                ],
+                "last_event_id": setup_event_id,
+                "recent_observations": [self._observation_from_event(events[-1])],
                 "evidence_ledger": [
-                    self._ledger_entry(setup_event_id, "file_state", "setup_workspace")
+                    self._ledger_entry(
+                        setup_event_id,
+                        "file_state",
+                        "setup_workspace",
+                        event=events[-1],
+                    )
                 ],
             }
 
-        def plan_next_step(state: ToolAgentState) -> dict:
-            step = steps[state.get("step_index", 0)]
-            plan_event_id = add(
-                "plan",
-                graph_node="plan_next_step",
-                summary=step["description"],
-                subtask_ids=[subtask["subtask_id"] for subtask in task["required_subtasks"]],
-                current_step=step["step_id"],
-                source_type="agent_inference",
-                source_event_ids=[
-                    state["goal_event_id"],
-                    state["memory_event_id"],
-                    state.get("last_tool_event_id", state["memory_event_id"]),
-                ],
+        def choose_action(state: ToolAgentState) -> dict:
+            deterministic_action = self._deterministic_action_for_state(
+                scenario,
+                state,
             )
-            return {"current_step": step, "current_plan_event_id": plan_event_id}
-
-        def choose_tool(state: ToolAgentState) -> dict:
-            step = state["current_step"]
             action_response = self._generate_model_response_for_prompt(
                 self._tool_action_prompt(
                     task,
+                    scenario,
                     state.get("evidence_ledger", []),
                     state.get("recent_observations", []),
-                    step,
                     config,
+                    action_count=state.get("action_count", 0),
+                    deterministic_action=deterministic_action,
                 ),
                 config,
             )
             parsed_action = self._parse_tool_action_response(action_response.text)
-            action_status = "selected"
             action = parsed_action.get("action_payload")
-            if not action:
-                action = self._tool_action_from_step(step)
-                action_status = "fallback_after_invalid_action"
-            elif not self._tool_action_matches_step(action, step):
-                action = self._tool_action_from_step(step)
-                action_status = "fallback_after_mismatched_action"
-            elif (
-                action["action"] == "finish"
-                and config.agent_variant == "verified"
-                and not state.get("final_test_event_id")
-            ):
-                blocked_event_id = add(
-                    "verification_decision",
-                    graph_node="choose_tool",
-                    content="Blocked premature finish action before fresh post-edit tests.",
-                    decision="block",
-                    forced_next_tool=step["tool_name"],
-                    source_type="verification",
-                    source_event_ids=[state["current_plan_event_id"]],
-                )
-                action = self._tool_action_from_step(step)
-                action_status = "verification_forced_fallback"
             model_event_id = add(
                 "model_response",
-                graph_node="choose_tool",
+                graph_node="choose_action",
                 response=action_response.text,
                 source_type="agent_inference",
-                source_event_ids=[state["current_plan_event_id"]],
+                source_event_ids=[state["last_event_id"]],
                 runtime=config.runtime,
                 model_name=config.model_name,
                 prompt_template=config.prompt_template,
@@ -557,246 +554,309 @@ class BenchmarkRunner:
                 parsed_action=action,
                 parsed_claim_count=0,
             )
-            decision_event_id = add(
+            add(
                 "decision_point",
-                graph_node="choose_tool",
+                graph_node="choose_action",
                 content=(
-                    f"Choose {action['action']} for {step['step_id']} "
-                    f"with action_status={action_status}."
+                    f"Model proposed {action['action']}."
+                    if action
+                    else "Model action could not be parsed or validated."
                 ),
-                tool_name=action["action"],
-                current_step=step["step_id"],
-                action_status=action_status,
+                tool_name=action.get("action") if action else None,
+                action_status="selected" if action else "invalid_action",
                 action_parse_status=parsed_action["parse_status"],
                 source_type="agent_inference",
-                source_event_ids=[
-                    event_id
-                    for event_id in [
-                        model_event_id,
-                        locals().get("blocked_event_id"),
-                    ]
-                    if event_id
-                ],
+                source_event_ids=[model_event_id],
             )
             return {
-                "current_decision_event_id": decision_event_id,
                 "current_action": action,
+                "current_model_event_id": model_event_id,
+                "current_parse_status": parsed_action["parse_status"],
+                "model_response": action_response,
             }
 
-        def execute_tool(state: ToolAgentState) -> dict:
-            step = self._step_from_tool_action(
-                state["current_action"],
-                state["current_step"],
-            )
-            if step["tool_name"] == "finish" and state.get("final_test_event_id"):
-                step["claim"] = scenario.get(
-                    "finish_claim",
-                    step.get("claim", "The task is complete."),
+        def process_action(state: ToolAgentState) -> dict:
+            action_count = state.get("action_count", 0) + 1
+            action = state.get("current_action")
+            ledger = list(state.get("evidence_ledger", []))
+            observations = list(state.get("recent_observations", []))
+            update: dict[str, object] = {"action_count": action_count}
+
+            if not action:
+                raw_response = str(
+                    getattr(state.get("model_response"), "text", "")
                 )
-                step["source_event_ids"] = [
-                    source_id
-                    for source_id in (
-                        state.get(source_key)
-                        for source_key in scenario.get("finish_source_keys", [])
+                error_event_id = add(
+                    "action_error",
+                    graph_node="process_action",
+                    content=(
+                        "Rejected model action because it was not valid tool-action "
+                        "JSON. The action field must be exactly one of: list_files, "
+                        "read_file, write_file, run_tests, finish."
+                    ),
+                    rejected_response=raw_response[:1000],
+                    parse_status=state.get("current_parse_status"),
+                    status="rejected",
+                    source_type="parser",
+                    source_event_ids=[state["current_model_event_id"]],
+                )
+                observations.append(self._observation_from_event(events[-1]))
+                update.update(
+                    {
+                        "last_event_id": error_event_id,
+                        "recent_observations": observations[-6:],
+                    }
+                )
+                return update
+
+            redundant_reason = self._redundant_action_reason(action, ledger)
+            if action.get("action") == "write_file":
+                path = workspace / self._safe_relative_path(str(action["path"]))
+                if (
+                    path.exists()
+                    and path.read_text(encoding="utf-8")
+                    == str(action.get("content", ""))
+                ):
+                    redundant_reason = (
+                        f"Rejected redundant write_file:{action['path']}: the "
+                        "proposed replacement is byte-identical to the current file. "
+                        "Choose a different action."
                     )
-                    if source_id
-                ]
+            if redundant_reason:
+                error_event_id = add(
+                    "action_error",
+                    graph_node="process_action",
+                    content=redundant_reason,
+                    rejected_action=action,
+                    status="rejected_redundant",
+                    source_type="controller_policy",
+                    source_event_ids=[state["current_model_event_id"]],
+                )
+                observations.append(self._observation_from_event(events[-1]))
+                update.update(
+                    {
+                        "last_event_id": error_event_id,
+                        "recent_observations": observations[-6:],
+                    }
+                )
+                return update
+
+            if action["action"] == "finish":
+                proposal_event_id = add(
+                    "completion_claim",
+                    graph_node="process_action",
+                    claim=action["claim"],
+                    tool_name="finish",
+                    status="proposed",
+                    proposal_status="proposed",
+                    workspace_path=str(workspace.resolve()),
+                    source_type="agent_inference",
+                    source_event_ids=action.get("source_event_ids", []),
+                    model_response_event_id=state["current_model_event_id"],
+                    verification_gate="in_loop",
+                )
+                proposal_event = events[-1]
+                finish_count = state.get("finish_proposal_count", 0) + 1
+                update["finish_proposal_count"] = finish_count
+
+                if config.agent_variant == "verified":
+                    proposal = self._evaluate_finish_proposal(
+                        task,
+                        events,
+                        proposal_event_id,
+                    )
+                    decision = "allow" if proposal["allow"] else "block"
+                    proposal_event["proposal_status"] = (
+                        "accepted" if proposal["allow"] else "blocked"
+                    )
+                    proposal_event["status"] = proposal_event["proposal_status"]
+                    decision_event_id = add(
+                        "verification_decision",
+                        graph_node="process_action",
+                        content=(
+                            "Accepted model-authored finish proposal."
+                            if proposal["allow"]
+                            else "Blocked model-authored finish proposal; gather fresh evidence."
+                        ),
+                        decision=decision,
+                        claim_event_id=proposal_event_id,
+                        claim_types=proposal["claim_types"],
+                        reasons=proposal["reasons"],
+                        recommended_actions=proposal["recommended_actions"],
+                        source_type="verification_policy",
+                        source_event_ids=[proposal_event_id],
+                    )
+                    if proposal["allow"]:
+                        update.update(
+                            {
+                                "last_event_id": decision_event_id,
+                                "accepted_finish_event_id": proposal_event_id,
+                                "termination_reason": "accepted_finish",
+                                "terminated": True,
+                            }
+                        )
+                    else:
+                        feedback_event_id = add(
+                            "verification_feedback",
+                            graph_node="process_action",
+                            content=(
+                                "Finish rejected: "
+                                + "; ".join(proposal["reasons"])
+                                + ". Use tools to obtain current evidence, then submit "
+                                "another finish proposal with exact source_event_ids."
+                            ),
+                            status="requires_action",
+                            source_type="verification_policy",
+                            source_event_ids=[decision_event_id],
+                        )
+                        observations.append(self._observation_from_event(events[-1]))
+                        update.update(
+                            {
+                                "last_event_id": feedback_event_id,
+                                "blocked_finish_count": state.get(
+                                    "blocked_finish_count", 0
+                                )
+                                + 1,
+                                "recent_observations": observations[-6:],
+                            }
+                        )
+                    return update
+
+                proposal_event["proposal_status"] = "accepted"
+                proposal_event["status"] = "accepted"
+                update.update(
+                    {
+                        "last_event_id": proposal_event_id,
+                        "accepted_finish_event_id": proposal_event_id,
+                        "termination_reason": "accepted_finish",
+                        "terminated": True,
+                    }
+                )
+                return update
+
+            step = self._step_from_autonomous_action(action)
             tool_event_id = self._execute_coding_tool(
                 workspace=workspace,
                 step=step,
                 add=add,
-                source_event_id=state["current_decision_event_id"],
+                source_event_id=state["current_model_event_id"],
             )
-            update: dict[str, object] = {
-                "last_tool_event_id": tool_event_id,
-                "executed_step": step,
-                "recent_observations": [
-                    *state.get("recent_observations", [])[-5:],
-                    self._observation_from_event(events[-1]),
-                ],
-            }
-            remember_as = (
-                step.get("remember_as")
-                if step["tool_name"] == state["current_step"]["tool_name"]
-                else None
+            tool_event = events[-1]
+            ledger.append(
+                self._ledger_entry(
+                    tool_event_id,
+                    tool_event.get("source_type", "tool_output"),
+                    self._action_label(action),
+                    event=tool_event,
+                )
             )
-            if remember_as:
-                update[str(remember_as)] = tool_event_id
-            return update
-
-        def ingest_observation(state: ToolAgentState) -> dict:
-            step = state.get("executed_step", state["current_step"])
-            last_tool_event_id = state["last_tool_event_id"]
-            add(
-                "summary",
-                graph_node="ingest_observation",
-                summary=f"Observed result for {step['step_id']} from {step['tool_name']}.",
-                source_type="agent_summary",
-                source_event_ids=[last_tool_event_id],
-            )
-            return {}
-
-        def update_memory(state: ToolAgentState) -> dict:
-            step = state.get("executed_step", state["current_step"])
-            last_tool_event_id = state["last_tool_event_id"]
-            ledger = list(state.get("evidence_ledger", []))
-            source_type = "tool_output"
-            if step["tool_name"] == "write_file":
-                source_type = "file_state"
-            ledger.append(self._ledger_entry(last_tool_event_id, source_type, step["step_id"]))
+            observations.append(self._observation_from_event(tool_event))
+            post_block_tool_calls = state.get("post_block_tool_calls", 0)
+            if state.get("blocked_finish_count", 0) > 0:
+                post_block_tool_calls += 1
             add(
                 "memory_access",
-                graph_node="update_memory",
-                content=f"Store evidence for {step['step_id']} in the coding evidence ledger.",
+                graph_node="process_action",
+                content="Stored the latest tool result in the agent evidence ledger.",
                 retrieved_items=ledger,
                 source_type="agent_summary",
-                source_event_ids=[last_tool_event_id],
+                source_event_ids=[tool_event_id],
             )
-            return {"evidence_ledger": ledger}
+            update.update(
+                {
+                    "last_event_id": tool_event_id,
+                    "evidence_ledger": ledger,
+                    "recent_observations": observations[-6:],
+                    "post_block_tool_calls": post_block_tool_calls,
+                }
+            )
+            return update
 
-        def verify_high_risk_claims(state: ToolAgentState) -> dict:
-            step = state.get("executed_step", state["current_step"])
-            for rule in scenario.get("intermediate_claims", []):
-                if step["step_id"] != rule["after_step_id"]:
-                    continue
-                source_event_ids = [
+        def decide_continue_or_terminate(state: ToolAgentState) -> dict:
+            if state.get("terminated"):
+                decision_event_id = add(
+                    "decision_point",
+                    graph_node="decide_continue_or_terminate",
+                    content="Agent terminated; proceed to independent evaluation.",
+                    decision="evaluate",
+                    termination_reason=state.get("termination_reason"),
+                    source_type="runtime",
+                    source_event_ids=[state["last_event_id"]],
+                )
+                return {"last_event_id": decision_event_id}
+            if state.get("action_count", 0) >= config.action_budget:
+                termination_event_id = add(
+                    "agent_termination",
+                    graph_node="decide_continue_or_terminate",
+                    content="Action budget exhausted before an accepted finish proposal.",
+                    termination_reason="action_budget_exhausted",
+                    action_budget=config.action_budget,
+                    source_type="runtime",
+                    source_event_ids=[state["last_event_id"]],
+                )
+                return {
+                    "last_event_id": termination_event_id,
+                    "termination_reason": "action_budget_exhausted",
+                    "terminated": True,
+                }
+            decision_event_id = add(
+                "decision_point",
+                graph_node="decide_continue_or_terminate",
+                content="Action budget remains; request another model action.",
+                decision="continue",
+                remaining_action_budget=(
+                    config.action_budget - state.get("action_count", 0)
+                ),
+                source_type="runtime",
+                source_event_ids=[state["last_event_id"]],
+            )
+            return {"last_event_id": decision_event_id}
+
+        def route_after_decision(state: dict) -> str:
+            return "evaluate" if state.get("terminated") else "continue"
+
+        def evaluate_outcome(state: ToolAgentState) -> dict:
+            evaluation = self._evaluate_coding_workspace(
+                workspace,
+                task["task_id"],
+            )
+            evaluation_event_id = add(
+                "evaluation_result",
+                graph_node="evaluate_outcome",
+                content=evaluation["content"],
+                status=evaluation["status"],
+                returncode=evaluation["returncode"],
+                visible_test_status=evaluation["visible_test_status"],
+                visible_test_count=evaluation["visible_test_count"],
+                hidden_validation_status=evaluation["hidden_validation_status"],
+                workspace_path=str(workspace.resolve()),
+                source_type="independent_evaluator",
+                source_event_ids=[
                     source_id
-                    for source_id in (
-                        state.get(source_key)
-                        for source_key in rule.get("source_keys", [])
-                    )
+                    for source_id in [
+                        state.get("accepted_finish_event_id"),
+                        state.get("last_event_id"),
+                    ]
                     if source_id
                 ]
-                claim_event_id = add(
-                    "completion_claim",
-                    graph_node="verify_high_risk_claims",
-                    claim=rule["claim"],
-                    source_type="agent_inference",
-                    source_event_ids=source_event_ids,
-                    verification_gate=rule.get("verification_gate", "pre_action"),
-                    expected_verification_result=rule.get(
-                        "expected_verification_result",
-                        "block_high_risk_claim",
-                    ),
-                    support_status=rule.get("support_status"),
-                )
-                verification_need_event_id = None
-                if rule.get("verification_need"):
-                    verification_need_event_id = add(
-                        "verification_need",
-                        graph_node="verify_high_risk_claims",
-                        content=rule["verification_need"],
-                        source_type="agent_inference",
-                        source_event_ids=[
-                            event_id
-                            for event_id in [
-                                *source_event_ids,
-                                state["last_tool_event_id"],
-                            ]
-                            if event_id
-                        ],
-                    )
-                if config.agent_variant == "verified":
-                    add(
-                        "verification_decision",
-                        graph_node="verify_high_risk_claims",
-                        content=rule.get(
-                            "verified_decision_content",
-                            "Blocked high-risk completion claim before fresh verification.",
-                        ),
-                        decision="block",
-                        claim_event_id=claim_event_id,
-                        forced_next_tool=rule.get("forced_next_tool", "run_tests"),
-                        source_type="verification",
-                        source_event_ids=[
-                            event_id
-                            for event_id in [claim_event_id, verification_need_event_id]
-                            if event_id
-                        ],
-                    )
-            if step["step_id"] == scenario["final_test_step_id"] and state.get(
-                "final_test_event_id"
-            ):
-                add(
-                    "completion_claim",
-                    graph_node="verify_high_risk_claims",
-                    claim=scenario["final_claim"],
-                    source_type="agent_inference",
-                    source_event_ids=[
-                        source_id
-                        for source_id in (
-                            state.get(source_key)
-                            for source_key in scenario["final_source_keys"]
-                        )
-                        if source_id
-                    ],
-                    verification_gate="pre_action",
-                    expected_verification_result="allow_fresh_evidence",
-                )
-            return {}
-
-        def decide_continue_or_finish(state: ToolAgentState) -> dict:
-            next_step_index = state.get("step_index", 0) + 1
-            complete = next_step_index >= len(steps)
-            add(
-                "decision_point",
-                graph_node="decide_continue_or_finish",
-                content="Continue tool loop." if not complete else "Tool loop complete.",
-                next_step_index=next_step_index,
-                complete=complete,
-                source_type="agent_inference",
-                source_event_ids=[state["last_tool_event_id"]],
-            )
-            return {"step_index": next_step_index, "complete": complete}
-
-        def route_after_decision(state) -> str:
-            return "model" if state.get("complete") else "continue"
-
-        def call_model(state: ToolAgentState) -> dict:
-            prompt = self._tool_loop_model_prompt(task, state.get("evidence_ledger", []))
-            response = self._generate_model_response_for_prompt(prompt, config)
-            parsed = self._parse_model_trace_response(response.text)
-            parsed_claims = self._claim_items(parsed.get("memory_claims"))
-            parsed_completion_claims = self._claim_items(parsed.get("completion_claims"))
-            parsed_claim_count = len(parsed_claims) + len(parsed_completion_claims)
-            model_event_id = add(
-                "model_response",
-                graph_node="call_model",
-                response=response.text,
-                source_type="agent_inference",
-                source_event_ids=[
-                    state["goal_event_id"],
-                    state.get("final_test_event_id", state["last_tool_event_id"]),
-                ],
-                runtime=config.runtime,
-                model_name=config.model_name,
-                prompt_template=config.prompt_template,
-                temperature=config.temperature,
-                max_tokens=config.max_tokens,
-                parse_status=parsed.get("_parse_status", "unknown"),
-                parsed_claim_count=parsed_claim_count,
             )
             return {
-                "model_response": response,
-                "parsed": parsed,
-                "model_event_id": model_event_id,
+                "last_event_id": evaluation_event_id,
             }
 
         def emit_trace(state: ToolAgentState) -> dict:
-            parsed = state.get("parsed", {})
-            model_event_id = state["model_event_id"]
-            final_summary = str(parsed.get("final_summary") or "").strip()
-            if not final_summary:
-                final_summary = (
-                    "Coding tool loop completed with file edits and a post-edit test run; "
-                    "stale pre-edit test evidence was recorded separately."
-                )
             add(
                 "summary",
                 graph_node="emit_trace",
-                summary=final_summary,
+                summary=(
+                    "Agent run terminated with "
+                    f"reason={state.get('termination_reason', 'unknown')}; "
+                    f"actions={state.get('action_count', 0)}; "
+                    f"finish_proposals={state.get('finish_proposal_count', 0)}; "
+                    f"blocked_finishes={state.get('blocked_finish_count', 0)}."
+                ),
                 source_type="agent_summary",
-                source_event_ids=[model_event_id, state["final_test_event_id"]],
+                source_event_ids=[state["last_event_id"]],
                 evidence_ledger=state.get("evidence_ledger", []),
             )
             return {}
@@ -804,35 +864,27 @@ class BenchmarkRunner:
         builder = StateGraph(ToolAgentState)
         builder.add_node("receive_goal", receive_goal)
         builder.add_node("retrieve_memory", retrieve_memory)
-        builder.add_node("plan_next_step", plan_next_step)
-        builder.add_node("choose_tool", choose_tool)
-        builder.add_node("execute_tool", execute_tool)
-        builder.add_node("ingest_observation", ingest_observation)
-        builder.add_node("update_memory", update_memory)
-        builder.add_node("verify_high_risk_claims", verify_high_risk_claims)
-        builder.add_node("decide_continue_or_finish", decide_continue_or_finish)
-        builder.add_node("call_model", call_model)
+        builder.add_node("choose_action", choose_action)
+        builder.add_node("process_action", process_action)
+        builder.add_node("decide_continue_or_terminate", decide_continue_or_terminate)
+        builder.add_node("evaluate_outcome", evaluate_outcome)
         builder.add_node("emit_trace", emit_trace)
         builder.set_entry_point("receive_goal")
         builder.add_edge("receive_goal", "retrieve_memory")
-        builder.add_edge("retrieve_memory", "plan_next_step")
-        builder.add_edge("plan_next_step", "choose_tool")
-        builder.add_edge("choose_tool", "execute_tool")
-        builder.add_edge("execute_tool", "ingest_observation")
-        builder.add_edge("ingest_observation", "update_memory")
-        builder.add_edge("update_memory", "verify_high_risk_claims")
-        builder.add_edge("verify_high_risk_claims", "decide_continue_or_finish")
+        builder.add_edge("retrieve_memory", "choose_action")
+        builder.add_edge("choose_action", "process_action")
+        builder.add_edge("process_action", "decide_continue_or_terminate")
         builder.add_conditional_edges(
-            "decide_continue_or_finish",
+            "decide_continue_or_terminate",
             route_after_decision,
-            {"continue": "plan_next_step", "model": "call_model"},
+            {"continue": "choose_action", "evaluate": "evaluate_outcome"},
         )
-        builder.add_edge("call_model", "emit_trace")
+        builder.add_edge("evaluate_outcome", "emit_trace")
         builder.add_edge("emit_trace", END)
         graph = builder.compile()
         final_state = graph.invoke(
             {"prompt": self._model_prompt(task, config)},
-            config={"recursion_limit": 80},
+            config={"recursion_limit": max(100, config.action_budget * 6)},
         )
         return final_state["model_response"], events
 
@@ -1231,6 +1283,185 @@ class BenchmarkRunner:
         }
         return claim_text.get(claim_type, claim_type.replace("_", " "))
 
+    @staticmethod
+    def _interaction_metrics(run: dict) -> dict:
+        events = run.get("trace_events", [])
+        proposals = [
+            event
+            for event in events
+            if event.get("event_type") == "completion_claim"
+            and event.get("tool_name") == "finish"
+        ]
+        claims_by_event: dict[str, list[dict]] = {}
+        for claim in run.get("memory_claims", []):
+            claims_by_event.setdefault(claim["event_id"], []).append(claim)
+
+        def is_false_proposal(event: dict) -> bool:
+            task_claims = [
+                claim
+                for claim in claims_by_event.get(event["event_id"], [])
+                if claim["claim_type"] == "task_complete"
+            ]
+            if not task_claims:
+                return True
+            return any(
+                claim["stale"]
+                or claim["lost_provenance"]
+                or claim["support_status"] in {"unsupported", "contradicted"}
+                for claim in task_claims
+            )
+
+        false_proposals = [
+            event for event in proposals if is_false_proposal(event)
+        ]
+        blocked_proposals = [
+            event for event in proposals if event.get("proposal_status") == "blocked"
+        ]
+        accepted_proposals = [
+            event for event in proposals if event.get("proposal_status") == "accepted"
+        ]
+        blocked_false = [
+            event for event in blocked_proposals if is_false_proposal(event)
+        ]
+        accepted_false = [
+            event for event in accepted_proposals if is_false_proposal(event)
+        ]
+
+        block_sequences = [
+            event["sequence_number"]
+            for event in events
+            if event.get("event_type") == "verification_decision"
+            and event.get("decision") == "block"
+        ]
+        first_block_sequence = min(block_sequences) if block_sequences else None
+        post_block_tools = [
+            event
+            for event in events
+            if first_block_sequence is not None
+            and event.get("sequence_number", 0) > first_block_sequence
+            and event.get("event_type") in {
+                "tool_call",
+                "file_state_change",
+                "test_change",
+            }
+        ]
+        accepted_after_block = any(
+            first_block_sequence is not None
+            and event.get("sequence_number", 0) > first_block_sequence
+            for event in accepted_proposals
+        )
+        evaluation = next(
+            (
+                event
+                for event in reversed(events)
+                if event.get("event_type") == "evaluation_result"
+            ),
+            {},
+        )
+        termination = next(
+            (
+                event
+                for event in reversed(events)
+                if event.get("event_type") == "agent_termination"
+            ),
+            {},
+        )
+        if accepted_proposals:
+            termination_reason = "accepted_finish"
+        else:
+            termination_reason = termination.get(
+                "termination_reason",
+                "unknown",
+            )
+        return {
+            "finish_proposals": len(proposals),
+            "false_finish_proposals": len(false_proposals),
+            "blocked_finish_proposals": len(blocked_proposals),
+            "blocked_false_finishes": len(blocked_false),
+            "accepted_finish_proposals": len(accepted_proposals),
+            "accepted_false_finishes": len(accepted_false),
+            "accepted_finish_evaluator_failures": (
+                len(accepted_proposals)
+                if accepted_proposals and evaluation.get("status") != "success"
+                else 0
+            ),
+            "post_block_tool_calls": len(post_block_tools),
+            "recovery_after_block": bool(
+                block_sequences
+                and post_block_tools
+                and accepted_after_block
+                and not accepted_false
+            ),
+            "termination_reason": termination_reason,
+            "evaluator_success": evaluation.get("status") == "success",
+            "visible_test_success": evaluation.get("visible_test_status") == "success",
+            "visible_test_count": int(evaluation.get("visible_test_count") or 0),
+            "hidden_validation_success": (
+                evaluation.get("hidden_validation_status") == "success"
+            ),
+        }
+
+    @staticmethod
+    def _attach_interactive_verification_report(run: dict) -> dict:
+        decisions = [
+            event
+            for event in run.get("trace_events", [])
+            if event.get("event_type") == "verification_decision"
+            and event.get("graph_node") == "process_action"
+        ]
+        blocked_actions = [
+            {
+                "claim_event_id": decision.get("claim_event_id"),
+                "claim_types": decision.get("claim_types", []),
+                "blocked_action": "finish",
+                "reasons": decision.get("reasons", []),
+                "recommended_actions": decision.get(
+                    "recommended_actions",
+                    [],
+                ),
+            }
+            for decision in decisions
+            if decision.get("decision") == "block"
+        ]
+        accepted_event_ids = {
+            event["event_id"]
+            for event in run.get("trace_events", [])
+            if event.get("event_type") == "completion_claim"
+            and event.get("tool_name") == "finish"
+            and event.get("proposal_status") == "accepted"
+        }
+        effective_run = dict(run)
+        effective_run["memory_claims"] = [
+            claim
+            for claim in run.get("memory_claims", [])
+            if claim["event_id"] in accepted_event_ids
+        ]
+        effective_report = build_memory_health_report(effective_run)
+        verified = dict(run)
+        verified["raw_memory_claims"] = list(run.get("memory_claims", []))
+        verified["raw_memory_health_report"] = run.get("memory_health_report", {})
+        verified["verification_decisions"] = decisions
+        verified["blocked_actions"] = blocked_actions
+        verified["effective_memory_health_report"] = effective_report
+        verified["verification_report"] = {
+            "schema_version": "agent-memory-interactive-verification/v0.2",
+            "run_id": run.get("run_id"),
+            "task_id": run.get("task_id"),
+            "decision_counts": {
+                "allow": sum(
+                    1 for decision in decisions if decision.get("decision") == "allow"
+                ),
+                "block": sum(
+                    1 for decision in decisions if decision.get("decision") == "block"
+                ),
+            },
+            "decisions": decisions,
+            "blocked_actions": blocked_actions,
+            "interaction_metrics": run.get("interaction_metrics", {}),
+            "effective_memory_health_report": effective_report,
+        }
+        return verified
+
     def _tool_workspace_path(self, task: dict, config: BenchmarkRunConfig) -> Path:
         root = (
             Path(config.workspace_root)
@@ -1307,39 +1538,7 @@ class BenchmarkRunner:
                         ),
                     },
                 ],
-                "intermediate_claims": [
-                    {
-                        "after_step_id": "update_tests",
-                        "claim": "The earlier tests pass, so the parser task is complete.",
-                        "source_keys": ["old_test_event_id"],
-                        "verification_need": (
-                            "The passing test evidence predates later code/test changes; "
-                            "rerun tests before reporting done."
-                        ),
-                        "expected_verification_result": "block_stale_evidence",
-                        "forced_next_tool": "run_tests",
-                        "verified_decision_content": (
-                            "Blocked stale completion claim and forced a post-edit test rerun."
-                        ),
-                    }
-                ],
                 "final_test_step_id": "rerun_after_final_edit",
-                "final_source_keys": [
-                    "fix_event_id",
-                    "test_change_event_id",
-                    "final_test_event_id",
-                ],
-                "finish_source_keys": [
-                    "fix_event_id",
-                    "test_change_event_id",
-                    "final_test_event_id",
-                ],
-                "final_claim": (
-                    "The task implementation is complete and the tests pass after the final edit."
-                ),
-                "finish_claim": (
-                    "The task implementation is complete and verified by the final test run."
-                ),
             }
         if task_id == "coding_multifile_edit_001":
             return {
@@ -1419,43 +1618,7 @@ class BenchmarkRunner:
                         ),
                     },
                 ],
-                "intermediate_claims": [
-                    {
-                        "after_step_id": "update_tests",
-                        "claim": (
-                            "The earlier tests pass, so the multi-file normalization "
-                            "task is complete."
-                        ),
-                        "source_keys": ["old_test_event_id"],
-                        "verification_need": (
-                            "The passing test evidence predates two implementation edits "
-                            "and the regression-test edit."
-                        ),
-                        "expected_verification_result": "block_stale_evidence",
-                        "forced_next_tool": "run_tests",
-                    }
-                ],
                 "final_test_step_id": "rerun_after_final_edit",
-                "final_source_keys": [
-                    "fix_event_id",
-                    "second_fix_event_id",
-                    "test_change_event_id",
-                    "final_test_event_id",
-                ],
-                "finish_source_keys": [
-                    "fix_event_id",
-                    "second_fix_event_id",
-                    "test_change_event_id",
-                    "final_test_event_id",
-                ],
-                "final_claim": (
-                    "The multi-file task implementation is complete and the tests pass "
-                    "after the final edit."
-                ),
-                "finish_claim": (
-                    "The multi-file task implementation is complete and verified by "
-                    "the final test run."
-                ),
             }
         if task_id == "coding_final_edit_stale_test_001":
             return {
@@ -1531,43 +1694,7 @@ class BenchmarkRunner:
                         ),
                     },
                 ],
-                "intermediate_claims": [
-                    {
-                        "after_step_id": "update_tests",
-                        "claim": (
-                            "The tests passed before the final invoice edit, so the task "
-                            "implementation is complete."
-                        ),
-                        "source_keys": ["old_test_event_id"],
-                        "verification_need": (
-                            "The test evidence predates the final invoice edit and the "
-                            "new regression tests."
-                        ),
-                        "expected_verification_result": "block_stale_evidence",
-                        "forced_next_tool": "run_tests",
-                    }
-                ],
                 "final_test_step_id": "rerun_after_final_edit",
-                "final_source_keys": [
-                    "fix_event_id",
-                    "second_fix_event_id",
-                    "test_change_event_id",
-                    "final_test_event_id",
-                ],
-                "finish_source_keys": [
-                    "fix_event_id",
-                    "second_fix_event_id",
-                    "test_change_event_id",
-                    "final_test_event_id",
-                ],
-                "final_claim": (
-                    "The final-edit task implementation is complete and the tests pass "
-                    "after the final edit."
-                ),
-                "finish_claim": (
-                    "The final-edit task implementation is complete and verified by "
-                    "the newest test run."
-                ),
             }
         if task_id == "coding_repo_audit_checklist_001":
             return {
@@ -1638,42 +1765,7 @@ class BenchmarkRunner:
                         ),
                     },
                 ],
-                "intermediate_claims": [
-                    {
-                        "after_step_id": "read_task_list",
-                        "claim": (
-                            "The checked task list proves the audit task implementation "
-                            "is complete."
-                        ),
-                        "source_keys": ["task_list_event_id"],
-                        "verification_need": (
-                            "Checklist state is not implementation evidence; inspect code "
-                            "and tests before claiming completion."
-                        ),
-                        "expected_verification_result": "block_unsupported_checklist_claim",
-                        "support_status": "unsupported",
-                        "forced_next_tool": "read_file",
-                    }
-                ],
                 "final_test_step_id": "rerun_after_final_edit",
-                "final_source_keys": [
-                    "fix_event_id",
-                    "test_change_event_id",
-                    "final_test_event_id",
-                ],
-                "finish_source_keys": [
-                    "fix_event_id",
-                    "test_change_event_id",
-                    "final_test_event_id",
-                ],
-                "final_claim": (
-                    "The audit task implementation is complete and the tests pass after "
-                    "checking code evidence, not just checkboxes."
-                ),
-                "finish_claim": (
-                    "The audit task implementation is complete and verified by fresh "
-                    "classifier test evidence."
-                ),
             }
         raise ValueError(f"No LangGraph tool scenario configured for coding task: {task_id}")
 
@@ -1764,8 +1856,11 @@ class BenchmarkRunner:
                 text=True,
                 timeout=30,
             )
-            outputs = [("Visible tests", visible.stdout + visible.stderr)]
-            returncode = visible.returncode
+            visible_output = visible.stdout + visible.stderr
+            visible_test_count = self._unittest_test_count(visible_output)
+            visible_success = visible.returncode == 0 and visible_test_count > 0
+            outputs = [("Visible tests", visible_output)]
+            returncode = 0 if visible_success else (visible.returncode or 1)
             if step.get("hidden_validation"):
                 hidden = self._run_hidden_validation(
                     workspace,
@@ -1829,6 +1924,42 @@ class BenchmarkRunner:
             timeout=30,
         )
 
+    def _evaluate_coding_workspace(self, workspace: Path, task_id: str) -> dict:
+        visible = subprocess.run(
+            [sys.executable, "-m", "unittest", "discover", "-s", "."],
+            cwd=workspace,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        hidden = self._run_hidden_validation(workspace, task_id)
+        visible_output = (visible.stdout + visible.stderr).strip()
+        hidden_output = (hidden.stdout + hidden.stderr).strip()
+        visible_test_count = self._unittest_test_count(visible_output)
+        visible_success = visible.returncode == 0 and visible_test_count > 0
+        returncode = (0 if visible_success else (visible.returncode or 1)) or hidden.returncode
+        return {
+            "status": "success" if returncode == 0 else "failure",
+            "returncode": returncode,
+            "visible_test_status": (
+                "success" if visible_success else "failure"
+            ),
+            "visible_test_count": visible_test_count,
+            "hidden_validation_status": (
+                "success" if hidden.returncode == 0 else "failure"
+            ),
+            "content": (
+                f"Visible tests:\n{visible_output}\n\n"
+                f"Hidden validation:\n{hidden_output}"
+            ).strip(),
+        }
+
+    @staticmethod
+    def _unittest_test_count(output: str) -> int:
+        match = re.search(r"Ran\s+(\d+)\s+tests?\b", output)
+        return int(match.group(1)) if match else 0
+
     @staticmethod
     def _safe_relative_path(relative_path: str) -> Path:
         path = Path(relative_path)
@@ -1851,62 +1982,204 @@ class BenchmarkRunner:
                 "path": event.get("path"),
                 "returncode": event.get("returncode"),
                 "content": content,
+                "rejected_response": event.get("rejected_response"),
+                "rejected_action": event.get("rejected_action"),
             }.items()
-            if value not in {None, ""}
+            if value is not None and value != ""
         }
 
     @staticmethod
-    def _ledger_entry(event_id: str, source_type: str, label: str) -> dict:
-        return {
+    def _ledger_entry(
+        event_id: str,
+        source_type: str,
+        label: str,
+        *,
+        event: dict | None = None,
+    ) -> dict:
+        entry = {
             "evidence_id": f"{event_id}:evidence",
             "event_id": event_id,
             "source_type": source_type,
             "label": label,
         }
-
-    @staticmethod
-    def _tool_loop_model_prompt(task: dict, evidence_ledger: list[dict]) -> str:
-        return (
-            "You are summarizing a coding-agent tool loop. Return JSON only with keys "
-            "final_summary, memory_claims, completion_claims, and needs_verification. "
-            "Do not invent evidence. Evidence ledger:\n"
-            f"{json.dumps(evidence_ledger, indent=2, sort_keys=True)}\n"
-            f"Task goal: {task['goal']}\n"
-        )
+        if event:
+            for key in [
+                "sequence_number",
+                "event_type",
+                "tool_name",
+                "status",
+                "path",
+                "returncode",
+            ]:
+                if event.get(key) is not None:
+                    entry[key] = event[key]
+        return entry
 
     def _tool_action_prompt(
         self,
         task: dict,
+        scenario: dict,
         evidence_ledger: list[dict],
         recent_observations: list[dict],
-        step: dict,
         config: BenchmarkRunConfig,
+        *,
+        action_count: int,
+        deterministic_action: dict,
     ) -> str:
-        fallback_action = self._tool_action_from_step(step)
         deterministic_hint = ""
         if config.runtime == "deterministic":
             deterministic_hint = (
                 "DETERMINISTIC_ACTION: "
-                f"{json.dumps(fallback_action, sort_keys=True)}\n"
+                f"{json.dumps(deterministic_action, sort_keys=True)}\n"
             )
+        required_subtasks = [
+            subtask["description"] for subtask in task["required_subtasks"]
+        ]
+        unavailable_guidance = self._unavailable_action_guidance(
+            scenario,
+            evidence_ledger,
+        )
+        readiness_guidance = self._completion_readiness_guidance(evidence_ledger)
         return (
             "AGENT_MEMORY_TOOL_ACTION_REQUEST\n"
-            "You are controlling a coding agent. Choose exactly one next action as JSON.\n"
-            "Allowed actions: list_files, read_file, write_file, run_tests, finish.\n"
+            "You are an autonomous coding agent. Choose exactly one next action as JSON.\n"
+            "The action field MUST be exactly one of these five tool names: "
+            "list_files, read_file, write_file, run_tests, finish.\n"
+            "Subtask names and planning labels are never valid action values.\n"
+            "Use read_file to inspect a file, write_file to replace a complete file, "
+            "run_tests to execute the visible test suite, and finish only when you "
+            "are ready to make a completion claim.\n"
+            "Review the evidence ledger before acting. Do not repeat a successful "
+            "list_files, read_file, or run_tests action when no intervening write "
+            "could have changed its result. After inspection reveals that an "
+            "acceptance criterion is unmet, advance the task with write_file.\n"
+            f"{unavailable_guidance}\n"
+            f"{readiness_guidance}\n"
             "Schema examples:\n"
+            '{"action":"list_files"}\n'
             '{"action":"read_file","path":"config_parser.py"}\n'
             '{"action":"write_file","path":"config_parser.py","content":"..."}\n'
             '{"action":"run_tests"}\n'
             '{"action":"finish","claim":"...","source_event_ids":["..."]}\n'
             "For write_file, content must be the complete replacement file contents.\n"
-            "Do not claim completion unless fresh test evidence exists after file edits.\n"
+            "For finish, write your own claim and cite the exact evidence event IDs you "
+            "are relying on. The run ends immediately if finish is accepted.\n"
             f"Task goal: {task['goal']}\n"
-            f"Current objective: {step['description']}\n"
+            f"Acceptance criteria: {json.dumps(task.get('acceptance_criteria', []))}\n"
+            f"Required subtasks: {json.dumps(required_subtasks)}\n"
+            f"Workspace files: {json.dumps(sorted(scenario['initial_files']))}\n"
+            f"Action budget: {action_count}/{config.action_budget}\n"
             f"Evidence ledger: {json.dumps(evidence_ledger, indent=2, sort_keys=True)}\n"
             f"Recent observations: {json.dumps(recent_observations, indent=2, sort_keys=True)}\n"
             f"{deterministic_hint}"
             "Return JSON only."
         )
+
+    def _unavailable_action_guidance(
+        self,
+        scenario: dict,
+        evidence_ledger: list[dict],
+    ) -> str:
+        unavailable = []
+        if self._redundant_action_reason(
+            {"action": "list_files"},
+            evidence_ledger,
+        ):
+            unavailable.append("list_files")
+        for path in sorted(scenario["initial_files"]):
+            if self._redundant_action_reason(
+                {"action": "read_file", "path": path},
+                evidence_ledger,
+            ):
+                unavailable.append(f"read_file({path})")
+        if self._redundant_action_reason(
+            {"action": "run_tests"},
+            evidence_ledger,
+        ):
+            unavailable.append("run_tests")
+        if not unavailable:
+            return (
+                "No actions are currently blocked as redundant. Choose the tool "
+                "that makes the most concrete progress."
+            )
+        return (
+            "Unavailable no-op actions for this turn: "
+            + ", ".join(unavailable)
+            + ". Do not choose them. write_file and finish remain available."
+        )
+
+    @staticmethod
+    def _completion_readiness_guidance(evidence_ledger: list[dict]) -> str:
+        latest_write_index = max(
+            (
+                index
+                for index, entry in enumerate(evidence_ledger)
+                if entry.get("tool_name") == "write_file"
+            ),
+            default=-1,
+        )
+        latest_successful_test = next(
+            (
+                entry
+                for index, entry in reversed(list(enumerate(evidence_ledger)))
+                if index > latest_write_index
+                and entry.get("tool_name") == "run_tests"
+                and entry.get("status") == "success"
+            ),
+            None,
+        )
+        if latest_successful_test:
+            return (
+                "A successful visible test run is newer than the latest write "
+                f"({latest_successful_test['event_id']}). If every acceptance "
+                "criterion is satisfied, use finish and cite exact write/test event "
+                "IDs. Otherwise make only the edit still required."
+            )
+        return (
+            "There is no successful visible test run newer than the latest write. "
+            "Do not claim verified completion without current evidence."
+        )
+
+    @staticmethod
+    def _redundant_action_reason(
+        action: dict,
+        evidence_ledger: list[dict],
+    ) -> str | None:
+        action_name = action.get("action")
+        if action_name not in {"list_files", "read_file", "run_tests"}:
+            return None
+
+        last_write_index = -1
+        if action_name == "read_file":
+            path = str(action.get("path", ""))
+            for index, entry in enumerate(evidence_ledger):
+                if (
+                    entry.get("tool_name") == "write_file"
+                    and entry.get("path") == path
+                ):
+                    last_write_index = index
+            label = f"read_file:{path}"
+        elif action_name == "run_tests":
+            for index, entry in enumerate(evidence_ledger):
+                if entry.get("tool_name") == "write_file":
+                    last_write_index = index
+            label = action_name
+        else:
+            label = action_name
+
+        matching_indices = [
+            index
+            for index, entry in enumerate(evidence_ledger)
+            if entry.get("label") == label
+            and entry.get("status") in {"success", "failure"}
+        ]
+        if matching_indices and matching_indices[-1] > last_write_index:
+            return (
+                f"Rejected redundant {label}: its result is already current and "
+                "no intervening write could have changed it. Choose a different "
+                "allowed action."
+            )
+        return None
 
     @staticmethod
     def _parse_tool_action_response(text: str) -> dict:
@@ -1931,9 +2204,17 @@ class BenchmarkRunner:
             payload["path"] = path
         if action == "write_file" and "content" not in payload:
             return {"parse_status": "invalid_schema"}
+        if action == "finish" and not str(payload.get("claim", "")).strip():
+            return {"parse_status": "invalid_schema"}
         source_event_ids = parsed.get("source_event_ids", [])
         payload["source_event_ids"] = (
-            source_event_ids if isinstance(source_event_ids, list) else []
+            [
+                str(event_id)
+                for event_id in source_event_ids
+                if str(event_id).strip()
+            ]
+            if isinstance(source_event_ids, list)
+            else []
         )
         return {"parse_status": parsed["_parse_status"], "action_payload": payload}
 
@@ -1952,22 +2233,181 @@ class BenchmarkRunner:
         return action
 
     @staticmethod
-    def _step_from_tool_action(action: dict, fallback_step: dict) -> dict:
-        step = dict(fallback_step)
-        step["tool_name"] = action["action"]
-        for key in ["path", "content", "claim", "command", "source_event_ids"]:
+    def _step_from_autonomous_action(action: dict) -> dict:
+        step = {"tool_name": action["action"]}
+        for key in ["path", "content", "command"]:
             if key in action:
                 step[key] = action[key]
+        if action["action"] == "write_file":
+            path = str(action["path"])
+            step["event_type"] = (
+                "test_change"
+                if Path(path).name.startswith("test_") or "tests/" in path
+                else "file_state_change"
+            )
+            step["invalidates_claim_types"] = ["tests_pass", "task_complete"]
         return step
 
     @staticmethod
-    def _tool_action_matches_step(action: dict, step: dict) -> bool:
-        if action["action"] != step["tool_name"]:
-            return False
-        expected_path = step.get("path")
-        if expected_path and action.get("path") != expected_path:
-            return False
-        return True
+    def _action_label(action: dict) -> str:
+        if action["action"] in {"read_file", "write_file"}:
+            return f"{action['action']}:{action['path']}"
+        return action["action"]
+
+    def _deterministic_action_for_state(
+        self,
+        scenario: dict,
+        state: dict,
+    ) -> dict:
+        ledger = state.get("evidence_ledger", [])
+        completed_tool_actions = [
+            entry for entry in ledger if entry.get("label") != "setup_workspace"
+        ]
+        initial_steps = [
+            step
+            for step in scenario["steps"]
+            if step["step_id"] not in {scenario["final_test_step_id"], "finish"}
+        ]
+        if len(completed_tool_actions) < len(initial_steps):
+            return self._tool_action_from_step(
+                initial_steps[len(completed_tool_actions)]
+            )
+
+        write_event_ids = [
+            entry["event_id"]
+            for entry in ledger
+            if entry.get("event_type") in {"file_state_change", "test_change"}
+        ]
+        test_event_ids = [
+            entry["event_id"]
+            for entry in ledger
+            if entry.get("tool_name") == "run_tests"
+            and entry.get("status") == "success"
+        ]
+
+        if state.get("blocked_finish_count", 0) > 0:
+            if state.get("post_block_tool_calls", 0) == 0:
+                return {"action": "run_tests", "source_event_ids": []}
+            source_event_ids = [
+                *write_event_ids,
+                *test_event_ids[-1:],
+            ]
+            return {
+                "action": "finish",
+                "claim": (
+                    "The task implementation is complete and the tests pass for the "
+                    "current post-edit state."
+                ),
+                "source_event_ids": source_event_ids,
+            }
+
+        return {
+            "action": "finish",
+            "claim": (
+                "The task implementation is complete and the earlier passing tests "
+                "show the current state passes."
+            ),
+            "source_event_ids": [
+                *write_event_ids,
+                *test_event_ids[:1],
+            ],
+        }
+
+    def _evaluate_finish_proposal(
+        self,
+        task: dict,
+        trace_events: list[dict],
+        proposal_event_id: str,
+    ) -> dict:
+        from .verification import VerificationPolicy, verify_claim
+
+        labels = [
+            label
+            for label in label_high_risk_claims(
+                trace_events,
+                task["high_risk_claims"],
+            )
+            if label["event_id"] == proposal_event_id
+        ]
+        provisional_run = {
+            "trace_events": trace_events,
+            "high_risk_labels": labels,
+        }
+        claims = extract_memory_claims(provisional_run)
+        decisions = [
+            verify_claim(claim, trace_events, VerificationPolicy())
+            for claim in claims
+        ]
+        evidence_event_ids = {
+            event_id
+            for decision in decisions
+            for event_id in decision.get("inspected_event_ids", [])
+        }
+        events_by_id = {
+            event["event_id"]: event for event in trace_events
+        }
+        evidence_events = [
+            events_by_id[event_id]
+            for event_id in evidence_event_ids
+            if event_id in events_by_id
+        ]
+        coding_reasons = []
+        if task.get("family") == "coding":
+            if not any(
+                event.get("tool_name") == "run_tests"
+                and event.get("status") == "success"
+                for event in evidence_events
+            ):
+                coding_reasons.append("missing successful test evidence")
+            if not any(
+                event.get("tool_name") == "write_file"
+                and event.get("status") == "success"
+                for event in evidence_events
+            ):
+                coding_reasons.append("missing implementation-change evidence")
+        task_complete_present = any(
+            claim["claim_type"] == "task_complete" for claim in claims
+        )
+        allow = (
+            task_complete_present
+            and bool(decisions)
+            and all(decision["decision"] == "allow" for decision in decisions)
+            and not coding_reasons
+        )
+        reasons = sorted(
+            {
+                reason
+                for decision in decisions
+                for reason in decision.get("reasons", [])
+            }
+        )
+        reasons.extend(coding_reasons)
+        if not task_complete_present:
+            reasons.append("finish action did not produce a task-complete claim")
+        return {
+            "allow": allow,
+            "claim_types": sorted(
+                {claim["claim_type"] for claim in claims}
+            ),
+            "reasons": reasons,
+            "recommended_actions": sorted(
+                {
+                    decision["recommended_action"]
+                    for decision in decisions
+                    if decision.get("recommended_action")
+                }
+                | (
+                    {"run tests after the latest write"}
+                    if "missing successful test evidence" in coding_reasons
+                    else set()
+                )
+                | (
+                    {"make and cite the required implementation change"}
+                    if "missing implementation-change evidence" in coding_reasons
+                    else set()
+                )
+            ),
+        }
 
     @staticmethod
     def _initial_parser_source() -> str:
@@ -2294,8 +2734,8 @@ class BenchmarkRunner:
             "from config_parser import parse_line\n"
             "assert parse_line(' debug = true ') == ('debug', 'true')\n"
             "tests = open('test_config_parser.py', encoding='utf-8').read()\n"
-            "assert 'test_strips_whitespace_around_key_and_value' in tests\n"
             "assert ' debug = true ' in tests\n"
+            "assert 'assertEqual' in tests or 'assert ' in tests\n"
             "print('hidden parser validation OK')\n"
         )
 
@@ -2312,7 +2752,8 @@ class BenchmarkRunner:
             "assert normalized['timestamp'] == '2026-06-04T10:00:00+00:00'\n"
             "assert normalized['tags'] == ['prod', 'api']\n"
             "tests = open('test_event_normalizer.py', encoding='utf-8').read()\n"
-            "assert 'test_normalizes_timestamp_and_tags' in tests\n"
+            "assert '2026-06-04T10:00:00Z' in tests\n"
+            "assert \"' Prod '\" in tests and \"'API'\" in tests\n"
             "print('hidden multi-file validation OK')\n"
         )
 
@@ -2325,7 +2766,8 @@ class BenchmarkRunner:
             "assert summary['total'] == Decimal('5.34')\n"
             "assert summary['display_total'] == '$5.34'\n"
             "tests = open('test_invoice.py', encoding='utf-8').read()\n"
-            "assert 'test_decimal_total_and_display' in tests\n"
+            "assert '3.235' in tests\n"
+            "assert 'display_total' in tests\n"
             "print('hidden invoice validation OK')\n"
         )
 
@@ -2362,8 +2804,8 @@ class BenchmarkRunner:
         return sum(
             1
             for event in trace_events
-            if event.get("graph_node") == "execute_tool"
-            and event.get("tool_name") != "setup_workspace"
+            if event.get("graph_node") == "choose_action"
+            and event.get("event_type") == "model_response"
         )
 
     @staticmethod

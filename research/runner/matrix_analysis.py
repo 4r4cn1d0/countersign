@@ -98,24 +98,24 @@ def format_model_matrix_analysis_markdown(report: dict) -> str:
     lines.extend(
         [
             "",
-            "## Coding-Agent Reality Matrix",
+            "## Coding-Agent Intervention Matrix",
             "",
-            "| Model | Final Tests Passed | Stale Evidence Rows | False Completion Claims | Verification Helped | Action Parses | Action Statuses | Avg Extra Tools | Extra Trace Events |",
-            "|---|---:|---:|---:|---:|---|---|---:|---:|",
+            "| Model | Baseline Eval Pass | Verified Eval Pass | Baseline Accepted False | Verified Proposed False | Blocked False | Verified Accepted False | Recoveries | Avg Extra Actions |",
+            "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
         ]
     )
     for model in report["models"]:
         lines.append(
-            "| `{model}` | {final} | {stale} | {false} | {helped} | {parse} | {status} | {tools:.2f} | {events} |".format(
+            "| `{model}` | {baseline_eval} | {verified_eval} | {baseline_false} | {verified_proposed} | {blocked_false} | {verified_false} | {recoveries} | {actions:.2f} |".format(
                 model=model["model_name"],
-                final=model["final_test_success_count"],
-                stale=model["stale_evidence_row_count"],
-                false=model["false_completion_claim_count"],
-                helped=model["verification_helped_count"],
-                parse=_format_counter(model["tool_action_parse_status_counts"]),
-                status=_format_counter(model["tool_action_status_counts"]),
-                tools=model["avg_extra_tool_calls"],
-                events=model["extra_trace_event_count"],
+                baseline_eval=model["baseline_evaluator_success_count"],
+                verified_eval=model["verified_evaluator_success_count"],
+                baseline_false=model["baseline_accepted_false_finish_count"],
+                verified_proposed=model["verified_false_finish_proposal_count"],
+                blocked_false=model["verified_blocked_false_finish_count"],
+                verified_false=model["verified_accepted_false_finish_count"],
+                recoveries=model["verified_recovery_count"],
+                actions=model["avg_extra_model_actions"],
             )
         )
 
@@ -124,25 +124,24 @@ def format_model_matrix_analysis_markdown(report: dict) -> str:
             "",
             "## Task Rows",
             "",
-            "| Model | Task | Parse | Final Tests | Stale | False | Verified False | Helped | Extra Tools | Blocked | Health | Drift |",
-            "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+            "| Model | Task | Baseline Eval | Verified Eval | Baseline Proposed False | Baseline Accepted False | Verified Proposed False | Blocked False | Verified Accepted False | Recovered | Extra Actions |",
+            "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
         ]
     )
     for row in report["tasks"]:
         lines.append(
-            "| `{model}` | `{task}` | `{parse}` | {final} | {stale} | {false} | {verified_false} | {helped} | {extra_tools} | {blocked} | {health:.4f} | {drift:.4f} |".format(
+            "| `{model}` | `{task}` | {baseline_eval} | {verified_eval} | {baseline_proposed} | {baseline_accepted} | {verified_proposed} | {blocked_false} | {verified_accepted} | {recovered} | {extra_actions} |".format(
                 model=row["model_name"],
                 task=row["task_id"],
-                parse=row["parse_status"],
-                final=row["final_test_success"],
-                stale=row["stale_claim_count"],
-                false=row["false_completion_claim_count"],
-                verified_false=row["verified_false_completion_claim_count"],
-                helped=row["verification_helped"],
-                extra_tools=row["extra_tool_calls"],
-                blocked=row["blocked_action_count"],
-                health=row["memory_health_score"],
-                drift=row["semantic_drift_score"],
+                baseline_eval=row["baseline_evaluator_success"],
+                verified_eval=row["verified_evaluator_success"],
+                baseline_proposed=row["baseline_false_finish_proposals"],
+                baseline_accepted=row["baseline_accepted_false_finishes"],
+                verified_proposed=row["verified_false_finish_proposals"],
+                blocked_false=row["verified_blocked_false_finishes"],
+                verified_accepted=row["verified_accepted_false_finishes"],
+                recovered=row["verified_recovery_after_block"],
+                extra_actions=row["extra_model_actions"],
             )
         )
 
@@ -176,14 +175,10 @@ def _task_rows_for_model(model: dict, manifest_dir: Path) -> list[dict]:
         metrics = health.get("metrics", {})
         verified = verified_by_task.get(run_info["task_id"], {})
         verification_report = verified.get("verification_report", {})
-        verified_health = (
-            verified.get("effective_memory_health_report")
-            or verified.get("memory_health_report")
-            or {}
-        )
         baseline_counts = health.get("claim_counts", {})
-        verified_counts = verified_health.get("claim_counts", {})
         verified_metadata = verified.get("run_metadata", {})
+        baseline_interaction = run.get("interaction_metrics", {})
+        verified_interaction = verified.get("interaction_metrics", {})
         baseline_tool_iterations = int(metadata.get("tool_loop_iterations") or 0)
         verified_tool_iterations = int(
             verified_metadata.get("tool_loop_iterations") or baseline_tool_iterations
@@ -191,9 +186,6 @@ def _task_rows_for_model(model: dict, manifest_dir: Path) -> list[dict]:
         final_test_status = _final_test_status(run)
         verified_final_test_status = _final_test_status(verified) if verified else {}
         false_completion_claims = int(baseline_counts.get("false_completion", 0))
-        verified_false_completion_claims = int(
-            verified_counts.get("false_completion", false_completion_claims)
-        )
         stale_claims = int(baseline_counts.get("stale", 0))
         rows.append(
             {
@@ -207,24 +199,53 @@ def _task_rows_for_model(model: dict, manifest_dir: Path) -> list[dict]:
                 "stale_claim_count": stale_claims,
                 "used_stale_evidence": stale_claims > 0,
                 "false_completion_claim_count": false_completion_claims,
-                "verified_false_completion_claim_count": verified_false_completion_claims,
-                "verification_helped": (
-                    verified_false_completion_claims < false_completion_claims
-                    or int(verified_counts.get("stale", stale_claims)) < stale_claims
+                "baseline_false_finish_proposals": int(
+                    baseline_interaction.get("false_finish_proposals", 0)
+                ),
+                "baseline_accepted_false_finishes": int(
+                    baseline_interaction.get("accepted_false_finishes", 0)
+                ),
+                "baseline_accepted_finish_evaluator_failures": int(
+                    baseline_interaction.get(
+                        "accepted_finish_evaluator_failures",
+                        0,
+                    )
+                ),
+                "verified_false_finish_proposals": int(
+                    verified_interaction.get("false_finish_proposals", 0)
+                ),
+                "verified_blocked_false_finishes": int(
+                    verified_interaction.get("blocked_false_finishes", 0)
+                ),
+                "verified_accepted_false_finishes": int(
+                    verified_interaction.get("accepted_false_finishes", 0)
+                ),
+                "verified_accepted_finish_evaluator_failures": int(
+                    verified_interaction.get(
+                        "accepted_finish_evaluator_failures",
+                        0,
+                    )
+                ),
+                "verified_recovery_after_block": bool(
+                    verified_interaction.get("recovery_after_block", False)
                 ),
                 "tool_loop_iterations": baseline_tool_iterations,
                 "verified_tool_loop_iterations": verified_tool_iterations,
-                "final_test_success": final_test_status.get("status") == "success",
-                "final_test_returncode": final_test_status.get("returncode"),
-                "verified_final_test_success": (
+                "baseline_evaluator_success": (
+                    final_test_status.get("status") == "success"
+                ),
+                "baseline_evaluator_returncode": final_test_status.get("returncode"),
+                "verified_evaluator_success": (
                     verified_final_test_status.get("status") == "success"
                     if verified
                     else None
                 ),
-                "verified_final_test_returncode": verified_final_test_status.get(
+                "verified_evaluator_returncode": verified_final_test_status.get(
                     "returncode"
                 ),
-                "extra_tool_calls": verified_tool_iterations - baseline_tool_iterations,
+                "extra_model_actions": (
+                    verified_tool_iterations - baseline_tool_iterations
+                ),
                 "extra_trace_events": max(
                     0,
                     len(verified.get("trace_events", [])) - len(run.get("trace_events", [])),
@@ -263,11 +284,38 @@ def _model_summary(model: dict, rows: list[dict]) -> dict:
         "false_completion_claim_count": sum(
             row["false_completion_claim_count"] for row in rows
         ),
-        "verification_helped_count": sum(1 for row in rows if row["verification_helped"]),
-        "final_test_success_count": sum(1 for row in rows if row["final_test_success"]),
+        "baseline_accepted_false_finish_count": sum(
+            row["baseline_accepted_false_finishes"] for row in rows
+        ),
+        "verified_false_finish_proposal_count": sum(
+            row["verified_false_finish_proposals"] for row in rows
+        ),
+        "verified_blocked_false_finish_count": sum(
+            row["verified_blocked_false_finishes"] for row in rows
+        ),
+        "verified_accepted_false_finish_count": sum(
+            row["verified_accepted_false_finishes"] for row in rows
+        ),
+        "baseline_accepted_finish_evaluator_failure_count": sum(
+            row["baseline_accepted_finish_evaluator_failures"] for row in rows
+        ),
+        "verified_accepted_finish_evaluator_failure_count": sum(
+            row["verified_accepted_finish_evaluator_failures"] for row in rows
+        ),
+        "verified_recovery_count": sum(
+            1 for row in rows if row["verified_recovery_after_block"]
+        ),
+        "baseline_evaluator_success_count": sum(
+            1 for row in rows if row["baseline_evaluator_success"]
+        ),
+        "verified_evaluator_success_count": sum(
+            1 for row in rows if row["verified_evaluator_success"]
+        ),
         "tool_action_parse_status_counts": dict(sorted(tool_action_parse_counts.items())),
         "tool_action_status_counts": dict(sorted(tool_action_status_counts.items())),
-        "avg_extra_tool_calls": _mean(row["extra_tool_calls"] for row in rows),
+        "avg_extra_model_actions": _mean(
+            row["extra_model_actions"] for row in rows
+        ),
         "extra_trace_event_count": sum(row["extra_trace_events"] for row in rows),
         "verification_event_count": sum(row["verification_event_count"] for row in rows),
         "avg_memory_health_score": _mean(row["memory_health_score"] for row in rows),
@@ -293,13 +341,38 @@ def _aggregate_summary(successful_rows: list[dict], task_rows: list[dict]) -> di
         "total_false_completion_claims": sum(
             row["false_completion_claim_count"] for row in task_rows
         ),
-        "verification_helped_rows": sum(
-            1 for row in task_rows if row["verification_helped"]
+        "baseline_accepted_false_finishes": sum(
+            row["baseline_accepted_false_finishes"] for row in task_rows
         ),
-        "final_test_success_rows": sum(
-            1 for row in task_rows if row["final_test_success"]
+        "verified_false_finish_proposals": sum(
+            row["verified_false_finish_proposals"] for row in task_rows
         ),
-        "total_extra_tool_calls": sum(row["extra_tool_calls"] for row in task_rows),
+        "verified_blocked_false_finishes": sum(
+            row["verified_blocked_false_finishes"] for row in task_rows
+        ),
+        "verified_accepted_false_finishes": sum(
+            row["verified_accepted_false_finishes"] for row in task_rows
+        ),
+        "baseline_accepted_finish_evaluator_failures": sum(
+            row["baseline_accepted_finish_evaluator_failures"]
+            for row in task_rows
+        ),
+        "verified_accepted_finish_evaluator_failures": sum(
+            row["verified_accepted_finish_evaluator_failures"]
+            for row in task_rows
+        ),
+        "verified_recovery_rows": sum(
+            1 for row in task_rows if row["verified_recovery_after_block"]
+        ),
+        "baseline_evaluator_success_rows": sum(
+            1 for row in task_rows if row["baseline_evaluator_success"]
+        ),
+        "verified_evaluator_success_rows": sum(
+            1 for row in task_rows if row["verified_evaluator_success"]
+        ),
+        "total_extra_model_actions": sum(
+            row["extra_model_actions"] for row in task_rows
+        ),
         "total_extra_trace_events": sum(row["extra_trace_events"] for row in task_rows),
         "avg_memory_health_score": _mean(
             row["memory_health_score"] for row in task_rows
@@ -327,7 +400,7 @@ def _tool_action_parse_status_counts(run: dict) -> dict[str, int]:
         event.get("parse_status", "unknown")
         for event in run.get("trace_events", [])
         if event.get("event_type") == "model_response"
-        and event.get("graph_node") == "choose_tool"
+        and event.get("graph_node") == "choose_action"
     )
     return dict(sorted(counts.items()))
 
@@ -337,7 +410,7 @@ def _tool_action_status_counts(run: dict) -> dict[str, int]:
         event.get("action_status", "unknown")
         for event in run.get("trace_events", [])
         if event.get("event_type") == "decision_point"
-        and event.get("graph_node") == "choose_tool"
+        and event.get("graph_node") == "choose_action"
     )
     return dict(sorted(counts.items()))
 
@@ -352,10 +425,7 @@ def _verification_event_count(run: dict) -> int:
 
 def _final_test_status(run: dict) -> dict:
     for event in reversed(run.get("trace_events", [])):
-        if (
-            event.get("event_type") == "tool_call"
-            and event.get("tool_name") == "run_tests"
-        ):
+        if event.get("event_type") == "evaluation_result":
             return {
                 "status": event.get("status"),
                 "returncode": event.get("returncode"),

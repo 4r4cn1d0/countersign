@@ -36,6 +36,7 @@ def main(argv: list[str] | None = None) -> int:
     run_parser.add_argument("--prompt-template", default="default_react_memory_v0")
     run_parser.add_argument("--temperature", type=float, default=0.0)
     run_parser.add_argument("--max-tokens", type=int, default=256)
+    run_parser.add_argument("--action-budget", type=int, default=16)
     run_parser.add_argument(
         "--trace-mode",
         choices=["scripted", "model_driven"],
@@ -45,6 +46,11 @@ def main(argv: list[str] | None = None) -> int:
     run_parser.add_argument("--seed", type=int, default=0)
     run_parser.add_argument("--out", default="runs")
     run_parser.add_argument("--workspace-root")
+    run_parser.add_argument(
+        "--allow-runtime-fallback",
+        action="store_true",
+        help="Explicitly allow deterministic fallback after a local runtime failure.",
+    )
     run_parser.add_argument("--format", choices=["table", "json", "markdown"], default="table")
     run_parser.set_defaults(handler=_run_command)
 
@@ -77,6 +83,7 @@ def main(argv: list[str] | None = None) -> int:
     bundle_parser.add_argument("--prompt-template", default="default_react_memory_v0")
     bundle_parser.add_argument("--temperature", type=float, default=0.0)
     bundle_parser.add_argument("--max-tokens", type=int, default=256)
+    bundle_parser.add_argument("--action-budget", type=int, default=16)
     bundle_parser.add_argument(
         "--trace-mode",
         choices=["scripted", "model_driven"],
@@ -84,6 +91,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     bundle_parser.add_argument("--seed", type=int, default=0)
     bundle_parser.add_argument("--workspace-root")
+    bundle_parser.add_argument(
+        "--allow-runtime-fallback",
+        action="store_true",
+        help="Explicitly allow deterministic fallback after a local runtime failure.",
+    )
     bundle_parser.add_argument("--test-status", default="not_run")
     bundle_parser.add_argument("--format", choices=["table", "json", "markdown"], default="table")
     bundle_parser.set_defaults(handler=_bundle_command)
@@ -104,6 +116,7 @@ def main(argv: list[str] | None = None) -> int:
     matrix_parser.add_argument("--variant", action="append", dest="variants")
     matrix_parser.add_argument("--pull-missing", action="store_true")
     matrix_parser.add_argument("--max-tokens", type=int)
+    matrix_parser.add_argument("--action-budget", type=int)
     matrix_parser.add_argument("--trace-mode", choices=["scripted", "model_driven"])
     matrix_parser.add_argument("--prompt-template")
     matrix_parser.add_argument("--minimum-successful-models", type=int)
@@ -143,6 +156,8 @@ def _run_command(args: argparse.Namespace) -> None:
         prompt_template=args.prompt_template,
         temperature=args.temperature,
         max_tokens=args.max_tokens,
+        action_budget=args.action_budget,
+        allow_runtime_fallback=args.allow_runtime_fallback,
         trace_mode=args.trace_mode,
         workspace_root=args.workspace_root or str(Path(args.out) / "workspaces"),
     )
@@ -191,6 +206,8 @@ def _bundle_command(args: argparse.Namespace) -> None:
         prompt_template=args.prompt_template,
         temperature=args.temperature,
         max_tokens=args.max_tokens,
+        action_budget=args.action_budget,
+        allow_runtime_fallback=args.allow_runtime_fallback,
         trace_mode=args.trace_mode,
         workspace_root=args.workspace_root or str(Path(args.out) / "workspaces"),
     )
@@ -215,6 +232,7 @@ def _matrix_command(args: argparse.Namespace) -> None:
         pull_missing=args.pull_missing,
         minimum_successful_models=args.minimum_successful_models,
         max_tokens=args.max_tokens,
+        action_budget=args.action_budget,
         trace_mode=args.trace_mode,
         prompt_template=args.prompt_template,
     )
@@ -292,6 +310,13 @@ def _format_markdown(payload: dict, title: str) -> str:
         lines.extend(_markdown_mapping("Verification Decisions", payload["decision_counts"]))
     if "metric_deltas" in payload:
         lines.extend(_markdown_mapping("Metric Deltas", payload["metric_deltas"]))
+    if "behavioral_outcomes" in payload:
+        lines.extend(
+            _markdown_mapping(
+                "Behavioral Outcomes",
+                payload["behavioral_outcomes"],
+            )
+        )
     if "written_paths" in payload:
         lines.append("## Written Files")
         lines.extend(f"- `{path}`" for path in payload["written_paths"])
@@ -384,6 +409,9 @@ def _format_table(payload: dict, title: str) -> str:
         lines.extend(_table_mapping(payload["decision_counts"]))
     elif "metric_deltas" in payload:
         lines.extend(_table_mapping(payload["metric_deltas"]))
+        if "behavioral_outcomes" in payload:
+            lines.append("")
+            lines.extend(_table_mapping(payload["behavioral_outcomes"]))
     elif "written_paths" in payload:
         lines.extend(f"saved: {path}" for path in payload["written_paths"])
     elif "manifest_path" in payload:

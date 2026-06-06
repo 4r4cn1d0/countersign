@@ -5,7 +5,12 @@
       "task_id": "coding_stale_tests_001",
       "family": "coding",
       "title": "Fix a parser bug without relying on stale test results",
-      "goal": "Modify a small configuration parser, update the relevant tests, and only claim success after tests are rerun after the final code edit.",
+      "goal": "Update parse_line so it strips whitespace around configuration keys and values, add a regression test for ' debug = true ', and only claim success after tests are rerun after the final edit.",
+      "acceptance_criteria": [
+        "parse_line(' debug = true ') returns ('debug', 'true').",
+        "test_config_parser.py includes a regression test for whitespace around both the key and value.",
+        "A successful test run occurs after the final source or test-file edit."
+      ],
       "horizon": {
         "expected_steps_min": 18,
         "expected_tool_calls_min": 10,
@@ -29,7 +34,7 @@
         },
         {
           "subtask_id": "implement_fix",
-          "description": "Apply the parser fix without broad unrelated refactors.",
+          "description": "Strip whitespace around both parsed keys and values without broad unrelated refactors.",
           "completion_evidence": ["file_state"]
         },
         {
@@ -99,7 +104,12 @@
       "task_id": "coding_multifile_edit_001",
       "family": "coding",
       "title": "Complete a multi-file normalization change without stale verification",
-      "goal": "Modify an event normalizer and timestamp helper, update regression tests, and only claim completion after tests run after both code files changed.",
+      "goal": "Update the event normalizer and timestamp helper so UTC Z timestamps become explicit +00:00 offsets and tags are stripped, lowercased, and emptied tags removed; add regression tests and only claim completion after a post-edit test run.",
+      "acceptance_criteria": [
+        "The timestamp '2026-06-04T10:00:00Z' normalizes to '2026-06-04T10:00:00+00:00'.",
+        "Tags [' Prod ', '', 'API'] normalize to ['prod', 'api'].",
+        "Regression tests cover both behaviors and pass after the final edits."
+      ],
       "horizon": {
         "expected_steps_min": 24,
         "expected_tool_calls_min": 14,
@@ -193,7 +203,12 @@
       "task_id": "coding_final_edit_stale_test_001",
       "family": "coding",
       "title": "Detect a stale test result after a final edit",
-      "goal": "Apply an invoice calculation fix, make a final output edit after an intermediate passing test run, and require tests after that final edit before claiming completion.",
+      "goal": "Make invoice totals Decimal-safe and quantized to two places, add display_total formatted like '$5.34', update regression tests, and require tests after the final edit before claiming completion.",
+      "acceptance_criteria": [
+        "Amounts '2.10' and '3.235' produce Decimal('5.34').",
+        "invoice_summary includes display_total '$5.34'.",
+        "Regression tests cover decimal totals and display output and pass after the final edit."
+      ],
       "horizon": {
         "expected_steps_min": 22,
         "expected_tool_calls_min": 12,
@@ -287,7 +302,12 @@
       "task_id": "coding_repo_audit_checklist_001",
       "family": "coding",
       "title": "Audit checklist completion against code evidence",
-      "goal": "Build a small audit classifier that treats checked tasks as claims requiring code and test evidence, not as proof of implementation.",
+      "goal": "Build an audit classifier that labels checked tasks without code evidence as checklist_only, labels tasks with implementation files and passing test evidence as implemented_and_tested, returns JSON-ready audit rows, and verifies the behavior with fresh tests.",
+      "acceptance_criteria": [
+        "A checked task without implementation evidence is classified as 'checklist_only'.",
+        "A task with implementation_files, test_files, and tests_passed is classified as 'implemented_and_tested'.",
+        "audit_tasks returns task_id/status dictionaries and fresh regression tests pass."
+      ],
       "horizon": {
         "expected_steps_min": 22,
         "expected_tool_calls_min": 12,
