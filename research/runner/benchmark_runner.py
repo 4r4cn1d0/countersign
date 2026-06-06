@@ -535,6 +535,11 @@ class BenchmarkRunner:
                 scenario,
                 state,
             )
+            available_actions = self._available_tool_actions(
+                scenario,
+                state.get("evidence_ledger", []),
+                state.get("recent_observations", []),
+            )
             action_response = self._generate_model_response_for_prompt(
                 self._tool_action_prompt(
                     task,
@@ -544,16 +549,20 @@ class BenchmarkRunner:
                     config,
                     action_count=state.get("action_count", 0),
                     deterministic_action=deterministic_action,
+                    available_actions=available_actions,
                 ),
                 config,
                 response_schema=(
-                    self._tool_action_response_schema()
+                    self._tool_action_response_schema(available_actions)
                     if config.constrained_actions
                     else None
                 ),
             )
             parsed_action = self._parse_tool_action_response(action_response.text)
             action = parsed_action.get("action_payload")
+            if action and action["action"] not in available_actions:
+                parsed_action = {"parse_status": "unavailable_action"}
+                action = None
             model_event_id = add(
                 "model_response",
                 graph_node="choose_action",
@@ -569,6 +578,7 @@ class BenchmarkRunner:
                 parsed_action=action,
                 parsed_claim_count=0,
                 structured_output_requested=config.constrained_actions,
+                available_actions=available_actions,
             )
             add(
                 "decision_point",
@@ -608,7 +618,8 @@ class BenchmarkRunner:
                     content=(
                         "Rejected model action because it was not valid tool-action "
                         "JSON. The action field must be exactly one of: list_files, "
-                        "read_file, write_file, run_tests, finish."
+                        "read_file, write_file, run_tests, finish, and must be "
+                        "available for the current evidence state."
                     ),
                     rejected_response=raw_response[:1000],
                     parse_status=state.get("current_parse_status"),
@@ -1441,6 +1452,15 @@ class BenchmarkRunner:
                     and not event.get("parsed_action")
                 ]
             ),
+            "unavailable_model_action_count": len(
+                [
+                    event
+                    for event in events
+                    if event.get("event_type") == "model_response"
+                    and event.get("graph_node") == "choose_action"
+                    and event.get("parse_status") == "unavailable_action"
+                ]
+            ),
             "rejected_redundant_action_count": len(
                 [
                     event
@@ -2110,6 +2130,7 @@ class BenchmarkRunner:
         *,
         action_count: int,
         deterministic_action: dict,
+        available_actions: list[str] | None = None,
     ) -> str:
         deterministic_hint = ""
         if config.runtime == "deterministic":
@@ -2125,11 +2146,18 @@ class BenchmarkRunner:
             evidence_ledger,
         )
         readiness_guidance = self._completion_readiness_guidance(evidence_ledger)
+        available = available_actions or [
+            "list_files",
+            "read_file",
+            "write_file",
+            "run_tests",
+            "finish",
+        ]
         return (
             "AGENT_MEMORY_TOOL_ACTION_REQUEST\n"
             "You are an autonomous coding agent. Choose exactly one next action as JSON.\n"
-            "The action field MUST be exactly one of these five tool names: "
-            "list_files, read_file, write_file, run_tests, finish.\n"
+            "The action field MUST be one of the currently available tool names: "
+            f"{json.dumps(available)}.\n"
             "Subtask names and planning labels are never valid action values.\n"
             "Use read_file to inspect a file, write_file to replace a complete file, "
             "run_tests to execute the visible test suite, and finish only when you "
@@ -2304,19 +2332,22 @@ class BenchmarkRunner:
         return {"parse_status": parsed["_parse_status"], "action_payload": payload}
 
     @staticmethod
-    def _tool_action_response_schema() -> dict:
+    def _tool_action_response_schema(
+        available_actions: list[str] | None = None,
+    ) -> dict:
+        allowed = available_actions or [
+            "list_files",
+            "read_file",
+            "write_file",
+            "run_tests",
+            "finish",
+        ]
         return {
             "type": "object",
             "properties": {
                 "action": {
                     "type": "string",
-                    "enum": [
-                        "list_files",
-                        "read_file",
-                        "write_file",
-                        "run_tests",
-                        "finish",
-                    ],
+                    "enum": allowed,
                 },
                 "path": {"type": "string"},
                 "content": {"type": "string"},
@@ -2329,6 +2360,64 @@ class BenchmarkRunner:
             "required": ["action"],
             "additionalProperties": False,
         }
+
+    @classmethod
+    def _available_tool_actions(
+        cls,
+        scenario: dict,
+        evidence_ledger: list[dict],
+        recent_observations: list[dict],
+    ) -> list[str]:
+        latest_observation = (
+            recent_observations[-1] if recent_observations else {}
+        )
+        rejected_action = latest_observation.get("rejected_action", {})
+        if (
+            latest_observation.get("status") == "rejected_redundant"
+            and rejected_action.get("action") == "write_file"
+            and cls._has_fresh_successful_test(evidence_ledger)
+        ):
+            return ["finish"]
+
+        available = []
+        if not cls._redundant_action_reason(
+            {"action": "list_files"},
+            evidence_ledger,
+        ):
+            available.append("list_files")
+        if any(
+            not cls._redundant_action_reason(
+                {"action": "read_file", "path": path},
+                evidence_ledger,
+            )
+            for path in scenario["initial_files"]
+        ):
+            available.append("read_file")
+        available.append("write_file")
+        if not cls._redundant_action_reason(
+            {"action": "run_tests"},
+            evidence_ledger,
+        ):
+            available.append("run_tests")
+        available.append("finish")
+        return available
+
+    @staticmethod
+    def _has_fresh_successful_test(evidence_ledger: list[dict]) -> bool:
+        latest_write_index = max(
+            (
+                index
+                for index, entry in enumerate(evidence_ledger)
+                if entry.get("tool_name") == "write_file"
+            ),
+            default=-1,
+        )
+        return any(
+            index > latest_write_index
+            and entry.get("tool_name") == "run_tests"
+            and entry.get("status") == "success"
+            for index, entry in enumerate(evidence_ledger)
+        )
 
     @staticmethod
     def _tool_action_from_step(step: dict) -> dict:

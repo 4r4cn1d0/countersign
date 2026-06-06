@@ -314,6 +314,7 @@ def test_langgraph_tool_agent_runs_real_coding_tool_loop(tmp_path: Path):
         "model_action_count": 6,
         "valid_model_action_count": 6,
         "invalid_model_action_count": 0,
+        "unavailable_model_action_count": 0,
         "rejected_redundant_action_count": 0,
         "action_compliance_rate": 1.0,
         "protocol_completion_status": "accepted_finish",
@@ -626,6 +627,57 @@ def test_langgraph_tool_loop_requests_structured_action_output(tmp_path: Path):
         if event.get("event_type") == "model_response"
         and event.get("graph_node") == "choose_action"
     )
+
+
+def test_action_availability_removes_current_no_ops_and_breaks_redundant_write_loop():
+    runner = BenchmarkRunner()
+    task = runner.get_task("coding_stale_tests_001")
+    scenario = runner._coding_tool_scenario(task)
+    ledger = [
+        {
+            "label": "list_files",
+            "tool_name": "list_files",
+            "status": "success",
+        },
+        {
+            "label": "read_file:config_parser.py",
+            "tool_name": "read_file",
+            "path": "config_parser.py",
+            "status": "success",
+        },
+        {
+            "label": "write_file:test_config_parser.py",
+            "tool_name": "write_file",
+            "path": "test_config_parser.py",
+            "status": "success",
+        },
+        {
+            "label": "run_tests",
+            "tool_name": "run_tests",
+            "status": "success",
+        },
+    ]
+
+    available = runner._available_tool_actions(scenario, ledger, [])
+    terminal_only = runner._available_tool_actions(
+        scenario,
+        ledger,
+        [
+            {
+                "status": "rejected_redundant",
+                "rejected_action": {
+                    "action": "write_file",
+                    "path": "test_config_parser.py",
+                },
+            }
+        ],
+    )
+
+    assert "list_files" not in available
+    assert "run_tests" not in available
+    assert "read_file" in available
+    assert {"write_file", "finish"}.issubset(available)
+    assert terminal_only == ["finish"]
 
 
 def test_langgraph_tool_loop_executes_model_selected_action_without_substitution(
