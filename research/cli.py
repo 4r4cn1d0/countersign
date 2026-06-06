@@ -39,6 +39,11 @@ def main(argv: list[str] | None = None) -> int:
     run_parser.add_argument("--max-tokens", type=int, default=256)
     run_parser.add_argument("--action-budget", type=int, default=16)
     run_parser.add_argument(
+        "--thinking",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+    )
+    run_parser.add_argument(
         "--trace-mode",
         choices=["scripted", "model_driven"],
         default="scripted",
@@ -86,6 +91,11 @@ def main(argv: list[str] | None = None) -> int:
     bundle_parser.add_argument("--max-tokens", type=int, default=256)
     bundle_parser.add_argument("--action-budget", type=int, default=16)
     bundle_parser.add_argument(
+        "--thinking",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+    )
+    bundle_parser.add_argument(
         "--trace-mode",
         choices=["scripted", "model_driven"],
         default="scripted",
@@ -113,6 +123,12 @@ def main(argv: list[str] | None = None) -> int:
         action="append",
         dest="models",
         help="Exact configured model tag to run. Repeat to run a subset.",
+    )
+    matrix_parser.add_argument(
+        "--thinking",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Enable or disable runtime reasoning mode during action generation.",
     )
     matrix_parser.add_argument("--variant", action="append", dest="variants")
     matrix_parser.add_argument("--pull-missing", action="store_true")
@@ -187,6 +203,7 @@ def _run_command(args: argparse.Namespace) -> None:
         allow_runtime_fallback=args.allow_runtime_fallback,
         trace_mode=args.trace_mode,
         workspace_root=args.workspace_root or str(Path(args.out) / "workspaces"),
+        thinking=args.thinking,
     )
     runs = [runner.run_task_id(args.task, config)] if args.task else runner.run_all(config)
     written_paths = _write_runs(runs, Path(args.out))
@@ -237,6 +254,7 @@ def _bundle_command(args: argparse.Namespace) -> None:
         allow_runtime_fallback=args.allow_runtime_fallback,
         trace_mode=args.trace_mode,
         workspace_root=args.workspace_root or str(Path(args.out) / "workspaces"),
+        thinking=args.thinking,
     )
     manifest = generate_artifact_bundle(
         Path(args.out),
@@ -265,6 +283,7 @@ def _matrix_command(args: argparse.Namespace) -> None:
         trace_mode=args.trace_mode,
         prompt_template=args.prompt_template,
         constrained_actions=args.constrained_actions,
+        thinking=args.thinking,
     )
     _emit(manifest, args.format, title="Model Matrix")
     if args.fail_under_minimum and not manifest["meets_minimum_successful_models"]:

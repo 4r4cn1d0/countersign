@@ -22,6 +22,7 @@ class ModelRequest:
     prompt_template: str
     max_tokens: int = 256
     response_schema: dict[str, Any] | None = None
+    thinking: bool | None = False
 
 
 @dataclass(frozen=True)
@@ -125,6 +126,8 @@ class OllamaModelAdapter:
                 "num_predict": request.max_tokens,
             },
         }
+        if request.thinking is not None:
+            payload["think"] = request.thinking
         if request.response_schema is not None:
             payload["format"] = request.response_schema
         response = _post_json(f"{self.endpoint}/api/chat", payload)

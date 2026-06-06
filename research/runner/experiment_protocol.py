@@ -28,6 +28,7 @@ def build_experiment_protocol(
     trace_mode: str,
     prompt_template: str,
     constrained_actions: bool,
+    thinking: bool,
 ) -> dict:
     """Build a predeclared protocol whose identifier excludes wall-clock time."""
 
@@ -55,6 +56,7 @@ def build_experiment_protocol(
             "trace_mode": trace_mode,
             "prompt_template": prompt_template,
             "constrained_actions": constrained_actions,
+            "thinking": thinking,
             "runtime_fallback_allowed": False,
         },
         "datasets": {

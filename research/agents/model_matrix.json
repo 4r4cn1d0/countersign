@@ -20,6 +20,7 @@
   "max_tokens": 256,
   "action_budget": 20,
   "constrained_actions": true,
+  "thinking": false,
   "minimum_successful_models": 5,
   "models": [
     {

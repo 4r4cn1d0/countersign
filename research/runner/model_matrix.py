@@ -54,6 +54,7 @@ def run_model_matrix(
     trace_mode: str | None = None,
     prompt_template: str | None = None,
     constrained_actions: bool | None = None,
+    thinking: bool | None = None,
     runner: BenchmarkRunner | None = None,
 ) -> dict:
     """Run paired baseline/verified trials under a frozen experiment protocol."""
@@ -98,6 +99,11 @@ def run_model_matrix(
         if constrained_actions is not None
         else bool(matrix.get("constrained_actions", True))
     )
+    active_thinking = (
+        bool(thinking)
+        if thinking is not None
+        else bool(matrix.get("thinking", False))
+    )
     minimum_successful = int(
         minimum_successful_models
         if minimum_successful_models is not None
@@ -131,6 +137,7 @@ def run_model_matrix(
         trace_mode=active_trace_mode,
         prompt_template=active_prompt_template,
         constrained_actions=active_constrained_actions,
+        thinking=active_thinking,
     )
     protocol_path = output_dir / "experiment_protocol.json"
     write_frozen_protocol(protocol_path, protocol)
@@ -157,6 +164,7 @@ def run_model_matrix(
             trace_mode=active_trace_mode,
             prompt_template=active_prompt_template,
             constrained_actions=active_constrained_actions,
+            thinking=active_thinking,
             protocol_id=protocol["protocol_id"],
             pull_missing=pull_missing,
             installed_names=installed_names,
@@ -219,6 +227,7 @@ def run_model_matrix(
         "trace_mode": active_trace_mode,
         "prompt_template": active_prompt_template,
         "constrained_actions": active_constrained_actions,
+        "thinking": active_thinking,
         "pull_missing": pull_missing,
         "minimum_successful_models": minimum_successful,
         "successful_model_count": len(successful_models),
@@ -277,6 +286,7 @@ def _run_one_model(
     trace_mode: str,
     prompt_template: str,
     constrained_actions: bool,
+    thinking: bool,
     protocol_id: str,
     pull_missing: bool,
     installed_names: set[str],
@@ -347,6 +357,7 @@ def _run_one_model(
                     trace_mode=trace_mode,
                     workspace_root=str(output_dir / "workspaces"),
                     constrained_actions=constrained_actions,
+                    thinking=thinking,
                 )
                 seed_dir = f"seed-{seed}"
                 run_path = (
@@ -572,6 +583,7 @@ def _model_matrix_summary(manifest: dict) -> str:
         f"- Framework: `{manifest.get('framework', 'react_custom')}`",
         f"- Seeds: `{manifest['seeds']}`",
         f"- Constrained actions: `{manifest['constrained_actions']}`",
+        f"- Thinking mode: `{manifest['thinking']}`",
         f"- Planned runs: `{manifest['planned_run_count']}`",
         f"- Completed runs: `{manifest['completed_run_count']}`",
         f"- Failed runs: `{manifest['failed_run_count']}`",

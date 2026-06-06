@@ -75,6 +75,7 @@ def test_ollama_adapter_contract_without_network():
     assert response.runtime == "ollama"
     assert response.text == "ok"
     assert post_json.call_args.args[0].endswith("/api/chat")
+    assert post_json.call_args.args[1]["think"] is False
 
 
 def test_ollama_adapter_sends_declared_json_schema():
@@ -103,6 +104,27 @@ def test_ollama_adapter_sends_declared_json_schema():
     assert post_json.call_args.args[1]["format"] == schema
 
 
+def test_ollama_adapter_sends_explicit_thinking_mode():
+    with patch(
+        "research.runner.model_adapters._post_json",
+        return_value={"message": {"content": '{"action":"list_files"}'}},
+    ) as post_json:
+        adapter = create_model_adapter("ollama", "http://127.0.0.1:11434")
+        adapter.generate(
+            ModelRequest(
+                prompt="Choose one action.",
+                model_name="deepseek-r1:8b",
+                model_family="deepseek",
+                temperature=0.0,
+                seed=0,
+                prompt_template="test_template",
+                thinking=True,
+            )
+        )
+
+    assert post_json.call_args.args[1]["think"] is True
+
+
 def test_runner_records_runtime_metadata_and_model_response():
     config = BenchmarkRunConfig(
         runtime="deterministic",
@@ -117,6 +139,7 @@ def test_runner_records_runtime_metadata_and_model_response():
     assert metadata["prompt_template"] == "test_template"
     assert metadata["temperature"] == 0.2
     assert metadata["seed"] == 99
+    assert metadata["thinking"] is False
     assert run["model_response"]["runtime"] == "deterministic"
 
 

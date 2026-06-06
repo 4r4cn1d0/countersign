@@ -34,6 +34,7 @@ def test_default_model_matrix_has_at_least_five_enabled_model_families():
     assert matrix["framework"] == "langgraph_tools"
     assert len(matrix["seeds"]) >= 3
     assert matrix["constrained_actions"] is True
+    assert matrix["thinking"] is False
     assert matrix["minimum_successful_models"] >= 5
     assert len(enabled_models) >= 5
     assert len({model["model_family"] for model in enabled_models}) >= 5
@@ -334,6 +335,7 @@ def test_protocol_identifier_is_stable_but_changes_with_generation_settings(
         "trace_mode": "model_driven",
         "prompt_template": "default_react_memory_v0",
         "constrained_actions": True,
+        "thinking": False,
     }
 
     first = build_experiment_protocol(**kwargs)
@@ -343,6 +345,10 @@ def test_protocol_identifier_is_stable_but_changes_with_generation_settings(
     assert first["protocol_id"] == second["protocol_id"]
     assert first["created_at"] != ""
     assert first["protocol_id"] != changed["protocol_id"]
+    changed_thinking = build_experiment_protocol(
+        **{**kwargs, "thinking": True}
+    )
+    assert first["protocol_id"] != changed_thinking["protocol_id"]
 
 
 def test_predeclared_statistics_report_zero_rate_uncertainty_and_exact_pairing():

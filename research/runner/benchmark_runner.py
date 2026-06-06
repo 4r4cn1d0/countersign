@@ -43,6 +43,7 @@ class BenchmarkRunConfig:
     trace_mode: str = "scripted"
     workspace_root: str | None = None
     constrained_actions: bool = True
+    thinking: bool = False
 
 
 class BenchmarkRunner:
@@ -114,6 +115,7 @@ class BenchmarkRunner:
                 "action_budget": run_config.action_budget,
                 "trace_mode": run_config.trace_mode,
                 "constrained_actions": run_config.constrained_actions,
+                "thinking": run_config.thinking,
                 "agent_framework_runtime": (
                     run_config.framework if run_config.framework != "react_custom" else None
                 ),
@@ -207,6 +209,7 @@ class BenchmarkRunner:
                     prompt_template=config.prompt_template,
                     max_tokens=config.max_tokens,
                     response_schema=response_schema,
+                    thinking=config.thinking,
                 )
             )
         except RuntimeError as exc:
@@ -222,6 +225,7 @@ class BenchmarkRunner:
                     prompt_template=config.prompt_template,
                     max_tokens=config.max_tokens,
                     response_schema=response_schema,
+                    thinking=config.thinking,
                 )
             ).__class__(
                 text="Runtime unavailable; deterministic fallback used for trace shape.",
@@ -574,6 +578,7 @@ class BenchmarkRunner:
                 prompt_template=config.prompt_template,
                 temperature=config.temperature,
                 max_tokens=config.max_tokens,
+                thinking=config.thinking,
                 parse_status=parsed_action["parse_status"],
                 parsed_action=action,
                 parsed_claim_count=0,
