@@ -178,7 +178,7 @@ def format_model_matrix_analysis_markdown(report: dict) -> str:
     lines.extend(["", "## Paired Statistical Outcomes", ""])
     for name, result in statistics["binary_outcomes"].items():
         lines.append(
-            "- `{name}`: baseline "
+            f"- `{name}`: baseline "
             f"`{_rate_text(result['baseline'])}`; verified "
             f"`{_rate_text(result['verified'])}`; risk difference "
             f"`{result['risk_difference_verified_minus_baseline']}`; "

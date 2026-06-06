@@ -178,6 +178,9 @@ def test_model_matrix_runs_paired_multi_seed_trials_with_hashes(tmp_path: Path):
     assert primary["verified"]["successes"] == 0
     assert primary["verified"]["ci95"][1] > 0
     assert primary["mcnemar"]["p_value_two_sided_exact"] == 0.25
+    markdown = format_model_matrix_analysis_markdown(report)
+    assert "`accepted_false_finish_trial`" in markdown
+    assert "`{name}`" not in markdown
     assert audit_model_matrix_manifest(Path(manifest["manifest_path"]))["valid"] is True
 
 
