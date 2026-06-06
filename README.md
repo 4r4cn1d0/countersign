@@ -24,14 +24,15 @@ The project is a working MVP/demo, not just a write-up.
 - SDK: Python instrumentation hooks for agent traces.
 - Research CLI: benchmark runs, scoring, verification, comparisons, artifact bundles,
   model matrices, and matrix reports.
-- Real-agent path: bounded LangGraph benchmark graph using local Ollama models.
+- Real-agent path: bounded LangGraph benchmark graph using local Ollama models, plus a
+  coding-focused LangGraph tool loop with real file and test tools.
 - Current strongest result: five local model rows run through LangGraph across all three
   seed memory-pressure tasks.
 
 Latest verified test state:
 
-- Focused research suite: 52 passed, 1 skipped.
-- Full backend suite: 283 passed, 1 skipped.
+- Focused research suite: 54 passed, 1 skipped.
+- Full backend suite: 285 passed, 1 skipped.
 
 ## Current Five-Model Result
 
@@ -72,17 +73,19 @@ the generation budget in `thinking`.
 
 ## How We Make It a Full Tool-Using Agent
 
-The present LangGraph path is real framework execution, but it is still a bounded
-benchmark graph: goal intake, memory loading, model call, trace emission, scoring, and
-verification. The next credibility jump is to give the graph real tools:
+The present five-model LangGraph path is real framework execution, but it is still a
+bounded benchmark graph: goal intake, memory loading, model call, trace emission, scoring,
+and verification. The first coding-focused tool-loop upgrade is now implemented as
+`--agent langgraph_tools`:
 
 - A workspace sandbox per run.
 - File read/write tools.
-- Shell/test execution tools.
-- Optional browser or source-fetch tools for research tasks.
+- Test execution tools.
 - An evidence ledger that records every tool output and source timestamp.
 - Verification gates before high-risk actions such as "tests pass", "task complete",
-  "source supports claim", or "file changed".
+  or "file changed".
+
+Broader source-fetch, browser, data-analysis, shell, and git tools remain future work.
 
 Detailed implementation plan:
 
@@ -185,6 +188,17 @@ python3 scripts/agent_memory.py run \
   --format json
 ```
 
+Run the coding-focused LangGraph tool loop:
+
+```bash
+python3 scripts/agent_memory.py run \
+  --task coding_stale_tests_001 \
+  --agent langgraph_tools \
+  --trace-mode model_driven \
+  --out runs/langgraph-tools-coding \
+  --format json
+```
+
 Run tests:
 
 ```bash
@@ -268,9 +282,11 @@ docs/                    Subsystem documentation
 
 ## Limits To Be Honest About
 
-- The strongest current real-agent evidence uses LangGraph, but with bounded benchmark
-  memory/tool nodes.
-- The next phase needs real shell/file/test/browser tools inside the agent graph.
+- The strongest five-model evidence still uses bounded LangGraph memory/tool nodes.
+- The new `langgraph_tools` mode uses real coding file/test tools, but only for coding
+  tasks so far.
+- The next phase needs model-matrix runs through `langgraph_tools` and additional real
+  source/data/browser tools for non-coding long-horizon tasks.
 - Local models are open-weight; licenses should be reported per model for publication.
 - Gemma 4 12B MLX needs prompt/runtime tuning before it can be counted as parsed
   comparison evidence.

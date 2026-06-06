@@ -98,9 +98,11 @@ The current real-agent runtime path uses:
 - Ollama as the local model runtime.
 - Local open-weight model rows from `research/agents/model_matrix.json`.
 
-The current LangGraph graph is bounded. It has graph nodes for goal intake, memory
-loading, model call, and trace emission. The next phase is a full tool-using graph with
-file, shell, test, browser/source-fetch, and verification nodes.
+The current five-model LangGraph graph is bounded. It has graph nodes for goal intake,
+memory loading, model call, and trace emission. The new `langgraph_tools` path adds a
+coding-focused StateGraph loop with workspace setup, planning, tool choice, file reads,
+file writes, test execution, evidence-ledger updates, verification events, and final trace
+emission. Broader shell/git/browser/source-fetch tools remain future work.
 
 Related docs:
 

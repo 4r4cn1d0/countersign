@@ -47,6 +47,7 @@ python3 scripts/agent_memory.py matrix --out runs/gemma4-12b-pressure --model ge
 python3 scripts/agent_memory.py matrix --out runs/langgraph-qwen-pressure --agent langgraph --model qwen2.5-coder:7b --trace-mode model_driven --prompt-template memory_pressure_v0 --minimum-successful-models 1 --fail-under-minimum
 python3 scripts/agent_memory.py matrix --out runs/langgraph-first-five --agent langgraph --model qwen2.5-coder:7b --model llama3.2:3b --model mistral:7b --model gemma3:4b --model phi4-mini:latest --trace-mode model_driven --prompt-template memory_pressure_v0 --minimum-successful-models 5 --fail-under-minimum
 python3 scripts/agent_memory.py matrix-report --manifest runs/langgraph-first-five/model_matrix_manifest.json --out runs/langgraph-first-five/report.md --format markdown
+python3 scripts/agent_memory.py run --task coding_stale_tests_001 --agent langgraph_tools --trace-mode model_driven --out runs/langgraph-tools-coding --format json
 ```
 
 The matrix runner disables deterministic fallback. Missing local models are skipped unless
@@ -128,6 +129,12 @@ The same day, a five-model LangGraph matrix also ran:
 The LangGraph adapter is a bounded benchmark graph with goal, memory/tool, model, and
 trace-emission nodes. It is real external framework execution, but it is not yet a full
 autonomous coding agent with shell/file-edit tools.
+
+The coding-focused `langgraph_tools` adapter now runs a real StateGraph loop over an
+isolated parser workspace. It lists files, reads the parser, runs tests, writes a parser
+fix, writes regression tests, records stale pre-edit test evidence, reruns tests after the
+final edit, and emits verification-relevant trace events. Smoke artifact:
+`/tmp/agent-memory-langgraph-tools-coding-smoke/coding_stale_tests_001_baseline.json`.
 
 The first-five all-task LangGraph comparison supersedes the one-task checkpoint for
 model comparison:

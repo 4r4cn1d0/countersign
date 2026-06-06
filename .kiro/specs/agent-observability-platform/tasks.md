@@ -64,6 +64,15 @@ Minimum demo capabilities:
   - Tune Gemma 4 12B prompt/runtime settings until it returns non-empty final JSON.
   - Extend LangGraph from bounded benchmark tools to real shell/file-edit/test tools.
 
+- Date: 2026-06-04 (Session 22)
+- Author: Codex (coding LangGraph tool loop)
+- Summary: Focused the tool-agent upgrade on coding tasks first while preserving non-coding long-horizon ideas in docs. Added `langgraph_tools`, a real LangGraph StateGraph loop with isolated coding workspace setup, file listing, file reads, file writes, Python unittest execution, evidence-ledger updates, stale-evidence verification events, and final trace emission.
+- Status: Coding tool-loop smoke artifact generated at `/tmp/agent-memory-langgraph-tools-coding-smoke/coding_stale_tests_001_baseline.json`. The run records 44 trace events, 6 tool-loop iterations, real parser/test files, a parser fix, regression test write, stale pre-edit test-pass/task-complete claims, and a post-edit test run with `Ran 2 tests ... OK`. Matrix smoke `/tmp/agent-memory-langgraph-tools-coding-matrix-smoke/model_matrix_manifest.json` succeeded with one deterministic Qwen row, baseline and verified artifacts, one comparison artifact, 2 blocked actions, and false-completion rate reduced by 1.0. Regression tests cover baseline detection and verified blocking of stale high-risk actions. Verification: focused research suite passes with 54 passed, 1 skipped; full backend suite passes with 285 passed, 1 skipped.
+- Next actions:
+  - Run focused research and full backend verification after this implementation.
+  - Run the first-five local model matrix on `coding_stale_tests_001` with `--agent langgraph_tools`.
+  - Add richer multi-file coding fixtures plus shell/git tools before expanding to non-coding tool tasks.
+
 - Date: 2026-06-04 (Session 17)
 - Author: Codex (real-runtime open model matrix)
 - Summary: Implemented and ran the first real-runtime local Ollama model matrix for the MacBook M4 Air 24 GB setup. Added a six-model matrix (`qwen2.5-coder:7b`, `llama3.2:3b`, `mistral:7b`, `deepseek-r1:8b`, `gemma3:4b`, `phi4-mini:latest`), a terminal `matrix`/`matrix-list` CLI, max-token controls, and no-fallback real-runtime enforcement so missing or failed models cannot be counted as deterministic benchmark evidence. Pulled the missing local Ollama models and ran `coding_stale_tests_001` across baseline and verified variants for all six model families.
@@ -1037,6 +1046,37 @@ Acceptance bar for unfinished research tasks:
     - _Research Requirements: implementation-backed completion_
     - _Status: Verified. Focused research suite passes: 52 passed, 1 skipped, 4 warnings (`python3 -m pytest backend/tests/test_research_benchmark_seed.py backend/tests/test_research_benchmark_runner.py backend/tests/test_research_memory_claims.py backend/tests/test_research_memory_metrics.py backend/tests/test_research_verification_and_cli.py backend/tests/test_research_runtime_and_bundle.py backend/tests/test_research_model_matrix.py -q`). Full backend suite passes: 283 passed, 1 skipped, 4 warnings (`python3 -m pytest -q` from `backend/`)._
 
+- [x] 31. Implement coding-focused LangGraph tool loop
+  - [x] 31.1 Add `langgraph_tools` framework mode
+    - Keep existing `langgraph` bounded benchmark path unchanged for prior comparisons
+    - Register `langgraph_tools` as an allowed open-source framework adapter
+    - Route terminal runs through `--agent langgraph_tools`
+    - _Research Requirements: real tool-using coding-agent path_
+    - _Status: Added `framework=langgraph_tools` in `research/runner/benchmark_runner.py`, registered it in `research/agents/initial_stack.json`, and documented the command in README and CLI docs._
+
+  - [x] 31.2 Implement coding workspace and tool loop
+    - Create an isolated per-run coding workspace
+    - Implement real `list_files`, `read_file`, `write_file`, and `run_tests` tool execution
+    - Emit trace events for planning, tool choice, tool execution, observation ingestion, memory updates, verification, and final summary
+    - Preserve an evidence ledger in trace events
+    - _Research Requirements: no-fake tool evidence_
+    - _Status: `langgraph_tools` now creates a parser workspace, reads/writes real files, runs `python -m unittest discover -s .`, records workspace paths, and reports `tool_loop_iterations` in run metadata._
+
+  - [x] 31.3 Exercise stale test evidence and verification blocking
+    - Run an old passing test before final edits
+    - Apply parser and test changes that invalidate the old test result
+    - Emit a stale pre-edit completion claim and a final post-edit test-pass claim
+    - Verify that strict policy blocks stale high-risk actions
+    - _Research Requirements: memory-corruption intervention evidence_
+    - _Status: Smoke run `/tmp/agent-memory-langgraph-tools-coding-smoke/coding_stale_tests_001_baseline.json` contains stale pre-edit `tests_pass` and `task_complete` claims, a final post-edit test run, and memory-health false-completion detection. Regression tests verify the `verified` variant blocks stale actions._
+
+  - [x] 31.4 Verify coding tool-loop tests
+    - Rerun focused research tests
+    - Rerun full backend tests
+    - Record exact pass/fail counts
+    - _Research Requirements: implementation-backed completion_
+    - _Status: Verified. Focused research suite passes: 54 passed, 1 skipped, 4 warnings (`python3 -m pytest backend/tests/test_research_benchmark_seed.py backend/tests/test_research_benchmark_runner.py backend/tests/test_research_memory_claims.py backend/tests/test_research_memory_metrics.py backend/tests/test_research_verification_and_cli.py backend/tests/test_research_runtime_and_bundle.py backend/tests/test_research_model_matrix.py -q`). Full backend suite passes: 285 passed, 1 skipped, 4 warnings (`python3 -m pytest -q` from `backend/`)._
+
 ## Notes
 
 - Tasks marked with `*` are optional and can be skipped for faster MVP
@@ -1048,7 +1088,7 @@ Acceptance bar for unfinished research tasks:
 - Core infrastructure tasks (1-6) establish the trace ingestion, storage, API, and streaming foundation
 - SDK and serialization tasks (7-10) support instrumented agent runs and trace persistence
 - Dashboard tasks (11-15) provide the current observability MVP for sessions, graphs, reasoning traces, and tool calls
-- Research MVP tasks (16-30) measure and reduce long-horizon memory corruption with terminal-first reproducibility
+- Research MVP tasks (16-31) measure and reduce long-horizon memory corruption with terminal-first reproducibility
 
 
 ## Task Dependency Graph

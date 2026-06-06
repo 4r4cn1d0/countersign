@@ -138,6 +138,15 @@ report shows 15 baseline task rows, parse status counts `json:11`, `json_repaire
 This is the current strongest real-agent comparison artifact, while Gemma 4 12B remains a
 separate heavyweight checkpoint until it returns usable final content under the prompt.
 
+Coding tool-loop checkpoint:
+`framework=langgraph_tools` now runs a coding-focused LangGraph StateGraph loop over an
+isolated parser workspace. The loop performs real file listing, file reading, file writing,
+and `python -m unittest discover -s .` execution, records an evidence ledger, emits stale
+pre-edit test-pass/task-complete claims, and reruns tests after the final edit. Smoke
+artifact: `/tmp/agent-memory-langgraph-tools-coding-smoke/coding_stale_tests_001_baseline.json`.
+This is the first real file/test tool path, but it is not yet a five-model tool-agent
+matrix and it does not yet include source/browser/data-analysis tools.
+
 License note: several candidate models are open-weight rather than OSI open-source. For
 publication, report exact model tags and licenses separately.
 

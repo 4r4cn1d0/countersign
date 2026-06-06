@@ -1,24 +1,43 @@
 # Tool-Using Agents
 
-The current LangGraph implementation is real external framework execution, but it is a
-bounded benchmark graph. To make the demo stronger, the next phase should turn it into a
-full tool-using agent that can perform long-horizon work and be verified while it acts.
+The project now has two LangGraph paths:
+
+- `langgraph`: a bounded benchmark graph used for the current five-model comparison.
+- `langgraph_tools`: a coding-focused tool loop with a real isolated workspace, file
+  reads/writes, Python test execution, an evidence ledger, and verification events.
+
+The broader goal is still a full tool-using agent that can perform long-horizon work and
+be verified while it acts.
 
 ## Current State
 
-The current LangGraph graph executes these nodes:
+The bounded `langgraph` graph executes these nodes:
 
 - `receive_goal`
 - `load_memory`
 - `call_model`
 - `emit_trace`
 
-That is enough to test model-authored memory claims against compressed context, but it is
-not yet enough to claim the system evaluates autonomous coding or research agents.
+The coding-focused `langgraph_tools` graph executes these nodes:
+
+- `receive_goal`
+- `retrieve_memory`
+- `plan_next_step`
+- `choose_tool`
+- `execute_tool`
+- `ingest_observation`
+- `update_memory`
+- `verify_high_risk_claims`
+- `decide_continue_or_finish`
+- `call_model`
+- `emit_trace`
+
+That tool loop is enough to evaluate a real coding workflow with files and tests. It is
+not yet a general autonomous research/browser/data-analysis agent.
 
 ## Target Agent Graph
 
-The next LangGraph graph should look like this:
+The implemented coding loop follows this shape:
 
 ```text
 receive_goal
@@ -45,6 +64,21 @@ Minimum tool set for coding tasks:
 - `run_shell(command, cwd, timeout)`
 - `run_tests(command, cwd, timeout)`
 - `inspect_git_status()`
+
+Currently implemented in `langgraph_tools`:
+
+- isolated coding workspace setup
+- `list_files`
+- `read_file`
+- `write_file`
+- `run_tests` via `python -m unittest discover -s .`
+
+Still future for coding tasks:
+
+- general shell command execution
+- git status/diff inspection
+- patch-style editing
+- richer multi-file task fixtures
 
 Minimum tool set for research and non-coding tasks:
 
@@ -114,19 +148,37 @@ Compare:
 - Extra time/tokens.
 - Number of blocked actions that prevented a bad claim.
 
+## Implemented Coding Checkpoint
+
+Smoke artifact:
+
+```text
+/tmp/agent-memory-langgraph-tools-coding-smoke/coding_stale_tests_001_baseline.json
+```
+
+The run records:
+
+- 44 trace events.
+- 6 coding tool-loop iterations.
+- real parser/test files in an isolated workspace.
+- a stale pre-edit test-pass/task-complete claim after later file/test changes.
+- a final post-edit test run with `Ran 2 tests ... OK`.
+- memory-health detection of stale and false-completion claims.
+- verified variant tests that block stale high-risk actions.
+
 ## Implementation Checklist
 
-1. Add a `tool_using_langgraph` framework mode or extend `framework=langgraph` behind a
-   config flag.
-2. Add a per-run workspace directory under the output artifact directory.
-3. Implement safe file, shell, test, and source-fetch tools.
-4. Make every tool call emit trace events in the existing schema.
-5. Add evidence-ledger data to run metadata or trace events.
-6. Update claim extraction to link claims to ledger evidence.
-7. Run the same seed tasks under baseline and verified variants.
-8. Add regression tests that prove unsupported completion claims are blocked.
-9. Add at least one coding and one non-coding tool-using seed task.
-10. Regenerate matrix reports across the first five models.
+1. [x] Add a `langgraph_tools` framework mode for coding tasks.
+2. [x] Add a per-run workspace directory under the output artifact directory.
+3. [x] Implement safe file and test tools for the first coding fixture.
+4. [x] Make every tool call emit trace events in the existing schema.
+5. [x] Add evidence-ledger data to trace events.
+6. [x] Preserve stale evidence so verification can block it.
+7. [x] Add regression tests that prove stale completion claims are blocked.
+8. [ ] Add general shell/git tools.
+9. [ ] Add richer multi-file coding fixtures.
+10. [ ] Add at least one non-coding tool-using seed task after coding stabilizes.
+11. [ ] Regenerate matrix reports across the first five models with `langgraph_tools`.
 
 ## Acceptance Bar
 
@@ -138,3 +190,6 @@ A full tool-using checkpoint should not be marked done until:
 - Baseline and verified variants both produce artifacts.
 - Verification blocks at least one seeded unsupported high-risk claim.
 - Focused research tests and full backend tests pass.
+
+The current coding checkpoint satisfies the coding-file/test-tool portion, but not the
+five-model matrix or non-coding tool portions yet.

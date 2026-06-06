@@ -39,6 +39,17 @@ python3 scripts/agent_memory.py run \
   --format json
 ```
 
+Run the coding-focused LangGraph tool loop:
+
+```bash
+python3 scripts/agent_memory.py run \
+  --task coding_stale_tests_001 \
+  --agent langgraph_tools \
+  --trace-mode model_driven \
+  --out runs/langgraph-tools-coding \
+  --format json
+```
+
 ## Score and Verify
 
 ```bash

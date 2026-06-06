@@ -78,9 +78,9 @@ Interpretation:
 
 ## Recommended Future Matrix
 
-After tool-using agents are implemented, rerun:
+After the coding tool loop is stable, rerun:
 
-- First-five clean comparison.
+- First-five clean comparison with `--agent langgraph_tools --task coding_stale_tests_001`.
 - Gemma 4 12B heavyweight comparison.
 - Optional DeepSeek row if runtime performance is acceptable.
 - A second framework adapter such as AutoGen or CrewAI.
