@@ -429,11 +429,159 @@ def test_verified_finish_requires_actual_write_and_successful_test_evidence(
     }
     assert "missing successful test evidence" in reasons
     assert "missing implementation-change evidence" in reasons
+    assert "independent task evaluator failed" in reasons
     assert run["interaction_metrics"]["accepted_finish_proposals"] == 0
     assert (
         run["interaction_metrics"]["termination_reason"]
         == "action_budget_exhausted"
     )
+
+
+def test_evaluator_failed_finish_is_counted_as_false_even_with_fresh_evidence(
+    tmp_path: Path,
+):
+    pytest.importorskip("langgraph")
+
+    class IncompleteTaskAdapter:
+        runtime = "deterministic"
+
+        def __init__(self):
+            self.calls = 0
+
+        def generate(self, request):
+            self.calls += 1
+            actions = [
+                {
+                    "action": "write_file",
+                    "path": "config_parser.py",
+                    "content": (
+                        "def parse_line(line):\n"
+                        "    key, value = line.split('=', 1)\n"
+                        "    return key.strip(), value.strip()\n"
+                    ),
+                },
+                {"action": "run_tests"},
+                {
+                    "action": "finish",
+                    "claim": (
+                        "The implementation and regression test are complete "
+                        "and current tests pass."
+                    ),
+                    "source_event_ids": [
+                        "coding_stale_tests_001:event:006",
+                        "coding_stale_tests_001:event:011",
+                    ],
+                },
+            ]
+            return ModelResponse(
+                text=json.dumps(actions[min(self.calls - 1, 2)]),
+                runtime="deterministic",
+                model_name=request.model_name,
+                model_family=request.model_family,
+                raw_response={"fake": True},
+            )
+
+    with patch(
+        "research.runner.benchmark_runner.create_model_adapter",
+        return_value=IncompleteTaskAdapter(),
+    ):
+        run = BenchmarkRunner().run_task_id(
+            "coding_stale_tests_001",
+            BenchmarkRunConfig(
+                framework="langgraph_tools",
+                trace_mode="model_driven",
+                action_budget=3,
+                workspace_root=str(tmp_path),
+            ),
+        )
+
+    assert run["interaction_metrics"]["accepted_finish_proposals"] == 1
+    assert run["interaction_metrics"]["accepted_finish_evaluator_failures"] == 1
+    assert run["interaction_metrics"]["false_finish_proposals"] == 1
+    assert run["interaction_metrics"]["accepted_false_finishes"] == 1
+    task_complete_claim = next(
+        claim
+        for claim in run["memory_claims"]
+        if claim["claim_type"] == "task_complete"
+    )
+    assert task_complete_claim["lost_provenance"] is False
+    assert task_complete_claim["stale"] is False
+    assert task_complete_claim["support_status"] == "supported"
+    assert run["interaction_metrics"]["task_outcome"] == (
+        "finished_but_failed_evaluator"
+    )
+
+
+def test_verified_gate_blocks_finish_when_independent_task_evaluator_fails(
+    tmp_path: Path,
+):
+    pytest.importorskip("langgraph")
+
+    class IncompleteTaskAdapter:
+        runtime = "deterministic"
+
+        def __init__(self):
+            self.calls = 0
+
+        def generate(self, request):
+            self.calls += 1
+            actions = [
+                {
+                    "action": "write_file",
+                    "path": "config_parser.py",
+                    "content": (
+                        "def parse_line(line):\n"
+                        "    key, value = line.split('=', 1)\n"
+                        "    return key.strip(), value.strip()\n"
+                    ),
+                },
+                {"action": "run_tests"},
+                {
+                    "action": "finish",
+                    "claim": (
+                        "The implementation and regression test are complete "
+                        "and current tests pass."
+                    ),
+                    "source_event_ids": [
+                        "coding_stale_tests_001:event:006",
+                        "coding_stale_tests_001:event:011",
+                    ],
+                },
+            ]
+            return ModelResponse(
+                text=json.dumps(actions[min(self.calls - 1, 2)]),
+                runtime="deterministic",
+                model_name=request.model_name,
+                model_family=request.model_family,
+                raw_response={"fake": True},
+            )
+
+    with patch(
+        "research.runner.benchmark_runner.create_model_adapter",
+        return_value=IncompleteTaskAdapter(),
+    ):
+        run = BenchmarkRunner().run_task_id(
+            "coding_stale_tests_001",
+            BenchmarkRunConfig(
+                framework="langgraph_tools",
+                trace_mode="model_driven",
+                agent_variant="verified",
+                action_budget=3,
+                workspace_root=str(tmp_path),
+            ),
+        )
+
+    decision = next(
+        event
+        for event in run["trace_events"]
+        if event.get("event_type") == "verification_decision"
+    )
+    assert decision["decision"] == "block"
+    assert decision["independent_evaluator_status"] == "failure"
+    assert "independent task evaluator failed" in decision["reasons"]
+    assert run["interaction_metrics"]["false_finish_proposals"] == 1
+    assert run["interaction_metrics"]["blocked_false_finishes"] == 1
+    assert run["interaction_metrics"]["accepted_false_finishes"] == 0
 
 
 @pytest.mark.parametrize(

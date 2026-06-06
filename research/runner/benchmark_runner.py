@@ -710,6 +710,15 @@ class BenchmarkRunner:
                         claim_types=proposal["claim_types"],
                         reasons=proposal["reasons"],
                         recommended_actions=proposal["recommended_actions"],
+                        independent_evaluator_status=proposal[
+                            "independent_evaluation"
+                        ].get("status"),
+                        independent_visible_test_status=proposal[
+                            "independent_evaluation"
+                        ].get("visible_test_status"),
+                        independent_hidden_validation_status=proposal[
+                            "independent_evaluation"
+                        ].get("hidden_validation_status"),
                         source_type="verification_policy",
                         source_event_ids=[proposal_event_id],
                     )
@@ -1322,8 +1331,16 @@ class BenchmarkRunner:
         claims_by_event: dict[str, list[dict]] = {}
         for claim in run.get("memory_claims", []):
             claims_by_event.setdefault(claim["event_id"], []).append(claim)
+        failed_verification_event_ids = {
+            event.get("claim_event_id")
+            for event in events
+            if event.get("event_type") == "verification_decision"
+            and event.get("independent_evaluator_status") == "failure"
+        }
 
         def is_false_proposal(event: dict) -> bool:
+            if event["event_id"] in failed_verification_event_ids:
+                return True
             task_claims = [
                 claim
                 for claim in claims_by_event.get(event["event_id"], [])
@@ -1385,6 +1402,18 @@ class BenchmarkRunner:
             ),
             {},
         )
+        if accepted_proposals and evaluation.get("status") != "success":
+            false_by_id = {
+                event["event_id"]: event for event in false_proposals
+            }
+            accepted_false_by_id = {
+                event["event_id"]: event for event in accepted_false
+            }
+            for event in accepted_proposals:
+                false_by_id[event["event_id"]] = event
+                accepted_false_by_id[event["event_id"]] = event
+            false_proposals = list(false_by_id.values())
+            accepted_false = list(accepted_false_by_id.values())
         termination = next(
             (
                 event
@@ -2553,6 +2582,11 @@ class BenchmarkRunner:
             if event_id in events_by_id
         ]
         coding_reasons = []
+        independent_evaluation = {
+            "status": "not_run",
+            "visible_test_status": "not_run",
+            "hidden_validation_status": "not_run",
+        }
         if task.get("family") == "coding":
             if not any(
                 event.get("tool_name") == "run_tests"
@@ -2566,6 +2600,17 @@ class BenchmarkRunner:
                 for event in evidence_events
             ):
                 coding_reasons.append("missing implementation-change evidence")
+            proposal_event = events_by_id.get(proposal_event_id, {})
+            workspace_path = proposal_event.get("workspace_path")
+            if workspace_path:
+                independent_evaluation = self._evaluate_coding_workspace(
+                    Path(str(workspace_path)),
+                    task["task_id"],
+                )
+                if independent_evaluation["status"] != "success":
+                    coding_reasons.append(
+                        "independent task evaluator failed"
+                    )
         task_complete_present = any(
             claim["claim_type"] == "task_complete" for claim in claims
         )
@@ -2607,7 +2652,13 @@ class BenchmarkRunner:
                     if "missing implementation-change evidence" in coding_reasons
                     else set()
                 )
+                | (
+                    {"re-inspect acceptance criteria and repair evaluator failures"}
+                    if "independent task evaluator failed" in coding_reasons
+                    else set()
+                )
             ),
+            "independent_evaluation": independent_evaluation,
         }
 
     @staticmethod

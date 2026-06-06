@@ -43,7 +43,8 @@ def compare_runs(baseline_run: dict, verified_run: dict) -> dict:
         "interpretation": (
             "Raw metrics count every model-authored finish proposal. Behavioral "
             "outcomes separately count which proposals the agent accepted, which "
-            "the verifier blocked, and whether the agent gathered new evidence."
+            "the verifier blocked, whether the independent evaluator rejected an "
+            "accepted claim, and whether the agent gathered new evidence."
         ),
         "baseline_metrics": baseline_metrics,
         "verified_raw_metrics": verified_metrics,

@@ -75,7 +75,8 @@ def build_experiment_protocol(
                 "definition": (
                     "At least one model-authored finish proposal was accepted even "
                     "though its task-complete claim was stale, unsupported, "
-                    "contradicted, or lacked provenance."
+                    "contradicted, lacked provenance, or failed the independent "
+                    "task evaluator."
                 ),
                 "comparison": "paired baseline versus verified exact McNemar test",
             },
