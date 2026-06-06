@@ -77,6 +77,32 @@ def test_ollama_adapter_contract_without_network():
     assert post_json.call_args.args[0].endswith("/api/chat")
 
 
+def test_ollama_adapter_sends_declared_json_schema():
+    schema = {
+        "type": "object",
+        "properties": {"action": {"type": "string"}},
+        "required": ["action"],
+    }
+    with patch(
+        "research.runner.model_adapters._post_json",
+        return_value={"message": {"content": '{"action":"run_tests"}'}},
+    ) as post_json:
+        adapter = create_model_adapter("ollama", "http://127.0.0.1:11434")
+        adapter.generate(
+            ModelRequest(
+                prompt="Choose one action.",
+                model_name="qwen2.5-coder:7b",
+                model_family="qwen",
+                temperature=0.0,
+                seed=0,
+                prompt_template="test_template",
+                response_schema=schema,
+            )
+        )
+
+    assert post_json.call_args.args[1]["format"] == schema
+
+
 def test_runner_records_runtime_metadata_and_model_response():
     config = BenchmarkRunConfig(
         runtime="deterministic",

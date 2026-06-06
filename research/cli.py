@@ -11,6 +11,7 @@ from .runner import (
     BenchmarkRunConfig,
     BenchmarkRunner,
     analyze_model_matrix_manifest,
+    audit_model_matrix_manifest,
     build_memory_health_report,
     compare_runs,
     format_model_matrix_analysis_markdown,
@@ -115,8 +116,22 @@ def main(argv: list[str] | None = None) -> int:
     )
     matrix_parser.add_argument("--variant", action="append", dest="variants")
     matrix_parser.add_argument("--pull-missing", action="store_true")
+    matrix_parser.add_argument(
+        "--seed",
+        action="append",
+        type=int,
+        dest="seeds",
+        help="Experiment seed. Repeat for paired multi-seed trials.",
+    )
+    matrix_parser.add_argument("--temperature", type=float)
     matrix_parser.add_argument("--max-tokens", type=int)
     matrix_parser.add_argument("--action-budget", type=int)
+    matrix_parser.add_argument(
+        "--constrained-actions",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Request runtime-enforced JSON schema for model tool actions.",
+    )
     matrix_parser.add_argument("--trace-mode", choices=["scripted", "model_driven"])
     matrix_parser.add_argument("--prompt-template")
     matrix_parser.add_argument("--minimum-successful-models", type=int)
@@ -137,6 +152,18 @@ def main(argv: list[str] | None = None) -> int:
     matrix_report_parser.add_argument("--out")
     matrix_report_parser.add_argument("--format", choices=["table", "json", "markdown"], default="table")
     matrix_report_parser.set_defaults(handler=_matrix_report_command)
+
+    matrix_audit_parser = subparsers.add_parser(
+        "matrix-audit",
+        help="Verify protocol and artifact hashes for a model matrix",
+    )
+    matrix_audit_parser.add_argument("--manifest", required=True)
+    matrix_audit_parser.add_argument(
+        "--format",
+        choices=["table", "json", "markdown"],
+        default="table",
+    )
+    matrix_audit_parser.set_defaults(handler=_matrix_audit_command)
 
     args = parser.parse_args(argv)
     args.handler(args)
@@ -229,12 +256,15 @@ def _matrix_command(args: argparse.Namespace) -> None:
         task_ids=args.tasks,
         model_names=args.models,
         variants=args.variants,
+        seeds=args.seeds,
         pull_missing=args.pull_missing,
         minimum_successful_models=args.minimum_successful_models,
+        temperature=args.temperature,
         max_tokens=args.max_tokens,
         action_budget=args.action_budget,
         trace_mode=args.trace_mode,
         prompt_template=args.prompt_template,
+        constrained_actions=args.constrained_actions,
     )
     _emit(manifest, args.format, title="Model Matrix")
     if args.fail_under_minimum and not manifest["meets_minimum_successful_models"]:
@@ -256,6 +286,13 @@ def _matrix_report_command(args: argparse.Namespace) -> None:
         else:
             _write_json(output, report)
     _emit(report, args.format, title="Model Matrix Analysis")
+
+
+def _matrix_audit_command(args: argparse.Namespace) -> None:
+    audit = audit_model_matrix_manifest(Path(args.manifest))
+    _emit(audit, args.format, title="Model Matrix Artifact Audit")
+    if not audit["valid"]:
+        raise SystemExit(2)
 
 
 def _write_runs(runs: list[dict], output: Path) -> list[Path]:
@@ -300,7 +337,9 @@ def _emit(payload: dict, output_format: str, title: str) -> None:
 
 
 def _format_markdown(payload: dict, title: str) -> str:
-    if payload.get("schema_version") == "agent-memory-model-matrix-analysis/v0.1":
+    if str(payload.get("schema_version", "")).startswith(
+        "agent-memory-model-matrix-analysis/"
+    ):
         return format_model_matrix_analysis_markdown(payload)
 
     lines = [f"# {title}", ""]
@@ -320,11 +359,13 @@ def _format_markdown(payload: dict, title: str) -> str:
     if "written_paths" in payload:
         lines.append("## Written Files")
         lines.extend(f"- `{path}`" for path in payload["written_paths"])
-    if "manifest_path" in payload:
+    if "manifest_path" in payload and "summary_markdown" in payload:
         lines.append("## Bundle Files")
         lines.append(f"- Manifest: `{payload['manifest_path']}`")
         lines.append(f"- Summary: `{payload['summary_markdown']}`")
-    if payload.get("schema_version") == "agent-memory-model-matrix-run/v0.1":
+    if str(payload.get("schema_version", "")).startswith(
+        "agent-memory-model-matrix-run/"
+    ):
         lines.extend(_markdown_model_matrix(payload))
     if payload.get("schema_version") == "agent-memory-model-matrix/v0.1":
         lines.extend(_markdown_configured_model_matrix(payload))
@@ -385,7 +426,9 @@ def _format_table(payload: dict, title: str) -> str:
             for model in payload["models"]
             if model.get("enabled", True)
         )
-    elif payload.get("schema_version") == "agent-memory-model-matrix-analysis/v0.1":
+    elif str(payload.get("schema_version", "")).startswith(
+        "agent-memory-model-matrix-analysis/"
+    ):
         lines.extend(
             [
                 f"successful_models  {payload['successful_model_count']}",
@@ -414,7 +457,7 @@ def _format_table(payload: dict, title: str) -> str:
             lines.extend(_table_mapping(payload["behavioral_outcomes"]))
     elif "written_paths" in payload:
         lines.extend(f"saved: {path}" for path in payload["written_paths"])
-    elif "manifest_path" in payload:
+    elif "manifest_path" in payload and "summary_markdown" in payload:
         lines.append(f"manifest: {payload['manifest_path']}")
         lines.append(f"summary:  {payload['summary_markdown']}")
     else:

@@ -7,7 +7,7 @@ import socket
 import urllib.error
 import urllib.request
 from dataclasses import asdict, dataclass
-from typing import Protocol
+from typing import Any, Protocol
 
 
 @dataclass(frozen=True)
@@ -21,6 +21,7 @@ class ModelRequest:
     seed: int
     prompt_template: str
     max_tokens: int = 256
+    response_schema: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -124,6 +125,8 @@ class OllamaModelAdapter:
                 "num_predict": request.max_tokens,
             },
         }
+        if request.response_schema is not None:
+            payload["format"] = request.response_schema
         response = _post_json(f"{self.endpoint}/api/chat", payload)
         message = response.get("message", {})
         return ModelResponse(
@@ -150,6 +153,8 @@ class LlamaCppHttpAdapter:
             "seed": request.seed,
             "n_predict": request.max_tokens,
         }
+        if request.response_schema is not None:
+            payload["json_schema"] = request.response_schema
         response = _post_json(f"{self.endpoint}/completion", payload)
         text = response.get("content", response.get("response", ""))
         return ModelResponse(

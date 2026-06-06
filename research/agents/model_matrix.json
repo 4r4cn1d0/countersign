@@ -12,9 +12,14 @@
     ]
   },
   "runtime": "ollama",
+  "framework": "langgraph_tools",
   "trace_mode": "model_driven",
   "prompt_template": "default_react_memory_v0",
+  "seeds": [0, 1, 2],
+  "temperature": 0.0,
   "max_tokens": 256,
+  "action_budget": 20,
+  "constrained_actions": true,
   "minimum_successful_models": 5,
   "models": [
     {

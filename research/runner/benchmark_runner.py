@@ -42,6 +42,7 @@ class BenchmarkRunConfig:
     allow_runtime_fallback: bool = False
     trace_mode: str = "scripted"
     workspace_root: str | None = None
+    constrained_actions: bool = True
 
 
 class BenchmarkRunner:
@@ -112,6 +113,7 @@ class BenchmarkRunner:
                 "max_tokens": run_config.max_tokens,
                 "action_budget": run_config.action_budget,
                 "trace_mode": run_config.trace_mode,
+                "constrained_actions": run_config.constrained_actions,
                 "agent_framework_runtime": (
                     run_config.framework if run_config.framework != "react_custom" else None
                 ),
@@ -186,7 +188,13 @@ class BenchmarkRunner:
         prompt = self._model_prompt(task, config)
         return self._generate_model_response_for_prompt(prompt, config)
 
-    def _generate_model_response_for_prompt(self, prompt: str, config: BenchmarkRunConfig):
+    def _generate_model_response_for_prompt(
+        self,
+        prompt: str,
+        config: BenchmarkRunConfig,
+        *,
+        response_schema: dict | None = None,
+    ):
         adapter = create_model_adapter(config.runtime, config.runtime_endpoint)
         try:
             return adapter.generate(
@@ -198,6 +206,7 @@ class BenchmarkRunner:
                     seed=config.seed,
                     prompt_template=config.prompt_template,
                     max_tokens=config.max_tokens,
+                    response_schema=response_schema,
                 )
             )
         except RuntimeError as exc:
@@ -212,6 +221,7 @@ class BenchmarkRunner:
                     seed=config.seed,
                     prompt_template=config.prompt_template,
                     max_tokens=config.max_tokens,
+                    response_schema=response_schema,
                 )
             ).__class__(
                 text="Runtime unavailable; deterministic fallback used for trace shape.",
@@ -536,6 +546,11 @@ class BenchmarkRunner:
                     deterministic_action=deterministic_action,
                 ),
                 config,
+                response_schema=(
+                    self._tool_action_response_schema()
+                    if config.constrained_actions
+                    else None
+                ),
             )
             parsed_action = self._parse_tool_action_response(action_response.text)
             action = parsed_action.get("action_payload")
@@ -553,6 +568,7 @@ class BenchmarkRunner:
                 parse_status=parsed_action["parse_status"],
                 parsed_action=action,
                 parsed_claim_count=0,
+                structured_output_requested=config.constrained_actions,
             )
             add(
                 "decision_point",
@@ -1399,7 +1415,76 @@ class BenchmarkRunner:
             "hidden_validation_success": (
                 evaluation.get("hidden_validation_status") == "success"
             ),
+            "model_action_count": len(
+                [
+                    event
+                    for event in events
+                    if event.get("event_type") == "model_response"
+                    and event.get("graph_node") == "choose_action"
+                ]
+            ),
+            "valid_model_action_count": len(
+                [
+                    event
+                    for event in events
+                    if event.get("event_type") == "model_response"
+                    and event.get("graph_node") == "choose_action"
+                    and event.get("parsed_action")
+                ]
+            ),
+            "invalid_model_action_count": len(
+                [
+                    event
+                    for event in events
+                    if event.get("event_type") == "model_response"
+                    and event.get("graph_node") == "choose_action"
+                    and not event.get("parsed_action")
+                ]
+            ),
+            "rejected_redundant_action_count": len(
+                [
+                    event
+                    for event in events
+                    if event.get("event_type") == "action_error"
+                    and event.get("status") == "rejected_redundant"
+                ]
+            ),
+            "action_compliance_rate": BenchmarkRunner._action_compliance_rate(
+                events
+            ),
+            "protocol_completion_status": termination_reason,
+            "task_outcome": BenchmarkRunner._task_outcome(
+                termination_reason,
+                evaluation.get("status") == "success",
+            ),
         }
+
+    @staticmethod
+    def _action_compliance_rate(events: list[dict]) -> float:
+        actions = [
+            event
+            for event in events
+            if event.get("event_type") == "model_response"
+            and event.get("graph_node") == "choose_action"
+        ]
+        if not actions:
+            return 0.0
+        valid = sum(1 for event in actions if event.get("parsed_action"))
+        return round(valid / len(actions), 4)
+
+    @staticmethod
+    def _task_outcome(termination_reason: str, evaluator_success: bool) -> str:
+        if termination_reason == "accepted_finish":
+            return (
+                "finished_and_passed"
+                if evaluator_success
+                else "finished_but_failed_evaluator"
+            )
+        return (
+            "passed_without_accepted_finish"
+            if evaluator_success
+            else "failed_without_accepted_finish"
+        )
 
     @staticmethod
     def _attach_interactive_verification_report(run: dict) -> dict:
@@ -2217,6 +2302,33 @@ class BenchmarkRunner:
             else []
         )
         return {"parse_status": parsed["_parse_status"], "action_payload": payload}
+
+    @staticmethod
+    def _tool_action_response_schema() -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": [
+                        "list_files",
+                        "read_file",
+                        "write_file",
+                        "run_tests",
+                        "finish",
+                    ],
+                },
+                "path": {"type": "string"},
+                "content": {"type": "string"},
+                "claim": {"type": "string"},
+                "source_event_ids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                },
+            },
+            "required": ["action"],
+            "additionalProperties": False,
+        }
 
     @staticmethod
     def _tool_action_from_step(step: dict) -> dict:

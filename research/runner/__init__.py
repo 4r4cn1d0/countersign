@@ -27,6 +27,18 @@ from .model_adapters import (
     create_model_adapter,
 )
 from .model_matrix import load_model_matrix, run_model_matrix
+from .experiment_protocol import (
+    audit_model_matrix_manifest,
+    build_artifact_index,
+    build_experiment_protocol,
+    sha256_file,
+)
+from .statistics import (
+    build_paired_statistics,
+    exact_mcnemar,
+    paired_bootstrap_mean_difference,
+    wilson_interval,
+)
 from .verification import (
     VerificationPolicy,
     build_verification_report,
@@ -67,4 +79,12 @@ __all__ = [
     "verify_claim",
     "verify_run",
     "run_model_matrix",
+    "build_artifact_index",
+    "audit_model_matrix_manifest",
+    "build_experiment_protocol",
+    "sha256_file",
+    "build_paired_statistics",
+    "exact_mcnemar",
+    "paired_bootstrap_mean_difference",
+    "wilson_interval",
 ]

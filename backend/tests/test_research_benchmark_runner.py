@@ -311,6 +311,13 @@ def test_langgraph_tool_agent_runs_real_coding_tool_loop(tmp_path: Path):
         "visible_test_success": True,
         "visible_test_count": 2,
         "hidden_validation_success": True,
+        "model_action_count": 6,
+        "valid_model_action_count": 6,
+        "invalid_model_action_count": 0,
+        "rejected_redundant_action_count": 0,
+        "action_compliance_rate": 1.0,
+        "protocol_completion_status": "accepted_finish",
+        "task_outcome": "finished_and_passed",
     }
     finish_event = next(
         event
@@ -558,6 +565,66 @@ def test_langgraph_tool_loop_rejects_invalid_action_without_substitution(tmp_pat
         and event.get("status") == "success"
         and "OK" in event.get("content", "")
         for event in run["trace_events"]
+    )
+
+
+def test_langgraph_tool_loop_requests_structured_action_output(tmp_path: Path):
+    pytest.importorskip("langgraph")
+
+    class SchemaCapturingAdapter:
+        runtime = "deterministic"
+
+        def __init__(self):
+            self.schemas = []
+
+        def generate(self, request):
+            if "AGENT_MEMORY_TOOL_ACTION_REQUEST" in request.prompt:
+                self.schemas.append(request.response_schema)
+                marker = "DETERMINISTIC_ACTION:"
+                action = json.loads(
+                    request.prompt.split(marker, 1)[1].strip().splitlines()[0]
+                )
+                return ModelResponse(
+                    text=json.dumps(action),
+                    runtime="deterministic",
+                    model_name=request.model_name,
+                    model_family=request.model_family,
+                    raw_response={"fake": True},
+                )
+            return ModelResponse(
+                text="{}",
+                runtime="deterministic",
+                model_name=request.model_name,
+                model_family=request.model_family,
+                raw_response={"fake": True},
+            )
+
+    adapter = SchemaCapturingAdapter()
+    with patch(
+        "research.runner.benchmark_runner.create_model_adapter",
+        return_value=adapter,
+    ):
+        run = BenchmarkRunner().run_task_id(
+            "coding_stale_tests_001",
+            BenchmarkRunConfig(
+                framework="langgraph_tools",
+                trace_mode="model_driven",
+                constrained_actions=True,
+                workspace_root=str(tmp_path),
+            ),
+        )
+
+    assert adapter.schemas
+    assert all(schema["required"] == ["action"] for schema in adapter.schemas)
+    assert all(
+        "finish" in schema["properties"]["action"]["enum"]
+        for schema in adapter.schemas
+    )
+    assert all(
+        event["structured_output_requested"] is True
+        for event in run["trace_events"]
+        if event.get("event_type") == "model_response"
+        and event.get("graph_node") == "choose_action"
     )
 
 
