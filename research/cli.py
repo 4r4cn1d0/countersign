@@ -37,7 +37,7 @@ def main(argv: list[str] | None = None) -> int:
     run_parser.add_argument("--prompt-template", default="default_react_memory_v0")
     run_parser.add_argument("--temperature", type=float, default=0.0)
     run_parser.add_argument("--max-tokens", type=int, default=256)
-    run_parser.add_argument("--action-budget", type=int, default=16)
+    run_parser.add_argument("--action-budget", type=int, default=32)
     run_parser.add_argument(
         "--thinking",
         action=argparse.BooleanOptionalAction,
@@ -90,7 +90,7 @@ def main(argv: list[str] | None = None) -> int:
     bundle_parser.add_argument("--prompt-template", default="default_react_memory_v0")
     bundle_parser.add_argument("--temperature", type=float, default=0.0)
     bundle_parser.add_argument("--max-tokens", type=int, default=256)
-    bundle_parser.add_argument("--action-budget", type=int, default=16)
+    bundle_parser.add_argument("--action-budget", type=int, default=32)
     bundle_parser.add_argument(
         "--thinking",
         action=argparse.BooleanOptionalAction,

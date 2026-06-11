@@ -14,4 +14,7 @@ service.set_namespace("beta")
 assert service.get_user("1") == {"name": "Ada"}
 assert repository.read_count == 2
 assert cache.get("alpha", "1") is None
+cache.set("gamma", "1", {"name": "Grace"})
+service.set_namespace("beta")
+assert cache.get("gamma", "1") == {"name": "Grace"}
 print("hidden cache validation passed")

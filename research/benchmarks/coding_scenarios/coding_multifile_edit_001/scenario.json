@@ -1,0 +1,47 @@
+{
+  "schema_version": "agent-memory-coding-scenario/v1",
+  "task_id": "coding_multifile_edit_001",
+  "workspace_sha256": "dacf5fb60130f820b492f932fb727badc861e5929a544ba8980e3504a27aaaa1",
+  "final_test_step_id": "final_tests",
+  "benchmark_features": {
+    "multiple_source_and_test_files": true,
+    "independent_subtasks": ["timestamps", "tags", "event fields", "batch integration"],
+    "plausible_false_lead_step_id": "apply_tag_false_lead",
+    "rollback_step_id": "replace_tag_false_lead",
+    "stale_evidence_test_step_id": "intermediate_tests",
+    "stale_evidence_invalidation_step_id": "late_pipeline_test_update",
+    "delayed_final_validation": true,
+    "context_compaction_conditions": ["lossy_compaction", "resume_summary"],
+    "hidden_tests_unavailable_to_agent": true,
+    "executable_evaluator": true
+  },
+  "requirement_updates": [
+    {
+      "after_action": 12,
+      "content": "Requirement update: duplicate normalized tags must be removed while preserving first-seen order."
+    }
+  ],
+  "steps": [
+    {"step_id": "list_workspace", "tool_name": "list_files", "description": "Inventory all normalization modules and tests."},
+    {"step_id": "read_contract", "tool_name": "read_file", "path": "docs/normalization_contract.md", "description": "Read the authoritative normalization contract."},
+    {"step_id": "read_legacy", "tool_name": "read_file", "path": "docs/legacy_format.md", "description": "Inspect the obsolete pass-through format."},
+    {"step_id": "read_normalizer", "tool_name": "read_file", "path": "event_normalizer.py", "description": "Inspect cross-module event normalization."},
+    {"step_id": "read_timestamp", "tool_name": "read_file", "path": "timestamp_utils.py", "description": "Inspect timestamp conversion."},
+    {"step_id": "read_tags", "tool_name": "read_file", "path": "tag_utils.py", "description": "Inspect tag handling."},
+    {"step_id": "read_pipeline", "tool_name": "read_file", "path": "pipeline.py", "description": "Inspect batch integration."},
+    {"step_id": "read_event_tests", "tool_name": "read_file", "path": "test_event_normalizer.py", "description": "Inspect event-level tests."},
+    {"step_id": "read_pipeline_tests", "tool_name": "read_file", "path": "test_pipeline.py", "description": "Inspect batch-level tests."},
+    {"step_id": "early_tests", "tool_name": "run_tests", "description": "Capture weak pre-edit passing evidence."},
+    {"step_id": "apply_tag_false_lead", "tool_name": "write_file", "path": "tag_utils.py", "content_from": "stages/tag_utils_false_lead.py", "description": "Apply a plausible normalization that forgets empty and duplicate handling."},
+    {"step_id": "test_false_lead", "tool_name": "run_tests", "description": "Show that existing tests do not reject the partial tag implementation."},
+    {"step_id": "replace_tag_false_lead", "tool_name": "write_file", "path": "tag_utils.py", "content_from": "solution/tag_utils.py", "description": "Replace the false lead with ordered deduplication."},
+    {"step_id": "fix_timestamps", "tool_name": "write_file", "path": "timestamp_utils.py", "content_from": "solution/timestamp_utils.py", "description": "Normalize UTC timestamps."},
+    {"step_id": "fix_event_fields", "tool_name": "write_file", "path": "event_normalizer.py", "content_from": "solution/event_normalizer.py", "description": "Normalize source and compose helper behavior."},
+    {"step_id": "update_event_tests", "tool_name": "write_file", "path": "test_event_normalizer.py", "content_from": "solution/test_event_normalizer.py", "description": "Add cross-module event regression coverage."},
+    {"step_id": "intermediate_tests", "tool_name": "run_tests", "description": "Validate before the final batch-test change."},
+    {"step_id": "late_pipeline_test_update", "tool_name": "write_file", "path": "test_pipeline.py", "content_from": "solution/test_pipeline.py", "description": "Add late batch ordering and fallback coverage."},
+    {"step_id": "inspect_late_test", "tool_name": "read_file", "path": "test_pipeline.py", "description": "Re-inspect the final changed evidence surface."},
+    {"step_id": "final_tests", "tool_name": "run_tests", "description": "Run visible and hidden evaluation after the final edit.", "hidden_validation": "coding_multifile_edit_001"},
+    {"step_id": "finish", "tool_name": "finish", "description": "Finish only with current multi-file evidence.", "claim": "Timestamp, tag, source, and batch normalization are implemented and verified after the final edit."}
+  ]
+}

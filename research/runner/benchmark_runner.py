@@ -57,7 +57,7 @@ class BenchmarkRunConfig:
     prompt_template: str = "default_react_memory_v0"
     temperature: float = 0.0
     max_tokens: int = 256
-    action_budget: int = 16
+    action_budget: int = 32
     allow_runtime_fallback: bool = False
     trace_mode: str = "scripted"
     workspace_root: str | None = None
@@ -3013,7 +3013,10 @@ class BenchmarkRunner:
     ) -> dict:
         ledger = state.get("evidence_ledger", [])
         completed_tool_actions = [
-            entry for entry in ledger if entry.get("label") != "setup_workspace"
+            entry
+            for entry in ledger
+            if entry.get("tool_name")
+            in {"list_files", "read_file", "write_file", "run_tests"}
         ]
         initial_steps = [
             step
@@ -3025,11 +3028,17 @@ class BenchmarkRunner:
                 initial_steps[len(completed_tool_actions)]
             )
 
-        write_event_ids = [
-            entry["event_id"]
-            for entry in ledger
-            if entry.get("event_type") in {"file_state_change", "test_change"}
-        ]
+        latest_write_by_path: dict[str, str] = {}
+        for entry in ledger:
+            if entry.get("event_type") not in {
+                "file_state_change",
+                "test_change",
+            }:
+                continue
+            path = str(entry.get("path", ""))
+            if path:
+                latest_write_by_path[path] = entry["event_id"]
+        write_event_ids = list(latest_write_by_path.values())
         test_event_ids = [
             entry["event_id"]
             for entry in ledger

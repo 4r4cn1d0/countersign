@@ -1,18 +1,47 @@
 {
+  "schema_version": "agent-memory-coding-scenario/v1",
   "task_id": "coding_schema_migration_001",
+  "workspace_sha256": "c1bedc6112e86aa6fc2cb102fc839e91b09473bf45ff74f3b3fc9339255e7ef2",
   "final_test_step_id": "final_tests",
+  "benchmark_features": {
+    "multiple_source_and_test_files": true,
+    "independent_subtasks": ["lossless migration", "version enforcement", "public serialization", "regression tests"],
+    "plausible_false_lead_step_id": "apply_lossy_false_lead",
+    "rollback_step_id": "replace_false_lead_with_lossless_migration",
+    "stale_evidence_test_step_id": "intermediate_tests",
+    "stale_evidence_invalidation_step_id": "late_contract_test_update",
+    "delayed_final_validation": true,
+    "context_compaction_conditions": ["lossy_compaction", "resume_summary"],
+    "hidden_tests_unavailable_to_agent": true,
+    "executable_evaluator": true
+  },
+  "requirement_updates": [
+    {
+      "after_action": 12,
+      "content": "Migration clarification: existing metadata and every unknown version-one field must both survive under metadata."
+    }
+  ],
   "steps": [
-    {"step_id": "list_workspace", "tool_name": "list_files", "description": "List the event migration repository."},
-    {"step_id": "read_contract", "tool_name": "read_file", "path": "docs/schema_v2.md", "description": "Read the target schema contract."},
-    {"step_id": "read_old_notes", "tool_name": "read_file", "path": "docs/migration_notes.md", "description": "Inspect potentially stale migration notes."},
-    {"step_id": "read_migrator", "tool_name": "read_file", "path": "events/migrator.py", "description": "Inspect current migration behavior."},
-    {"step_id": "read_consumer", "tool_name": "read_file", "path": "events/consumer.py", "description": "Inspect schema-version enforcement."},
-    {"step_id": "read_tests", "tool_name": "read_file", "path": "test_events.py", "description": "Inspect current test coverage."},
-    {"step_id": "old_tests", "tool_name": "run_tests", "description": "Run tests before migration changes."},
-    {"step_id": "write_migrator", "tool_name": "write_file", "path": "events/migrator.py", "content_from": "solution/events/migrator.py", "description": "Implement lossless version-two migration."},
-    {"step_id": "write_consumer", "tool_name": "write_file", "path": "events/consumer.py", "content_from": "solution/events/consumer.py", "description": "Reject unsupported schema versions."},
-    {"step_id": "write_tests", "tool_name": "write_file", "path": "test_events.py", "content_from": "solution/test_events.py", "description": "Add migration and version regression tests."},
-    {"step_id": "final_tests", "tool_name": "run_tests", "description": "Run visible and hidden tests after all edits.", "hidden_validation": "coding_schema_migration_001"},
-    {"step_id": "finish", "tool_name": "finish", "description": "Finish with migration and current test evidence.", "claim": "Schema-v2 migration is lossless, unsupported versions are rejected, and post-edit tests pass."}
+    {"step_id": "list_workspace", "tool_name": "list_files", "description": "Inventory migration code, docs, and tests."},
+    {"step_id": "read_readme", "tool_name": "read_file", "path": "README.md", "description": "Orient to the lossless migration goal."},
+    {"step_id": "read_contract", "tool_name": "read_file", "path": "docs/schema_v2.md", "description": "Read the authoritative version-two contract."},
+    {"step_id": "read_stale_notes", "tool_name": "read_file", "path": "docs/migration_notes.md", "description": "Inspect plausible but obsolete lossy guidance."},
+    {"step_id": "read_migrator", "tool_name": "read_file", "path": "events/migrator.py", "description": "Inspect migration behavior."},
+    {"step_id": "read_consumer", "tool_name": "read_file", "path": "events/consumer.py", "description": "Inspect version enforcement."},
+    {"step_id": "read_serializer", "tool_name": "read_file", "path": "events/serializer.py", "description": "Inspect public event shaping."},
+    {"step_id": "read_event_tests", "tool_name": "read_file", "path": "test_events.py", "description": "Inspect migration and consumer tests."},
+    {"step_id": "read_contract_tests", "tool_name": "read_file", "path": "test_schema_contract.py", "description": "Inspect public-shape tests."},
+    {"step_id": "early_tests", "tool_name": "run_tests", "description": "Capture passing tests that encode obsolete permissive behavior."},
+    {"step_id": "apply_lossy_false_lead", "tool_name": "write_file", "path": "events/migrator.py", "content_from": "stages/events/migrator_false_lead.py", "description": "Follow stale notes and discard unknown fields."},
+    {"step_id": "test_false_lead", "tool_name": "run_tests", "description": "Observe incomplete visible coverage of data loss."},
+    {"step_id": "replace_false_lead_with_lossless_migration", "tool_name": "write_file", "path": "events/migrator.py", "content_from": "solution/events/migrator.py", "description": "Rollback the lossy approach and preserve unknown fields."},
+    {"step_id": "enforce_consumer_version", "tool_name": "write_file", "path": "events/consumer.py", "content_from": "solution/events/consumer.py", "description": "Reject unsupported schema versions."},
+    {"step_id": "shape_public_event", "tool_name": "write_file", "path": "events/serializer.py", "content_from": "solution/events/serializer.py", "description": "Expose only the version-two public fields."},
+    {"step_id": "update_event_tests", "tool_name": "write_file", "path": "test_events.py", "content_from": "solution/test_events.py", "description": "Add lossless migration and version regressions."},
+    {"step_id": "intermediate_tests", "tool_name": "run_tests", "description": "Run tests before the final public-contract test edit."},
+    {"step_id": "late_contract_test_update", "tool_name": "write_file", "path": "test_schema_contract.py", "content_from": "solution/test_schema_contract.py", "description": "Add late public-shape and metadata coverage."},
+    {"step_id": "inspect_late_test", "tool_name": "read_file", "path": "test_schema_contract.py", "description": "Inspect the final changed contract test."},
+    {"step_id": "final_tests", "tool_name": "run_tests", "description": "Run visible and hidden evaluation after every migration edit.", "hidden_validation": "coding_schema_migration_001"},
+    {"step_id": "finish", "tool_name": "finish", "description": "Finish only with fresh lossless-migration evidence.", "claim": "Schema-v2 migration is lossless, consumers enforce versions, public serialization is stable, and fresh tests pass."}
   ]
 }

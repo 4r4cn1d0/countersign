@@ -238,13 +238,17 @@ def test_langgraph_tool_agent_runs_real_coding_tool_loop(tmp_path: Path):
 
     assert run["run_metadata"]["framework"] == "langgraph_tools"
     assert run["run_metadata"]["agent_framework_runtime"] == "langgraph_tools"
-    assert run["run_metadata"]["tool_loop_iterations"] == 6
+    assert run["run_metadata"]["tool_loop_iterations"] == 20
     assert workspace_path.exists()
     assert (workspace_path / "config_parser.py").read_text() == (
-        "def parse_line(line):\n"
-        "    key, value = line.split('=', 1)\n"
-        "    return key.strip(), value.strip()\n"
-    )
+        ROOT
+        / "research"
+        / "benchmarks"
+        / "coding_scenarios"
+        / "coding_stale_tests_001"
+        / "solution"
+        / "config_parser.py"
+    ).read_text()
     assert {
         "receive_goal",
         "retrieve_memory",
@@ -279,7 +283,7 @@ def test_langgraph_tool_agent_runs_real_coding_tool_loop(tmp_path: Path):
         if event["event_type"] == "model_response"
         and event.get("graph_node") == "choose_action"
     ]
-    assert len(action_events) == 6
+    assert len(action_events) == 20
     assert {event["parse_status"] for event in action_events} == {"json"}
     assert {"read_file", "write_file", "run_tests", "finish"}.issubset(
         {event["parsed_action"]["action"] for event in action_events}
@@ -315,10 +319,10 @@ def test_langgraph_tool_agent_runs_real_coding_tool_loop(tmp_path: Path):
         "termination_reason": "accepted_finish",
         "evaluator_success": True,
         "visible_test_success": True,
-        "visible_test_count": 2,
+        "visible_test_count": 4,
         "hidden_validation_success": True,
-        "model_action_count": 6,
-        "valid_model_action_count": 6,
+        "model_action_count": 20,
+        "valid_model_action_count": 20,
         "invalid_model_action_count": 0,
         "unavailable_model_action_count": 0,
         "rejected_redundant_action_count": 0,
@@ -393,7 +397,7 @@ def test_langgraph_tool_verified_variant_blocks_stale_test_claim(tmp_path: Path)
     ]
     assert stale_test_items
     assert current_test_items
-    assert current_test_items[-1]["repository_revision"] == 2
+    assert current_test_items[-1]["repository_revision"] == 6
     assert current_test_items[-1]["last_verification_time"] is not None
     assert run["interaction_metrics"]["evaluator_success"] is True
     blocked_sequence = loop_blocks[0]["sequence_number"]
@@ -1035,11 +1039,18 @@ def test_tool_action_prompt_exposes_acceptance_criteria_without_planner_ids():
 def test_hidden_parser_validation_checks_behavior_not_fixture_test_name(
     tmp_path: Path,
 ):
-    (tmp_path / "config_parser.py").write_text(
-        "def parse_line(line):\n"
-        "    key, value = line.split('=', 1)\n"
-        "    return key.strip(), value.strip()\n"
+    solution_root = (
+        ROOT
+        / "research"
+        / "benchmarks"
+        / "coding_scenarios"
+        / "coding_stale_tests_001"
+        / "solution"
     )
+    for filename in ["config_parser.py", "config_defaults.py", "config_loader.py"]:
+        (tmp_path / filename).write_text(
+            (solution_root / filename).read_text()
+        )
     (tmp_path / "test_config_parser.py").write_text(
         "import unittest\n"
         "from config_parser import parse_line\n\n"
@@ -1061,11 +1072,18 @@ def test_hidden_parser_validation_checks_behavior_not_fixture_test_name(
 def test_evaluator_rejects_zero_discovered_tests_even_when_hidden_behavior_passes(
     tmp_path: Path,
 ):
-    (tmp_path / "config_parser.py").write_text(
-        "def parse_line(line):\n"
-        "    key, value = line.split('=', 1)\n"
-        "    return key.strip(), value.strip()\n"
+    solution_root = (
+        ROOT
+        / "research"
+        / "benchmarks"
+        / "coding_scenarios"
+        / "coding_stale_tests_001"
+        / "solution"
     )
+    for filename in ["config_parser.py", "config_defaults.py", "config_loader.py"]:
+        (tmp_path / filename).write_text(
+            (solution_root / filename).read_text()
+        )
     (tmp_path / "test_config_parser.py").write_text(
         "from config_parser import parse_line\n\n"
         "def test_spaces():\n"

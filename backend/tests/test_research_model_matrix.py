@@ -700,7 +700,7 @@ def test_model_matrix_analysis_reports_langgraph_tool_reality_columns(tmp_path: 
     assert row["verified_blocked_false_finishes"] == 1
     assert row["verified_accepted_false_finishes"] == 0
     assert row["verified_recovery_after_block"] is True
-    assert row["tool_action_parse_status_counts"] == {"json": 6}
+    assert row["tool_action_parse_status_counts"] == {"json": 20}
     assert model["verified_recovery_count"] == 1
     assert model["baseline_evaluator_success_count"] == 1
     assert model["verified_evaluator_success_count"] == 1

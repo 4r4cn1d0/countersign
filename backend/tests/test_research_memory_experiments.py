@@ -27,6 +27,18 @@ from research.runner.operational_memory import (
 from research.runner.task_state_probes import score_task_state_probe
 
 
+CODING_FIXTURE_TASK_IDS = {
+    "coding_stale_tests_001",
+    "coding_multifile_edit_001",
+    "coding_final_edit_stale_test_001",
+    "coding_repo_audit_checklist_001",
+    "coding_cache_invalidation_001",
+    "coding_source_confusion_001",
+    "coding_schema_migration_001",
+    "coding_retry_policy_001",
+}
+
+
 def _sample_memory():
     ledger = [
         {
@@ -212,12 +224,7 @@ def test_probe_scoring_penalizes_wrong_state_and_lost_attribution():
 
 @pytest.mark.parametrize(
     "task_id",
-    [
-        "coding_cache_invalidation_001",
-        "coding_source_confusion_001",
-        "coding_schema_migration_001",
-        "coding_retry_policy_001",
-    ],
+    sorted(CODING_FIXTURE_TASK_IDS),
 )
 def test_fixture_backed_tasks_pass_visible_and_hidden_evaluation(
     tmp_path: Path,
@@ -231,28 +238,141 @@ def test_fixture_backed_tasks_pass_visible_and_hidden_evaluation(
             framework="langgraph_tools",
             trace_mode="model_driven",
             runtime="deterministic",
-            action_budget=20,
+            action_budget=24,
             workspace_root=str(tmp_path),
         ),
     )
 
     scenario = load_fixture_scenario(task_id)
     assert scenario is not None
-    assert set(fixture_scenario_ids()).issuperset(
-        {
-            "coding_cache_invalidation_001",
-            "coding_source_confusion_001",
-            "coding_schema_migration_001",
-            "coding_retry_policy_001",
-        }
-    )
+    assert set(fixture_scenario_ids()) == CODING_FIXTURE_TASK_IDS
     for step in scenario["steps"]:
         if step.get("tool_name") == "read_file":
             assert step["path"] in scenario["initial_files"]
     assert run["interaction_metrics"]["visible_test_success"] is True
     assert run["interaction_metrics"]["hidden_validation_success"] is True
     assert run["interaction_metrics"]["evaluator_success"] is True
-    assert run["run_metadata"]["tool_loop_iterations"] >= 10
+    assert run["interaction_metrics"]["model_action_count"] == 20
+
+
+@pytest.mark.parametrize("task_id", sorted(CODING_FIXTURE_TASK_IDS))
+def test_coding_fixture_meets_long_horizon_benchmark_contract(task_id: str):
+    scenario = load_fixture_scenario(task_id)
+    assert scenario is not None
+    assert 20 <= scenario["planned_model_actions"] <= 50
+    assert len(scenario["repository_hash"]) == 64
+    assert Path(scenario["hidden_validation_path"]).is_file()
+
+    source_files = [
+        path
+        for path in scenario["initial_files"]
+        if path.endswith(".py") and not Path(path).name.startswith("test_")
+    ]
+    test_files = [
+        path
+        for path in scenario["initial_files"]
+        if Path(path).name.startswith("test_") and path.endswith(".py")
+    ]
+    assert len(source_files) >= 2
+    assert len(test_files) >= 2
+
+    features = scenario["benchmark_features"]
+    assert len(features["independent_subtasks"]) >= 3
+    assert features["multiple_source_and_test_files"] is True
+    assert features["delayed_final_validation"] is True
+    assert features["context_compaction_conditions"] == [
+        "lossy_compaction",
+        "resume_summary",
+    ]
+    assert features["hidden_tests_unavailable_to_agent"] is True
+    assert features["executable_evaluator"] is True
+    assert scenario["requirement_updates"]
+
+    step_ids = [step["step_id"] for step in scenario["steps"]]
+    false_lead_index = step_ids.index(
+        features["plausible_false_lead_step_id"]
+    )
+    rollback_index = step_ids.index(features["rollback_step_id"])
+    stale_test_index = step_ids.index(
+        features["stale_evidence_test_step_id"]
+    )
+    invalidation_index = step_ids.index(
+        features["stale_evidence_invalidation_step_id"]
+    )
+    final_test_index = step_ids.index(scenario["final_test_step_id"])
+    assert false_lead_index < rollback_index
+    assert stale_test_index < invalidation_index < final_test_index
+
+
+@pytest.mark.parametrize("task_id", sorted(CODING_FIXTURE_TASK_IDS))
+def test_verified_fixture_recovers_under_lossy_compaction(
+    tmp_path: Path,
+    task_id: str,
+):
+    pytest.importorskip("langgraph")
+
+    run = BenchmarkRunner().run_task_id(
+        task_id,
+        BenchmarkRunConfig(
+            framework="langgraph_tools",
+            trace_mode="model_driven",
+            runtime="deterministic",
+            agent_variant="verified",
+            action_budget=24,
+            workspace_root=str(tmp_path),
+            memory_condition="lossy_compaction",
+            memory_pressure_start=6,
+            memory_window=6,
+        ),
+    )
+
+    pressure_events = [
+        event
+        for event in run["trace_events"]
+        if event.get("event_type") == "memory_pressure"
+        and event.get("operations")
+    ]
+    metrics = run["interaction_metrics"]
+    assert pressure_events
+    assert metrics["blocked_false_finishes"] == 1
+    assert metrics["accepted_finish_proposals"] == 1
+    assert metrics["recovery_after_block"] is True
+    assert metrics["evaluator_success"] is True
+    assert 20 <= metrics["model_action_count"] <= 50
+
+
+def test_fixture_recovers_from_resume_summary_memory(tmp_path: Path):
+    pytest.importorskip("langgraph")
+
+    run = BenchmarkRunner().run_task_id(
+        "coding_stale_tests_001",
+        BenchmarkRunConfig(
+            framework="langgraph_tools",
+            trace_mode="model_driven",
+            runtime="deterministic",
+            agent_variant="verified",
+            action_budget=24,
+            workspace_root=str(tmp_path),
+            memory_condition="resume_summary",
+            memory_pressure_start=6,
+            memory_window=6,
+        ),
+    )
+
+    pressure_events = [
+        event
+        for event in run["trace_events"]
+        if event.get("event_type") == "memory_pressure"
+        and event.get("operations")
+    ]
+    assert pressure_events
+    assert any(
+        "resume" in operation
+        for event in pressure_events
+        for operation in event.get("operations", [])
+    )
+    assert run["interaction_metrics"]["recovery_after_block"] is True
+    assert run["interaction_metrics"]["evaluator_success"] is True
 
 
 def test_real_runtime_shadow_probe_is_measured_without_steering_main_loop(
@@ -327,7 +447,7 @@ def test_real_runtime_shadow_probe_is_measured_without_steering_main_loop(
                 framework="langgraph_tools",
                 trace_mode="model_driven",
                 runtime="ollama",
-                action_budget=16,
+                action_budget=32,
                 workspace_root=str(tmp_path),
                 task_state_probes=True,
                 probe_interval=2,

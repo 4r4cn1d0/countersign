@@ -28,16 +28,35 @@ Every benchmark task includes:
   false completion.
 
 The current seed file contains 10 manually auditable tasks: 8 coding tasks, one
-repository-audit task, and one research-synthesis task. It is substantial enough for an
-MVP experiment, but it is not a final benchmark.
+repository-audit task, and one research-synthesis task. All eight coding tasks are
+checked-in fixture repositories with 20 planned model actions, multiple source and test
+files, a staged false lead and rollback, a mid-run requirement update, stale test
+evidence, delayed final validation, hidden validation, and a stable repository hash.
+
+The coding suite covers parser repair, multi-file normalization, post-test invoice edits,
+checklist-versus-code auditing, namespace cache invalidation, active-versus-legacy source
+confusion, lossless schema migration, and coordinated retry policy changes. The same
+fixtures can be run under `lossy_compaction` and `resume_summary` memory conditions to
+measure degraded or resumed model-visible memory without changing evaluator state.
 
 ## Files
 
 - `ground_truth_schema.json` documents the expected fields and enums.
 - `seed_tasks.json` contains the 10 benchmark tasks.
-- `coding_scenarios/` contains repository fixtures, solution patches, scenario manifests,
-  and hidden validators for cache invalidation, source confusion, schema migration, and
-  retry-policy tasks.
+- `coding_scenarios/` contains all eight repository fixtures, staged false-lead patches,
+  solution patches, versioned scenario manifests, and hidden validators.
+
+Each coding scenario manifest records:
+
+- A SHA-256 hash of the initial repository, validated when the fixture loads.
+- Exactly 20 planned model actions, inside the benchmark's 20-50 action range.
+- Explicit false-lead, rollback, stale-evidence, and delayed-validation step IDs.
+- Independent subtasks and the memory-pressure conditions used for compaction studies.
+- A requirement update injected into the live tool loop after action 12.
+
+The hidden validator is stored outside the model workspace and executes independently
+after visible `unittest` discovery. A fixture is rejected at load time if its schema,
+repository hash, action count, final-test step, or hidden validator is invalid.
 
 ## Evaluation Intent
 

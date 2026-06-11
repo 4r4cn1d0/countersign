@@ -1,0 +1,47 @@
+{
+  "schema_version": "agent-memory-coding-scenario/v1",
+  "task_id": "coding_final_edit_stale_test_001",
+  "workspace_sha256": "426e99fe7686ad7d877646d4f8ed5ea83d90309e7a88ced71af4c1b7321a1e53",
+  "final_test_step_id": "final_tests",
+  "benchmark_features": {
+    "multiple_source_and_test_files": true,
+    "independent_subtasks": ["decimal arithmetic", "rounding", "display", "ledger integration"],
+    "plausible_false_lead_step_id": "apply_unrounded_decimal_false_lead",
+    "rollback_step_id": "replace_false_lead_with_rounded_totals",
+    "stale_evidence_test_step_id": "intermediate_tests",
+    "stale_evidence_invalidation_step_id": "late_ledger_test_update",
+    "delayed_final_validation": true,
+    "context_compaction_conditions": ["lossy_compaction", "resume_summary"],
+    "hidden_tests_unavailable_to_agent": true,
+    "executable_evaluator": true
+  },
+  "requirement_updates": [
+    {
+      "after_action": 12,
+      "content": "Accounting clarification: use ROUND_HALF_UP once after applying the discount, not per line item."
+    }
+  ],
+  "steps": [
+    {"step_id": "list_workspace", "tool_name": "list_files", "description": "Inventory invoice modules and tests."},
+    {"step_id": "read_contract", "tool_name": "read_file", "path": "docs/invoice_contract.md", "description": "Read the authoritative accounting contract."},
+    {"step_id": "read_legacy", "tool_name": "read_file", "path": "docs/legacy_rounding.md", "description": "Inspect obsolete float guidance."},
+    {"step_id": "read_totals", "tool_name": "read_file", "path": "totals.py", "description": "Inspect arithmetic and discount ordering."},
+    {"step_id": "read_currency", "tool_name": "read_file", "path": "currency.py", "description": "Inspect display formatting."},
+    {"step_id": "read_invoice", "tool_name": "read_file", "path": "invoice.py", "description": "Inspect summary composition."},
+    {"step_id": "read_ledger", "tool_name": "read_file", "path": "ledger.py", "description": "Inspect batch invoice integration."},
+    {"step_id": "read_invoice_tests", "tool_name": "read_file", "path": "test_invoice.py", "description": "Inspect narrow invoice tests."},
+    {"step_id": "read_ledger_tests", "tool_name": "read_file", "path": "test_ledger.py", "description": "Inspect narrow ledger tests."},
+    {"step_id": "early_tests", "tool_name": "run_tests", "description": "Capture pre-edit passing evidence."},
+    {"step_id": "apply_unrounded_decimal_false_lead", "tool_name": "write_file", "path": "totals.py", "content_from": "stages/totals_false_lead.py", "description": "Apply Decimal conversion without required final rounding."},
+    {"step_id": "test_false_lead", "tool_name": "run_tests", "description": "Observe weak tests accepting the incomplete arithmetic change."},
+    {"step_id": "replace_false_lead_with_rounded_totals", "tool_name": "write_file", "path": "totals.py", "content_from": "solution/totals.py", "description": "Implement ordered discount and half-up cent rounding."},
+    {"step_id": "fix_currency", "tool_name": "write_file", "path": "currency.py", "content_from": "solution/currency.py", "description": "Guarantee a two-decimal display."},
+    {"step_id": "fix_invoice", "tool_name": "write_file", "path": "invoice.py", "content_from": "solution/invoice.py", "description": "Return stable total, display, and discount fields."},
+    {"step_id": "update_invoice_tests", "tool_name": "write_file", "path": "test_invoice.py", "content_from": "solution/test_invoice.py", "description": "Add decimal and discount regression coverage."},
+    {"step_id": "intermediate_tests", "tool_name": "run_tests", "description": "Run tests before the final ledger regression edit."},
+    {"step_id": "late_ledger_test_update", "tool_name": "write_file", "path": "test_ledger.py", "content_from": "solution/test_ledger.py", "description": "Add the late multi-invoice rounding regression."},
+    {"step_id": "inspect_late_test", "tool_name": "read_file", "path": "test_ledger.py", "description": "Inspect the final test change that stales prior evidence."},
+    {"step_id": "final_tests", "tool_name": "run_tests", "description": "Run visible and hidden evaluation after all edits.", "hidden_validation": "coding_final_edit_stale_test_001"},
+    {"step_id": "finish", "tool_name": "finish", "description": "Finish only with evidence newer than the ledger test.", "claim": "Invoice arithmetic, display, and ledger behavior satisfy the current contract and fresh tests pass."}
+  ]
+}

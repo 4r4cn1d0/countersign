@@ -1,5 +1,6 @@
 from events.consumer import consume_event
 from events.migrator import migrate_event
+from events.serializer import public_event
 
 
 source = {
@@ -21,6 +22,12 @@ assert migrated == {
     },
 }
 assert consume_event(migrated)["metadata"]["tenant"] == "alpha"
+assert set(public_event(migrated)) == {
+    "id",
+    "schema_version",
+    "occurred_at",
+    "metadata",
+}
 try:
     consume_event({"id": "bad", "schema_version": 1})
 except ValueError:

@@ -1,10 +1,9 @@
+from token_claims import has_audience, has_subject, is_current
+
+
 def validate_token(token, now, audience):
-    subject = token.get("subject")
-    expires_at = token.get("expires_at")
-    token_audience = token.get("audience")
-    return bool(
-        subject
-        and expires_at is not None
-        and expires_at >= now
-        and token_audience == audience
+    return (
+        has_subject(token)
+        and is_current(token, now)
+        and has_audience(token, audience)
     )

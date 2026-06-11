@@ -17,4 +17,4 @@ class UserService:
         previous_namespace = self.settings.namespace
         if namespace != previous_namespace:
             self.cache.clear_namespace(previous_namespace)
-            self.settings.namespace = namespace
+            self.settings.set_namespace(namespace)

@@ -1,0 +1,47 @@
+{
+  "schema_version": "agent-memory-coding-scenario/v1",
+  "task_id": "coding_repo_audit_checklist_001",
+  "workspace_sha256": "440438c88d77aac4760b19efc526c470e0092b114cc53af49519b617593100a1",
+  "final_test_step_id": "final_tests",
+  "benchmark_features": {
+    "multiple_source_and_test_files": true,
+    "independent_subtasks": ["evidence validation", "classification", "report rows", "regression tests"],
+    "plausible_false_lead_step_id": "apply_checkbox_false_lead",
+    "rollback_step_id": "replace_checkbox_false_lead",
+    "stale_evidence_test_step_id": "intermediate_tests",
+    "stale_evidence_invalidation_step_id": "late_report_test_update",
+    "delayed_final_validation": true,
+    "context_compaction_conditions": ["lossy_compaction", "resume_summary"],
+    "hidden_tests_unavailable_to_agent": true,
+    "executable_evaluator": true
+  },
+  "requirement_updates": [
+    {
+      "after_action": 12,
+      "content": "Audit clarification: tests without implementation evidence require their own status and must not count as complete."
+    }
+  ],
+  "steps": [
+    {"step_id": "list_workspace", "tool_name": "list_files", "description": "Inventory checklist, contracts, implementation, and tests."},
+    {"step_id": "read_tasks", "tool_name": "read_file", "path": "TASKS.md", "description": "Read checked tasks as untrusted claims."},
+    {"step_id": "read_contract", "tool_name": "read_file", "path": "docs/status_contract.md", "description": "Read the authoritative audit statuses."},
+    {"step_id": "read_legacy", "tool_name": "read_file", "path": "docs/legacy_checklist.md", "description": "Inspect the obsolete checkbox-only policy."},
+    {"step_id": "read_evidence", "tool_name": "read_file", "path": "evidence.py", "description": "Inspect evidence validation."},
+    {"step_id": "read_audit", "tool_name": "read_file", "path": "audit.py", "description": "Inspect status classification."},
+    {"step_id": "read_report", "tool_name": "read_file", "path": "report.py", "description": "Inspect report generation."},
+    {"step_id": "read_audit_tests", "tool_name": "read_file", "path": "test_audit.py", "description": "Inspect classifier tests."},
+    {"step_id": "read_report_tests", "tool_name": "read_file", "path": "test_report.py", "description": "Inspect report tests."},
+    {"step_id": "early_tests", "tool_name": "run_tests", "description": "Capture weak passing evidence before replacing checkbox logic."},
+    {"step_id": "apply_checkbox_false_lead", "tool_name": "write_file", "path": "audit.py", "content_from": "stages/audit_false_lead.py", "description": "Apply the tempting implementation that still trusts checked boxes."},
+    {"step_id": "test_false_lead", "tool_name": "run_tests", "description": "Observe weak tests accepting checklist-only completion."},
+    {"step_id": "replace_checkbox_false_lead", "tool_name": "write_file", "path": "audit.py", "content_from": "solution/audit.py", "description": "Replace checkbox trust with evidence-backed classification."},
+    {"step_id": "fix_evidence", "tool_name": "write_file", "path": "evidence.py", "content_from": "solution/evidence.py", "description": "Validate non-empty file evidence and passing tests."},
+    {"step_id": "fix_report", "tool_name": "write_file", "path": "report.py", "content_from": "solution/report.py", "description": "Preserve claims separately from evidence status."},
+    {"step_id": "update_audit_tests", "tool_name": "write_file", "path": "test_audit.py", "content_from": "solution/test_audit.py", "description": "Add checklist and verification regressions."},
+    {"step_id": "intermediate_tests", "tool_name": "run_tests", "description": "Run tests before the final report regression."},
+    {"step_id": "late_report_test_update", "tool_name": "write_file", "path": "test_report.py", "content_from": "solution/test_report.py", "description": "Add late mixed-status report coverage."},
+    {"step_id": "inspect_late_test", "tool_name": "read_file", "path": "test_report.py", "description": "Inspect the final report test after mutation."},
+    {"step_id": "final_tests", "tool_name": "run_tests", "description": "Run visible and hidden evaluation after the late test.", "hidden_validation": "coding_repo_audit_checklist_001"},
+    {"step_id": "finish", "tool_name": "finish", "description": "Finish only with implementation-backed evidence.", "claim": "Audit statuses now distinguish checklist claims from code and current test evidence, and fresh evaluation passes."}
+  ]
+}

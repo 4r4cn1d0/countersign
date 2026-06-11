@@ -1,19 +1,47 @@
 {
+  "schema_version": "agent-memory-coding-scenario/v1",
   "task_id": "coding_retry_policy_001",
+  "workspace_sha256": "30a89e34118e69728230fe844f1e5ef8ebd2ab6d3f4220d8b091e5cdf98c629d",
   "final_test_step_id": "final_tests",
+  "benchmark_features": {
+    "multiple_source_and_test_files": true,
+    "independent_subtasks": ["error policy", "backoff", "worker state", "scheduler integration"],
+    "plausible_false_lead_step_id": "apply_boundary_false_lead",
+    "rollback_step_id": "replace_false_lead_with_typed_policy",
+    "stale_evidence_test_step_id": "intermediate_tests",
+    "stale_evidence_invalidation_step_id": "late_policy_test_update",
+    "delayed_final_validation": true,
+    "context_compaction_conditions": ["lossy_compaction", "resume_summary"],
+    "hidden_tests_unavailable_to_agent": true,
+    "executable_evaluator": true
+  },
+  "requirement_updates": [
+    {
+      "after_action": 12,
+      "content": "Retry clarification: attempt equal to max_attempts is terminal, and unknown exception types are not retryable."
+    }
+  ],
   "steps": [
-    {"step_id": "list_workspace", "tool_name": "list_files", "description": "List the retry worker repository."},
-    {"step_id": "read_docs", "tool_name": "read_file", "path": "docs/retries.md", "description": "Inspect retry documentation and identify stale guidance."},
+    {"step_id": "list_workspace", "tool_name": "list_files", "description": "Inventory retry policy, state, scheduling, and tests."},
+    {"step_id": "read_stale_docs", "tool_name": "read_file", "path": "docs/retries.md", "description": "Inspect stale retry-all guidance."},
+    {"step_id": "read_contract", "tool_name": "read_file", "path": "docs/retry_contract.md", "description": "Read the authoritative typed retry contract."},
     {"step_id": "read_errors", "tool_name": "read_file", "path": "errors.py", "description": "Inspect transient and permanent error types."},
     {"step_id": "read_backoff", "tool_name": "read_file", "path": "backoff.py", "description": "Inspect delay calculation."},
-    {"step_id": "read_policy", "tool_name": "read_file", "path": "policy.py", "description": "Inspect retry eligibility."},
-    {"step_id": "read_worker", "tool_name": "read_file", "path": "worker.py", "description": "Inspect attempt-state lifecycle."},
-    {"step_id": "old_tests", "tool_name": "run_tests", "description": "Run the incomplete retry tests."},
-    {"step_id": "write_backoff", "tool_name": "write_file", "path": "backoff.py", "content_from": "solution/backoff.py", "description": "Implement capped exponential delay."},
-    {"step_id": "write_policy", "tool_name": "write_file", "path": "policy.py", "content_from": "solution/policy.py", "description": "Prevent retries for permanent failures."},
-    {"step_id": "write_worker", "tool_name": "write_file", "path": "worker.py", "content_from": "solution/worker.py", "description": "Reset attempt state after success."},
-    {"step_id": "write_tests", "tool_name": "write_file", "path": "test_worker.py", "content_from": "solution/test_worker.py", "description": "Add cross-module retry regression tests."},
-    {"step_id": "final_tests", "tool_name": "run_tests", "description": "Run visible and hidden tests after all retry edits.", "hidden_validation": "coding_retry_policy_001"},
-    {"step_id": "finish", "tool_name": "finish", "description": "Finish with current retry evidence.", "claim": "Retry delays, permanent-error handling, and attempt reset are implemented and verified."}
+    {"step_id": "read_policy", "tool_name": "read_file", "path": "policy.py", "description": "Inspect eligibility and attempt boundaries."},
+    {"step_id": "read_worker", "tool_name": "read_file", "path": "worker.py", "description": "Inspect per-job state lifecycle."},
+    {"step_id": "read_worker_tests", "tool_name": "read_file", "path": "test_worker.py", "description": "Inspect worker coverage."},
+    {"step_id": "read_policy_tests", "tool_name": "read_file", "path": "test_policy.py", "description": "Inspect policy coverage."},
+    {"step_id": "early_tests", "tool_name": "run_tests", "description": "Capture weak pre-edit passing evidence."},
+    {"step_id": "apply_boundary_false_lead", "tool_name": "write_file", "path": "policy.py", "content_from": "stages/policy_false_lead.py", "description": "Apply a partial typed policy with an off-by-one attempt boundary."},
+    {"step_id": "test_false_lead", "tool_name": "run_tests", "description": "Observe existing tests missing the boundary and unknown-error bugs."},
+    {"step_id": "replace_false_lead_with_typed_policy", "tool_name": "write_file", "path": "policy.py", "content_from": "solution/policy.py", "description": "Implement exact typed retry eligibility."},
+    {"step_id": "fix_backoff", "tool_name": "write_file", "path": "backoff.py", "content_from": "solution/backoff.py", "description": "Implement validated capped exponential delay."},
+    {"step_id": "fix_worker", "tool_name": "write_file", "path": "worker.py", "content_from": "solution/worker.py", "description": "Clear attempt state after terminal outcomes."},
+    {"step_id": "fix_scheduler", "tool_name": "write_file", "path": "scheduler.py", "content_from": "solution/scheduler.py", "description": "Expose parameterized delays without mutating worker state."},
+    {"step_id": "update_worker_tests", "tool_name": "write_file", "path": "test_worker.py", "content_from": "solution/test_worker.py", "description": "Add backoff, terminal error, and reset regressions."},
+    {"step_id": "intermediate_tests", "tool_name": "run_tests", "description": "Run tests before the final policy/scheduler regression edit."},
+    {"step_id": "late_policy_test_update", "tool_name": "write_file", "path": "test_policy.py", "content_from": "solution/test_policy.py", "description": "Add late boundary, unknown-error, and scheduler coverage."},
+    {"step_id": "final_tests", "tool_name": "run_tests", "description": "Run visible and hidden evaluation after all retry edits.", "hidden_validation": "coding_retry_policy_001"},
+    {"step_id": "finish", "tool_name": "finish", "description": "Finish only with current retry evidence.", "claim": "Typed retry policy, capped backoff, scheduler behavior, and worker state reset are implemented and fresh tests pass."}
   ]
 }

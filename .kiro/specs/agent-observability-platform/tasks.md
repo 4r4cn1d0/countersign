@@ -1078,17 +1078,21 @@ Acceptance bar for unfinished research tasks:
     - _Status: Verified. Focused research suite passes: 54 passed, 1 skipped, 4 warnings (`python3 -m pytest backend/tests/test_research_benchmark_seed.py backend/tests/test_research_benchmark_runner.py backend/tests/test_research_memory_claims.py backend/tests/test_research_memory_metrics.py backend/tests/test_research_verification_and_cli.py backend/tests/test_research_runtime_and_bundle.py backend/tests/test_research_model_matrix.py -q`). Full backend suite passes: 285 passed, 1 skipped, 4 warnings (`python3 -m pytest -q` from `backend/`)._
 
 - [ ] 32. Complete research roadmap foundations 1-6
-  - [ ] 32.1 Build a genuinely long-horizon fixture-backed coding suite
+  - [x] 32.1 Build a genuinely long-horizon fixture-backed coding suite
     - Keep at least 8 coding tasks and 10 total tasks
     - Require 20-50 meaningful model actions per coding task
     - Use multiple source and test files, independent subtasks, a plausible false lead,
       stale evidence, delayed validation, context compaction, hidden tests, and an executable
       evaluator in every counted coding task
     - Include requirement changes, resume-from-summary, source confusion, and rollback tasks
-    - _Status: Partial. The dataset contains 10 tasks and 8 coding tasks, but current
-      deterministic coding trajectories require only 7-13 model actions. Four tasks use the
-      richer checked-in fixture/hidden-validator format. This does not yet satisfy the
-      stronger 20-50-action benchmark definition._
+    - _Status: Complete. The dataset contains 10 tasks and 8 coding tasks. Every coding
+      task is now a checked-in fixture repository with 20 planned model actions, at least
+      two source and two test files, independent subtasks, an explicit false lead and
+      rollback, stale-evidence transition, delayed final validation, a live requirement
+      update, lossy-compaction/resume-summary conditions, a hidden validator, and a
+      load-time-verified repository SHA-256. Deterministic baseline runs complete all eight
+      fixtures in exactly 20 model actions with visible and hidden evaluators passing;
+      verified runs block stale completion and recover after fresh validation._
 
   - [x] 32.2 Add controlled model-visible memory pressure
     - Implement full history, normal compaction, lossy compaction, provenance loss,
@@ -1141,13 +1145,15 @@ Acceptance bar for unfinished research tasks:
       currently fails generation without its `llama-server` binary._
 
 - [ ] 33. Finish the real long-horizon benchmark
-  - [ ] 33.1 Convert all eight coding tasks to checked-in fixture repositories
-  - [ ] 33.2 Expand each counted trajectory to 20-50 meaningful actions
-  - [ ] 33.3 Add hidden validators and repository hashes for every task
-  - [ ] 33.4 Add explicit false leads, stale-evidence transitions, and delayed validation
-  - [ ] 33.5 Add requirement-change, lossy-resume, and rollback scenarios
+  - [x] 33.1 Convert all eight coding tasks to checked-in fixture repositories
+  - [x] 33.2 Expand each counted trajectory to 20-50 meaningful actions
+  - [x] 33.3 Add hidden validators and repository hashes for every task
+  - [x] 33.4 Add explicit false leads, stale-evidence transitions, and delayed validation
+  - [x] 33.5 Add requirement-change, lossy-resume, and rollback scenarios
   - [ ] 33.6 Verify that baseline local models can fail for memory reasons rather than only
     coding incapability
+  - _Status: Fixture construction is complete. Remaining item 33.6 requires fresh local-model
+    executions; it is intentionally not inferred from deterministic harness results._
   - _Completion evidence: task manifests, fixture repositories, hidden evaluators, action
     counts from real-model runs, and per-task failure-mode labels._
 

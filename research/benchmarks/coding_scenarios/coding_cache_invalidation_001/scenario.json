@@ -1,18 +1,47 @@
 {
+  "schema_version": "agent-memory-coding-scenario/v1",
   "task_id": "coding_cache_invalidation_001",
+  "workspace_sha256": "d913d6fae7673f2443d27eb5dc05f94567a3e9cc9ee7f18b47cec656580ad4f5",
   "final_test_step_id": "final_tests",
+  "benchmark_features": {
+    "multiple_source_and_test_files": true,
+    "independent_subtasks": ["cache keys", "namespace transitions", "service integration", "regression tests"],
+    "plausible_false_lead_step_id": "apply_string_key_false_lead",
+    "rollback_step_id": "replace_false_lead_with_tuple_keys",
+    "stale_evidence_test_step_id": "intermediate_tests",
+    "stale_evidence_invalidation_step_id": "late_cache_test_update",
+    "delayed_final_validation": true,
+    "context_compaction_conditions": ["lossy_compaction", "resume_summary"],
+    "hidden_tests_unavailable_to_agent": true,
+    "executable_evaluator": true
+  },
+  "requirement_updates": [
+    {
+      "after_action": 12,
+      "content": "Requirement update: selecting the current namespace again must not clear any other namespace."
+    }
+  ],
   "steps": [
-    {"step_id": "list_workspace", "tool_name": "list_files", "description": "List the cache service repository."},
-    {"step_id": "read_readme", "tool_name": "read_file", "path": "README.md", "description": "Inspect documentation, treating it as potentially stale."},
+    {"step_id": "list_workspace", "tool_name": "list_files", "description": "Inventory cache service files and tests."},
+    {"step_id": "read_readme", "tool_name": "read_file", "path": "README.md", "description": "Inspect stale process-wide cache documentation."},
+    {"step_id": "read_contract", "tool_name": "read_file", "path": "docs/cache_contract.md", "description": "Read the authoritative namespace contract."},
+    {"step_id": "read_config", "tool_name": "read_file", "path": "config.py", "description": "Inspect namespace ownership."},
+    {"step_id": "read_repository", "tool_name": "read_file", "path": "repository.py", "description": "Inspect observable repository reads."},
     {"step_id": "read_cache", "tool_name": "read_file", "path": "cache.py", "description": "Inspect cache key and invalidation behavior."},
-    {"step_id": "read_config", "tool_name": "read_file", "path": "config.py", "description": "Inspect namespace configuration."},
-    {"step_id": "read_service", "tool_name": "read_file", "path": "service.py", "description": "Inspect service cache usage."},
-    {"step_id": "read_repository", "tool_name": "read_file", "path": "repository.py", "description": "Inspect repository behavior."},
-    {"step_id": "old_tests", "tool_name": "run_tests", "description": "Run the existing incomplete tests."},
-    {"step_id": "write_cache", "tool_name": "write_file", "path": "cache.py", "content_from": "solution/cache.py", "description": "Implement namespace-aware cache storage."},
-    {"step_id": "write_service", "tool_name": "write_file", "path": "service.py", "content_from": "solution/service.py", "description": "Use namespace-aware keys and invalidate the previous namespace."},
-    {"step_id": "write_tests", "tool_name": "write_file", "path": "test_service.py", "content_from": "solution/test_service.py", "description": "Add namespace and invalidation regression tests."},
-    {"step_id": "final_tests", "tool_name": "run_tests", "description": "Run visible and hidden tests after the final edit.", "hidden_validation": "coding_cache_invalidation_001"},
-    {"step_id": "finish", "tool_name": "finish", "description": "Finish with current implementation and test evidence.", "claim": "Namespace-aware cache invalidation is implemented and verified by post-edit tests."}
+    {"step_id": "read_service", "tool_name": "read_file", "path": "service.py", "description": "Inspect service integration."},
+    {"step_id": "read_service_tests", "tool_name": "read_file", "path": "test_service.py", "description": "Inspect service test coverage."},
+    {"step_id": "read_cache_tests", "tool_name": "read_file", "path": "test_cache.py", "description": "Inspect low-level cache coverage."},
+    {"step_id": "early_tests", "tool_name": "run_tests", "description": "Capture weak pre-edit passing evidence."},
+    {"step_id": "apply_string_key_false_lead", "tool_name": "write_file", "path": "cache.py", "content_from": "stages/cache_false_lead.py", "description": "Try a string-composed namespace key without selective invalidation."},
+    {"step_id": "test_false_lead", "tool_name": "run_tests", "description": "Observe the partial change against old callers."},
+    {"step_id": "replace_false_lead_with_tuple_keys", "tool_name": "write_file", "path": "cache.py", "content_from": "solution/cache.py", "description": "Use tuple keys and namespace-scoped clearing."},
+    {"step_id": "fix_settings", "tool_name": "write_file", "path": "config.py", "content_from": "solution/config.py", "description": "Make settings own namespace transitions."},
+    {"step_id": "fix_service", "tool_name": "write_file", "path": "service.py", "content_from": "solution/service.py", "description": "Integrate namespaced reads and previous-namespace invalidation."},
+    {"step_id": "update_service_tests", "tool_name": "write_file", "path": "test_service.py", "content_from": "solution/test_service.py", "description": "Add service namespace regressions."},
+    {"step_id": "intermediate_tests", "tool_name": "run_tests", "description": "Run tests before replacing the low-level cache test."},
+    {"step_id": "late_cache_test_update", "tool_name": "write_file", "path": "test_cache.py", "content_from": "solution/test_cache.py", "description": "Add late isolation and selective-clear coverage."},
+    {"step_id": "inspect_late_test", "tool_name": "read_file", "path": "test_cache.py", "description": "Inspect the final changed cache regression."},
+    {"step_id": "final_tests", "tool_name": "run_tests", "description": "Run visible and hidden evaluation after every cache edit.", "hidden_validation": "coding_cache_invalidation_001"},
+    {"step_id": "finish", "tool_name": "finish", "description": "Finish with current namespace evidence only.", "claim": "Namespace-aware cache storage and invalidation are implemented and fresh visible and hidden tests pass."}
   ]
 }

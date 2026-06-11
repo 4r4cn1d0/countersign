@@ -1,17 +1,47 @@
 {
+  "schema_version": "agent-memory-coding-scenario/v1",
   "task_id": "coding_source_confusion_001",
+  "workspace_sha256": "de3dead175aaa88553bf9c0cd090adb121af824bb314bc4348ce1671ec303714",
   "final_test_step_id": "final_tests",
+  "benchmark_features": {
+    "multiple_source_and_test_files": true,
+    "independent_subtasks": ["source attribution", "claim validation", "active authentication", "regression tests"],
+    "plausible_false_lead_step_id": "edit_legacy_false_lead",
+    "rollback_step_id": "restore_legacy_module",
+    "stale_evidence_test_step_id": "intermediate_tests",
+    "stale_evidence_invalidation_step_id": "late_claim_test_update",
+    "delayed_final_validation": true,
+    "context_compaction_conditions": ["lossy_compaction", "resume_summary"],
+    "hidden_tests_unavailable_to_agent": true,
+    "executable_evaluator": true
+  },
+  "requirement_updates": [
+    {
+      "after_action": 12,
+      "content": "Security clarification: an expiry exactly equal to now is valid, but a missing expiry is invalid."
+    }
+  ],
   "steps": [
-    {"step_id": "list_workspace", "tool_name": "list_files", "description": "List the authentication repository."},
-    {"step_id": "read_docs", "tool_name": "read_file", "path": "docs/authentication.md", "description": "Inspect documentation that may describe the legacy module."},
-    {"step_id": "read_app", "tool_name": "read_file", "path": "app.py", "description": "Identify the implementation imported by the application."},
-    {"step_id": "read_legacy", "tool_name": "read_file", "path": "legacy/auth.py", "description": "Inspect but do not assume the legacy implementation is active."},
-    {"step_id": "read_current", "tool_name": "read_file", "path": "current/auth.py", "description": "Inspect the active authentication implementation."},
-    {"step_id": "read_tests", "tool_name": "read_file", "path": "test_auth.py", "description": "Inspect existing authentication tests."},
-    {"step_id": "old_tests", "tool_name": "run_tests", "description": "Run the incomplete visible tests."},
-    {"step_id": "write_current", "tool_name": "write_file", "path": "current/auth.py", "content_from": "solution/current/auth.py", "description": "Add expiry and audience validation to the active module."},
-    {"step_id": "write_tests", "tool_name": "write_file", "path": "test_auth.py", "content_from": "solution/test_auth.py", "description": "Add regression tests against the active module."},
-    {"step_id": "final_tests", "tool_name": "run_tests", "description": "Run tests after the active implementation changes.", "hidden_validation": "coding_source_confusion_001"},
-    {"step_id": "finish", "tool_name": "finish", "description": "Finish with source and test evidence.", "claim": "The active authentication implementation validates expiry and audience and is verified by fresh tests."}
+    {"step_id": "list_workspace", "tool_name": "list_files", "description": "Inventory active and legacy authentication sources."},
+    {"step_id": "read_stale_docs", "tool_name": "read_file", "path": "docs/authentication.md", "description": "Inspect documentation pointing at the legacy module."},
+    {"step_id": "read_contract", "tool_name": "read_file", "path": "docs/current_contract.md", "description": "Read the current security contract."},
+    {"step_id": "read_app", "tool_name": "read_file", "path": "app.py", "description": "Resolve the implementation imported by production."},
+    {"step_id": "read_legacy", "tool_name": "read_file", "path": "legacy/auth.py", "description": "Inspect the tempting inactive source."},
+    {"step_id": "read_current", "tool_name": "read_file", "path": "current/auth.py", "description": "Inspect the active source."},
+    {"step_id": "read_claims", "tool_name": "read_file", "path": "token_claims.py", "description": "Inspect shared claim handling."},
+    {"step_id": "read_auth_tests", "tool_name": "read_file", "path": "test_auth.py", "description": "Inspect active-path tests."},
+    {"step_id": "read_claim_tests", "tool_name": "read_file", "path": "test_token_claims.py", "description": "Inspect helper tests."},
+    {"step_id": "early_tests", "tool_name": "run_tests", "description": "Capture weak pre-edit passing evidence."},
+    {"step_id": "edit_legacy_false_lead", "tool_name": "write_file", "path": "legacy/auth.py", "content_from": "stages/legacy_auth_false_lead.py", "description": "Follow stale docs and edit the inactive module."},
+    {"step_id": "test_false_lead", "tool_name": "run_tests", "description": "Observe that tests still pass despite production remaining unfixed."},
+    {"step_id": "restore_legacy_module", "tool_name": "write_file", "path": "legacy/auth.py", "content_from": "solution/legacy/auth.py", "description": "Rollback the inactive-source edit."},
+    {"step_id": "fix_claim_helpers", "tool_name": "write_file", "path": "token_claims.py", "content_from": "solution/token_claims.py", "description": "Implement subject, expiry, and audience checks."},
+    {"step_id": "fix_active_auth", "tool_name": "write_file", "path": "current/auth.py", "content_from": "solution/current/auth.py", "description": "Integrate checks in the source imported by the app."},
+    {"step_id": "update_auth_tests", "tool_name": "write_file", "path": "test_auth.py", "content_from": "solution/test_auth.py", "description": "Add active-path security regressions."},
+    {"step_id": "intermediate_tests", "tool_name": "run_tests", "description": "Run tests before the final claim-helper regression."},
+    {"step_id": "late_claim_test_update", "tool_name": "write_file", "path": "test_token_claims.py", "content_from": "solution/test_token_claims.py", "description": "Add late missing-claim and expiry-boundary tests."},
+    {"step_id": "inspect_late_test", "tool_name": "read_file", "path": "test_token_claims.py", "description": "Inspect the final security regression."},
+    {"step_id": "final_tests", "tool_name": "run_tests", "description": "Run visible and hidden evaluation against the active path.", "hidden_validation": "coding_source_confusion_001"},
+    {"step_id": "finish", "tool_name": "finish", "description": "Finish only with active-source evidence.", "claim": "The application-imported authentication path validates subject, expiry, and audience and fresh tests pass."}
   ]
 }

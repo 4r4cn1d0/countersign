@@ -95,7 +95,7 @@ def run_model_matrix(
     active_action_budget = int(
         action_budget
         if action_budget is not None
-        else matrix.get("action_budget", 16)
+        else matrix.get("action_budget", 32)
     )
     active_trace_mode = trace_mode or matrix.get("trace_mode", "scripted")
     active_prompt_template = prompt_template or matrix.get(

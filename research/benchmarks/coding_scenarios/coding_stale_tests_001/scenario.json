@@ -1,0 +1,47 @@
+{
+  "schema_version": "agent-memory-coding-scenario/v1",
+  "task_id": "coding_stale_tests_001",
+  "workspace_sha256": "02b14f14a2c9d662664de13a82715176fac494bfd0a9dd580d69dbba42d6e1f0",
+  "final_test_step_id": "final_tests",
+  "benchmark_features": {
+    "multiple_source_and_test_files": true,
+    "independent_subtasks": ["parser", "defaults", "loader", "regression tests"],
+    "plausible_false_lead_step_id": "apply_value_only_false_lead",
+    "rollback_step_id": "replace_false_lead_with_contract_parser",
+    "stale_evidence_test_step_id": "intermediate_tests",
+    "stale_evidence_invalidation_step_id": "late_loader_test_update",
+    "delayed_final_validation": true,
+    "context_compaction_conditions": ["lossy_compaction", "resume_summary"],
+    "hidden_tests_unavailable_to_agent": true,
+    "executable_evaluator": true
+  },
+  "requirement_updates": [
+    {
+      "after_action": 12,
+      "content": "Clarification: duplicate keys are allowed and the last explicit value must win over normalized defaults."
+    }
+  ],
+  "steps": [
+    {"step_id": "list_workspace", "tool_name": "list_files", "description": "Inventory the fixture repository before relying on remembered paths."},
+    {"step_id": "read_readme", "tool_name": "read_file", "path": "README.md", "description": "Orient to the loader and its related modules."},
+    {"step_id": "read_contract", "tool_name": "read_file", "path": "docs/parser_contract.md", "description": "Read the authoritative parser contract."},
+    {"step_id": "read_legacy_notes", "tool_name": "read_file", "path": "docs/legacy_notes.md", "description": "Inspect the plausible but obsolete parser guidance."},
+    {"step_id": "read_parser", "tool_name": "read_file", "path": "config_parser.py", "description": "Inspect parsing behavior."},
+    {"step_id": "read_defaults", "tool_name": "read_file", "path": "config_defaults.py", "description": "Inspect default normalization."},
+    {"step_id": "read_loader", "tool_name": "read_file", "path": "config_loader.py", "description": "Inspect integration and duplicate-key behavior."},
+    {"step_id": "read_parser_tests", "tool_name": "read_file", "path": "test_config_parser.py", "description": "Inspect narrow visible parser coverage."},
+    {"step_id": "read_loader_tests", "tool_name": "read_file", "path": "test_config_loader.py", "description": "Inspect narrow visible integration coverage."},
+    {"step_id": "early_tests", "tool_name": "run_tests", "description": "Establish passing but soon-to-be-stale baseline evidence."},
+    {"step_id": "apply_value_only_false_lead", "tool_name": "write_file", "path": "config_parser.py", "content_from": "stages/config_parser_false_lead.py", "description": "Follow the tempting partial fix that strips only values."},
+    {"step_id": "test_false_lead", "tool_name": "run_tests", "description": "Observe that weak tests fail to expose the incomplete fix."},
+    {"step_id": "replace_false_lead_with_contract_parser", "tool_name": "write_file", "path": "config_parser.py", "content_from": "solution/config_parser.py", "description": "Rollback the partial approach and implement the full parser contract."},
+    {"step_id": "normalize_defaults", "tool_name": "write_file", "path": "config_defaults.py", "content_from": "solution/config_defaults.py", "description": "Normalize default keys and values."},
+    {"step_id": "integrate_loader", "tool_name": "write_file", "path": "config_loader.py", "content_from": "solution/config_loader.py", "description": "Handle comments, blanks, defaults, and duplicate precedence."},
+    {"step_id": "update_parser_tests", "tool_name": "write_file", "path": "test_config_parser.py", "content_from": "solution/test_config_parser.py", "description": "Add parser contract regressions."},
+    {"step_id": "intermediate_tests", "tool_name": "run_tests", "description": "Run tests before the final integration-test edit."},
+    {"step_id": "late_loader_test_update", "tool_name": "write_file", "path": "test_config_loader.py", "content_from": "solution/test_config_loader.py", "description": "Add the late duplicate/default integration regression, invalidating prior test evidence."},
+    {"step_id": "inspect_late_test", "tool_name": "read_file", "path": "test_config_loader.py", "description": "Inspect the final changed test and retain its exact requirement."},
+    {"step_id": "final_tests", "tool_name": "run_tests", "description": "Run visible and hidden evaluation after every edit.", "hidden_validation": "coding_stale_tests_001"},
+    {"step_id": "finish", "tool_name": "finish", "description": "Finish only with evidence newer than the late edit.", "claim": "The parser, defaults, and loader satisfy the current contract and fresh visible and hidden tests pass."}
+  ]
+}
