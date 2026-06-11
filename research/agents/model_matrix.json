@@ -27,6 +27,7 @@
   "memory_window": 8,
   "task_state_probes": true,
   "probe_interval": 5,
+  "probe_max_tokens": 768,
   "minimum_successful_models": 5,
   "models": [
     {

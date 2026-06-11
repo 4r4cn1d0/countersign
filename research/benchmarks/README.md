@@ -27,14 +27,17 @@ Every benchmark task includes:
 - Targeted failure modes such as semantic drift, temporal disordering, source confusion, and
   false completion.
 
-The seed file is intentionally small and manually auditable. It is not meant to be a final
-benchmark, only the first reproducible substrate for building claim extraction, scoring,
-and verification gates.
+The current seed file contains 10 manually auditable tasks: 8 coding tasks, one
+repository-audit task, and one research-synthesis task. It is substantial enough for an
+MVP experiment, but it is not a final benchmark.
 
 ## Files
 
 - `ground_truth_schema.json` documents the expected fields and enums.
-- `seed_tasks.json` contains the first benchmark tasks.
+- `seed_tasks.json` contains the 10 benchmark tasks.
+- `coding_scenarios/` contains repository fixtures, solution patches, scenario manifests,
+  and hidden validators for cache invalidation, source confusion, schema migration, and
+  retry-policy tasks.
 
 ## Evaluation Intent
 

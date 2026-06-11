@@ -17,6 +17,7 @@ from research.runner import (
     compute_attribution_accuracy,
     compute_false_completion_rate,
     compute_semantic_drift_score,
+    compute_structured_memory_metrics,
     compute_task_state_accuracy,
     compute_temporal_accuracy,
 )
@@ -35,19 +36,20 @@ def test_memory_health_report_contains_core_metrics():
     run = BenchmarkRunner().run_all()[0]
     report = build_memory_health_report(run)
 
-    assert report["schema_version"] == "agent-memory-health/v0.1"
+    assert report["schema_version"] == "agent-memory-health/v0.2"
     assert report["run_id"] == run["run_id"]
     assert report["task_id"] == run["task_id"]
     assert report["claim_counts"]["total"] == len(run["memory_claims"])
     assert set(report["metrics"]) == {
-        "semantic_drift_score",
-        "goal_fidelity",
         "task_state_accuracy",
         "attribution_accuracy",
         "temporal_accuracy",
         "false_completion_rate",
         "memory_health_score",
     }
+    assert report["exploratory_metrics"]["method"] == "lexical_jaccard"
+    assert report["exploratory_metrics"]["confirmatory"] is False
+    assert "structured_memory_score" in report["headline_metrics"]
 
 
 def test_metric_scores_handle_unsupported_and_stale_completion_claims():
@@ -164,6 +166,36 @@ def test_memory_health_report_api_scores_submitted_run():
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["schema_version"] == "agent-memory-health/v0.1"
+    assert payload["schema_version"] == "agent-memory-health/v0.2"
     assert payload["run_id"] == run["run_id"]
     assert payload["metrics"]["memory_health_score"] <= 1.0
+
+
+def test_structured_metrics_count_explicit_stale_decision_evidence():
+    run = {
+        "memory_claims": [],
+        "operational_memory": [
+            {
+                "event_id": "test-old",
+                "stale": True,
+                "support_status": "stale",
+            },
+            {
+                "event_id": "write-current",
+                "stale": False,
+                "support_status": "supported",
+            },
+        ],
+        "trace_events": [
+            {
+                "event_type": "completion_claim",
+                "tool_name": "finish",
+                "source_event_ids": ["test-old", "write-current"],
+            }
+        ],
+    }
+
+    metrics = compute_structured_memory_metrics(run)
+
+    assert metrics["stale_observations_used_after_invalidation"] == 1
+    assert metrics["stale_decision_use_rate"] == 0.5

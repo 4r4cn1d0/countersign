@@ -34,6 +34,8 @@ def build_experiment_protocol(
     memory_window: int = 8,
     task_state_probes: bool = False,
     probe_interval: int = 5,
+    probe_max_tokens: int = 768,
+    memory_repair: bool = True,
 ) -> dict:
     """Build a predeclared protocol whose identifier excludes wall-clock time."""
 
@@ -83,6 +85,7 @@ def build_experiment_protocol(
         "task_state_probes": {
             "enabled": task_state_probes,
             "interval_actions": probe_interval,
+            "max_tokens": probe_max_tokens,
             "method": (
                 "A non-intervening model fork reconstructs structured task state "
                 "from the same visible memory and is scored against canonical "
@@ -92,6 +95,21 @@ def build_experiment_protocol(
                 "Deterministic oracle probes validate instrumentation and are "
                 "excluded from empirical probe outcomes."
             ),
+        },
+        "memory_repair": {
+            "enabled": memory_repair,
+            "policy": (
+                "After a high-risk finish belief is blocked, derive and execute "
+                "the smallest bounded evidence-refresh action, update operational "
+                "memory, and require the model to replan."
+            ),
+            "outcomes": [
+                "corruption_detection",
+                "false-claim_containment",
+                "repair_attempt",
+                "repair_success",
+                "independently_verified_recovery",
+            ],
         },
         "datasets": {
             "benchmark": {
@@ -129,6 +147,8 @@ def build_experiment_protocol(
                 "subtask_state_probe_accuracy",
                 "latest_test_probe_accuracy",
                 "evidence_attribution_probe_accuracy",
+                "temporal_ordering_probe_accuracy",
+                "memory_repair_recovery",
             ],
         },
         "analysis_plan": {

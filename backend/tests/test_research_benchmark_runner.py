@@ -305,6 +305,12 @@ def test_langgraph_tool_agent_runs_real_coding_tool_loop(tmp_path: Path):
         "accepted_false_finishes": 1,
         "accepted_finish_evaluator_failures": 0,
         "post_block_tool_calls": 0,
+        "memory_corruption_detections": 0,
+        "memory_corruption_containments": 0,
+        "memory_repair_attempts": 0,
+        "memory_repair_successes": 0,
+        "memory_replanned_after_repair": False,
+        "memory_repair_recovery": False,
         "recovery_after_block": False,
         "termination_reason": "accepted_finish",
         "evaluator_success": True,
@@ -368,6 +374,27 @@ def test_langgraph_tool_verified_variant_blocks_stale_test_claim(tmp_path: Path)
     assert run["interaction_metrics"]["accepted_false_finishes"] == 0
     assert run["interaction_metrics"]["post_block_tool_calls"] == 1
     assert run["interaction_metrics"]["recovery_after_block"] is True
+    assert run["interaction_metrics"]["memory_corruption_detections"] == 1
+    assert run["interaction_metrics"]["memory_corruption_containments"] == 1
+    assert run["interaction_metrics"]["memory_repair_attempts"] == 1
+    assert run["interaction_metrics"]["memory_repair_successes"] == 1
+    assert run["interaction_metrics"]["memory_repair_recovery"] is True
+    assert run["memory_repair_summary"]["successful_recovery"] is True
+    stale_test_items = [
+        item
+        for item in run["operational_memory"]
+        if item.get("tool_name") == "run_tests" and item.get("stale")
+    ]
+    current_test_items = [
+        item
+        for item in run["operational_memory"]
+        if item.get("tool_name") == "run_tests"
+        and not item.get("stale")
+    ]
+    assert stale_test_items
+    assert current_test_items
+    assert current_test_items[-1]["repository_revision"] == 2
+    assert current_test_items[-1]["last_verification_time"] is not None
     assert run["interaction_metrics"]["evaluator_success"] is True
     blocked_sequence = loop_blocks[0]["sequence_number"]
     assert any(

@@ -26,17 +26,22 @@ The project is a working MVP/demo, not just a write-up.
   model matrices, and matrix reports.
 - Real-agent path: bounded LangGraph benchmark graph using local Ollama models, plus a
   coding-focused LangGraph tool loop with real file and test tools.
-- Current strongest result: five local model rows run through LangGraph across all three
-  seed memory-pressure tasks.
+- Benchmark suite: 10 long-horizon tasks, including 8 coding tasks and 4
+  fixture-backed repositories with independent hidden validators.
+- Controlled experiments: 8 model-visible memory conditions, canonical evaluator state,
+  repeatable condition/seed pairing, and non-intervening task-state probes.
+- Current Mistral path: `devstral-small-2:24b` is installed and has completed a real
+  eight-action coding run with valid structured actions and evaluator success.
 
 Latest verified test state:
 
-- Focused research suite: 54 passed, 1 skipped.
-- Full backend suite: 285 passed, 1 skipped.
+- Focused research suite: 101 passed, 1 skipped.
+- Full backend suite with PostgreSQL/TimescaleDB running: 332 passed, 1 skipped.
+- Frontend: 26 passed; production build succeeds.
 
-## Current Five-Model Result
+## Historical Five-Model Result
 
-The current real-agent comparison is:
+The June 4, 2026 real-agent comparison used:
 
 - `qwen2.5-coder:7b`
 - `llama3.2:3b`
@@ -70,6 +75,9 @@ Aggregate result:
 Gemma 4 12B MLX is installed and runnable, but it is not counted in the clean five-model
 comparison yet because its current LangGraph run returned empty final content after using
 the generation budget in `thinking`.
+
+That comparison remains valid historical evidence, but it predates the current
+fixture-backed coding suite, controlled memory conditions, and task-state probes.
 
 ## How We Make It a Full Tool-Using Agent
 
@@ -194,7 +202,15 @@ Run the coding-focused LangGraph tool loop:
 python3 scripts/agent_memory.py run \
   --task coding_stale_tests_001 \
   --agent langgraph_tools \
+  --runtime ollama \
+  --runtime-endpoint http://127.0.0.1:11435 \
+  --model-family mistral \
+  --model devstral-small-2:24b \
   --trace-mode model_driven \
+  --memory-condition temporal_corruption \
+  --memory-pressure-start 2 \
+  --task-state-probes \
+  --probe-max-tokens 768 \
   --out runs/langgraph-tools-coding \
   --format json
 ```
@@ -208,7 +224,8 @@ python3 -m pytest backend/tests/test_research_benchmark_seed.py \
   backend/tests/test_research_memory_metrics.py \
   backend/tests/test_research_verification_and_cli.py \
   backend/tests/test_research_runtime_and_bundle.py \
-  backend/tests/test_research_model_matrix.py -q
+  backend/tests/test_research_model_matrix.py \
+  backend/tests/test_research_memory_experiments.py -q
 
 cd backend
 python3 -m pytest -q

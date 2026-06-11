@@ -61,6 +61,8 @@ def run_model_matrix(
     memory_window: int | None = None,
     task_state_probes: bool | None = None,
     probe_interval: int | None = None,
+    probe_max_tokens: int | None = None,
+    memory_repair: bool | None = None,
     runner: BenchmarkRunner | None = None,
 ) -> dict:
     """Run paired baseline/verified trials under a frozen experiment protocol."""
@@ -141,6 +143,18 @@ def run_model_matrix(
         if probe_interval is not None
         else matrix.get("probe_interval", 5)
     )
+    active_probe_max_tokens = int(
+        probe_max_tokens
+        if probe_max_tokens is not None
+        else matrix.get("probe_max_tokens", 768)
+    )
+    if active_probe_max_tokens < 128:
+        raise ValueError("probe_max_tokens must be at least 128")
+    active_memory_repair = (
+        bool(memory_repair)
+        if memory_repair is not None
+        else bool(matrix.get("memory_repair", True))
+    )
     minimum_successful = int(
         minimum_successful_models
         if minimum_successful_models is not None
@@ -180,6 +194,8 @@ def run_model_matrix(
         memory_window=active_memory_window,
         task_state_probes=active_task_state_probes,
         probe_interval=active_probe_interval,
+        probe_max_tokens=active_probe_max_tokens,
+        memory_repair=active_memory_repair,
     )
     protocol_path = output_dir / "experiment_protocol.json"
     write_frozen_protocol(protocol_path, protocol)
@@ -212,6 +228,8 @@ def run_model_matrix(
             memory_window=active_memory_window,
             task_state_probes=active_task_state_probes,
             probe_interval=active_probe_interval,
+            probe_max_tokens=active_probe_max_tokens,
+            memory_repair=active_memory_repair,
             protocol_id=protocol["protocol_id"],
             pull_missing=pull_missing,
             installed_names=installed_names,
@@ -280,6 +298,8 @@ def run_model_matrix(
         "memory_window": active_memory_window,
         "task_state_probes": active_task_state_probes,
         "probe_interval": active_probe_interval,
+        "probe_max_tokens": active_probe_max_tokens,
+        "memory_repair": active_memory_repair,
         "pull_missing": pull_missing,
         "minimum_successful_models": minimum_successful,
         "successful_model_count": len(successful_models),
@@ -345,6 +365,8 @@ def _run_one_model(
     memory_window: int,
     task_state_probes: bool,
     probe_interval: int,
+    probe_max_tokens: int,
+    memory_repair: bool,
     protocol_id: str,
     pull_missing: bool,
     installed_names: set[str],
@@ -429,6 +451,8 @@ def _run_one_model(
                         memory_window=memory_window,
                         task_state_probes=task_state_probes,
                         probe_interval=probe_interval,
+                        probe_max_tokens=probe_max_tokens,
+                        memory_repair=memory_repair,
                     )
                     seed_dir = f"seed-{seed}"
                     run_path = (

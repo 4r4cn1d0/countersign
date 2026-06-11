@@ -31,10 +31,16 @@ safety motivation, deterministic open-source-style benchmark harness, terminal C
 generated artifact bundle, verification intervention, dashboard inspection layer, and
 passing backend/frontend/research tests.
 
-It is not yet a finished empirical result about real open-source LLM agents. The checkpoint
-bundle now includes preliminary real LangGraph/Ollama evidence, but the LangGraph graph is
-still a bounded benchmark graph with memory/tool nodes rather than a full autonomous
-coding agent with shell, file-edit, browser, and test tools.
+It is not yet a finished empirical result about real open-source LLM agents. Since the
+June 4 checkpoint, the coding path has become a model-driven LangGraph loop with real
+file reads/writes, test execution, independent hidden evaluation, controlled model-visible
+memory treatments, and non-intervening task-state probes. Browser, source-fetch, and
+data-analysis task environments remain future work.
+
+The June 11 implementation checkpoint contains 10 tasks, including 8 coding tasks and 4
+fixture-backed repositories. Eight memory conditions are available as a first-class matrix
+axis. A real `devstral-small-2:24b` run completed 8 valid actions with evaluator success,
+and a live 768-token shadow probe produced parseable state JSON with `0.9333` accuracy.
 
 ## Real-Runtime Model Matrix
 
@@ -44,7 +50,7 @@ targets seven sequentially-run model backends:
 
 - `qwen2.5-coder:7b`
 - `llama3.2:3b`
-- `mistral:7b`
+- `devstral-small-2:24b`
 - `deepseek-r1:8b`
 - `gemma3:4b`
 - `gemma4:12b-mlx`
@@ -61,8 +67,8 @@ ReAct-style harness across model backends. The configured default is now `model_
 trace mode, where model-authored JSON claims create trace events that are scored against
 provenance and verification rules. The older `scripted` mode remains available for
 deterministic regression tests and should be labeled as such. The first LangGraph adapter
-is now implemented for bounded benchmark runs; a later phase should add full tool-using
-LangGraph, AutoGen, CrewAI, OpenHands/SWE-agent, or non-deterministic ReAct adapters.
+and coding-focused tool loop are implemented. Later phases should add source/browser/data
+environments and a second framework adapter.
 
 Run the configured matrix:
 
@@ -135,8 +141,9 @@ The run generated 30 run artifacts, 15 verification artifacts, 15 score artifact
 15 baseline-vs-verified comparison artifacts with zero model-row errors. The analysis
 report shows 15 baseline task rows, parse status counts `json:11`, `json_repaired:2`,
 `unparsed:2`, 29 parsed claims, 19 high-risk labels, and 19 blocked verification actions.
-This is the current strongest real-agent comparison artifact, while Gemma 4 12B remains a
-separate heavyweight checkpoint until it returns usable final content under the prompt.
+This remains the strongest completed multi-model comparison artifact, while the newer
+10-task tool-loop and Devstral checkpoints are currently single-model or deterministic
+implementation evidence rather than a completed five-model result.
 
 Coding tool-loop checkpoint:
 `framework=langgraph_tools` now runs a coding-focused LangGraph StateGraph loop over an

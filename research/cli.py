@@ -212,6 +212,8 @@ def _run_command(args: argparse.Namespace) -> None:
         memory_window=args.memory_window,
         task_state_probes=args.task_state_probes,
         probe_interval=args.probe_interval,
+        probe_max_tokens=args.probe_max_tokens,
+        memory_repair=args.memory_repair,
     )
     runs = [runner.run_task_id(args.task, config)] if args.task else runner.run_all(config)
     written_paths = _write_runs(runs, Path(args.out))
@@ -268,6 +270,8 @@ def _bundle_command(args: argparse.Namespace) -> None:
         memory_window=args.memory_window,
         task_state_probes=args.task_state_probes,
         probe_interval=args.probe_interval,
+        probe_max_tokens=args.probe_max_tokens,
+        memory_repair=args.memory_repair,
     )
     manifest = generate_artifact_bundle(
         Path(args.out),
@@ -302,6 +306,8 @@ def _matrix_command(args: argparse.Namespace) -> None:
         memory_window=args.memory_window,
         task_state_probes=args.task_state_probes,
         probe_interval=args.probe_interval,
+        probe_max_tokens=args.probe_max_tokens,
+        memory_repair=args.memory_repair,
     )
     _emit(manifest, args.format, title="Model Matrix")
     if args.fail_under_minimum and not manifest["meets_minimum_successful_models"]:
@@ -369,6 +375,21 @@ def _add_memory_experiment_arguments(
         "--probe-interval",
         type=int,
         default=5 if defaults else None,
+    )
+    parser.add_argument(
+        "--probe-max-tokens",
+        type=int,
+        default=768 if defaults else None,
+        help="Separate generation budget for structured task-state probes.",
+    )
+    parser.add_argument(
+        "--memory-repair",
+        action=argparse.BooleanOptionalAction,
+        default=True if defaults else None,
+        help=(
+            "After a verified finish is blocked, execute the smallest bounded "
+            "evidence refresh before replanning."
+        ),
     )
 
 

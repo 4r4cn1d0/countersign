@@ -134,12 +134,12 @@ def format_model_matrix_analysis_markdown(report: dict) -> str:
         "",
         "## Model Summary",
         "",
-        "| Model | Status | Pairs | Eligible | Baseline Accepted False | Verified Proposed False | Blocked False | Verified Accepted False | Avg Extra Actions |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| Model | Status | Pairs | Eligible | Baseline Accepted False | Blocked False | Repair Successes | Recovered Tasks | Verified Accepted False | Avg Extra Actions |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for model in report["models"]:
         lines.append(
-            "| `{model}` | `{status}` | {pairs} | {eligible} | {baseline_false} | {verified_proposed} | {blocked_false} | {verified_false} | {actions:.2f} |".format(
+            "| `{model}` | `{status}` | {pairs} | {eligible} | {baseline_false} | {blocked_false} | {repair_successes} | {recoveries} | {verified_false} | {actions:.2f} |".format(
                 model=model["model_name"],
                 status=model["status"],
                 pairs=model["pair_count"],
@@ -147,11 +147,14 @@ def format_model_matrix_analysis_markdown(report: dict) -> str:
                 baseline_false=model[
                     "baseline_accepted_false_finish_count"
                 ],
-                verified_proposed=model[
-                    "verified_false_finish_proposal_count"
-                ],
                 blocked_false=model[
                     "verified_blocked_false_finish_count"
+                ],
+                repair_successes=model[
+                    "verified_memory_repair_success_count"
+                ],
+                recoveries=model[
+                    "verified_memory_repair_recovery_count"
                 ],
                 verified_false=model[
                     "verified_accepted_false_finish_count"
@@ -165,13 +168,13 @@ def format_model_matrix_analysis_markdown(report: dict) -> str:
             "",
             "## Coding-Agent Intervention Matrix",
             "",
-            "| Model | Task | Memory | Seed | Eligible | Baseline Outcome | Verified Outcome | Baseline Accepted False | Verified Proposed False | Blocked False | Verified Accepted False | Baseline Probe | Verified Probe | Extra Actions |",
-            "|---|---|---|---:|---:|---|---|---:|---:|---:|---:|---:|---:|---:|",
+            "| Model | Task | Memory | Seed | Eligible | Baseline Outcome | Verified Outcome | Baseline Accepted False | Blocked False | Repair Attempts | Repair Recovery | Verified Accepted False | Baseline Structured Memory | Verified Structured Memory | Extra Actions |",
+            "|---|---|---|---:|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|",
         ]
     )
     for row in report["tasks"]:
         lines.append(
-            "| `{model}` | `{task}` | `{memory}` | {seed} | {eligible} | `{baseline_outcome}` | `{verified_outcome}` | {baseline_false} | {verified_proposed} | {blocked_false} | {verified_false} | {baseline_probe} | {verified_probe} | {actions} |".format(
+            "| `{model}` | `{task}` | `{memory}` | {seed} | {eligible} | `{baseline_outcome}` | `{verified_outcome}` | {baseline_false} | {blocked_false} | {repair_attempts} | {repair_recovery} | {verified_false} | {baseline_structured} | {verified_structured} | {actions} |".format(
                 model=row["model_name"],
                 task=row["task_id"],
                 memory=row["memory_condition"],
@@ -180,11 +183,16 @@ def format_model_matrix_analysis_markdown(report: dict) -> str:
                 baseline_outcome=row["baseline_task_outcome"],
                 verified_outcome=row["verified_task_outcome"],
                 baseline_false=row["baseline_accepted_false_finishes"],
-                verified_proposed=row["verified_false_finish_proposals"],
                 blocked_false=row["verified_blocked_false_finishes"],
+                repair_attempts=row["verified_memory_repair_attempts"],
+                repair_recovery=row["verified_memory_repair_recovery"],
                 verified_false=row["verified_accepted_false_finishes"],
-                baseline_probe=row["baseline_probe_overall_accuracy"],
-                verified_probe=row["verified_probe_overall_accuracy"],
+                baseline_structured=row[
+                    "baseline_structured_memory_score"
+                ],
+                verified_structured=row[
+                    "verified_structured_memory_score"
+                ],
                 actions=row["extra_model_actions"],
             )
         )
@@ -282,9 +290,13 @@ def _task_rows_for_model(
         baseline_interaction = baseline.get("interaction_metrics", {})
         verified_interaction = verified.get("interaction_metrics", {})
         baseline_health = baseline.get("memory_health_report", {})
+        verified_health = verified.get("memory_health_report", {})
         baseline_probe = baseline.get("task_state_probe_summary", {})
         verified_probe = verified.get("task_state_probe_summary", {})
         metrics = baseline_health.get("metrics", {})
+        baseline_headline = baseline_health.get("headline_metrics", {})
+        verified_headline = verified_health.get("headline_metrics", {})
+        exploratory = baseline_health.get("exploratory_metrics", {})
         verification_report = verified.get("verification_report", {})
         baseline_counts = baseline_health.get("claim_counts", {})
         baseline_final = _final_test_status(baseline)
@@ -367,6 +379,42 @@ def _task_rows_for_model(
                 "verified_recovery_after_block": bool(
                     verified_interaction.get("recovery_after_block", False)
                 ),
+                "baseline_memory_repair_recovery": bool(
+                    baseline_interaction.get(
+                        "memory_repair_recovery",
+                        False,
+                    )
+                ),
+                "verified_memory_corruption_detections": int(
+                    verified_interaction.get(
+                        "memory_corruption_detections",
+                        0,
+                    )
+                ),
+                "verified_memory_corruption_containments": int(
+                    verified_interaction.get(
+                        "memory_corruption_containments",
+                        0,
+                    )
+                ),
+                "verified_memory_repair_attempts": int(
+                    verified_interaction.get(
+                        "memory_repair_attempts",
+                        0,
+                    )
+                ),
+                "verified_memory_repair_successes": int(
+                    verified_interaction.get(
+                        "memory_repair_successes",
+                        0,
+                    )
+                ),
+                "verified_memory_repair_recovery": bool(
+                    verified_interaction.get(
+                        "memory_repair_recovery",
+                        False,
+                    )
+                ),
                 "baseline_evaluator_success": (
                     baseline_final.get("status") == "success"
                     if baseline
@@ -448,6 +496,40 @@ def _task_rows_for_model(
                         "mean_evidence_attribution_accuracy"
                     )
                 ),
+                "baseline_structured_memory_score": baseline_headline.get(
+                    "structured_memory_score"
+                ),
+                "verified_structured_memory_score": verified_headline.get(
+                    "structured_memory_score"
+                ),
+                "baseline_requirement_recall": baseline_headline.get(
+                    "requirement_recall"
+                ),
+                "verified_requirement_recall": verified_headline.get(
+                    "requirement_recall"
+                ),
+                "baseline_temporal_ordering_accuracy": (
+                    baseline_headline.get(
+                        "temporal_ordering_accuracy"
+                    )
+                ),
+                "verified_temporal_ordering_accuracy": (
+                    verified_headline.get(
+                        "temporal_ordering_accuracy"
+                    )
+                ),
+                "baseline_stale_decision_use_rate": float(
+                    baseline_headline.get(
+                        "stale_decision_use_rate",
+                        0.0,
+                    )
+                ),
+                "verified_stale_decision_use_rate": float(
+                    verified_headline.get(
+                        "stale_decision_use_rate",
+                        0.0,
+                    )
+                ),
                 "verified_probe_evidence_attribution_accuracy": (
                     verified_probe.get(
                         "mean_evidence_attribution_accuracy"
@@ -474,7 +556,7 @@ def _task_rows_for_model(
                     metrics.get("memory_health_score", 0.0)
                 ),
                 "semantic_drift_score": float(
-                    metrics.get("semantic_drift_score", 0.0)
+                    exploratory.get("semantic_drift_score", 0.0)
                 ),
                 "false_completion_rate": float(
                     metrics.get("false_completion_rate", 0.0)
@@ -560,6 +642,15 @@ def _model_summary(model: dict, rows: list[dict]) -> dict:
         "verified_recovery_count": sum(
             1 for row in rows if row["verified_recovery_after_block"]
         ),
+        "verified_memory_repair_recovery_count": sum(
+            1 for row in rows if row["verified_memory_repair_recovery"]
+        ),
+        "verified_memory_repair_attempt_count": sum(
+            row["verified_memory_repair_attempts"] for row in rows
+        ),
+        "verified_memory_repair_success_count": sum(
+            row["verified_memory_repair_successes"] for row in rows
+        ),
         "baseline_evaluator_success_count": sum(
             1 for row in rows if row["baseline_evaluator_success"]
         ),
@@ -583,6 +674,16 @@ def _model_summary(model: dict, rows: list[dict]) -> dict:
         ),
         "avg_memory_health_score": _mean(
             row["memory_health_score"] for row in rows
+        ),
+        "avg_baseline_structured_memory_score": _mean(
+            row["baseline_structured_memory_score"]
+            for row in rows
+            if row["baseline_structured_memory_score"] is not None
+        ),
+        "avg_verified_structured_memory_score": _mean(
+            row["verified_structured_memory_score"]
+            for row in rows
+            if row["verified_structured_memory_score"] is not None
         ),
         "avg_semantic_drift_score": _mean(
             row["semantic_drift_score"] for row in rows
@@ -655,6 +756,19 @@ def _aggregate_summary(
             for row in task_rows
             if row["verified_recovery_after_block"]
         ),
+        "verified_memory_repair_recovery_rows": sum(
+            1
+            for row in task_rows
+            if row["verified_memory_repair_recovery"]
+        ),
+        "verified_memory_repair_attempts": sum(
+            row["verified_memory_repair_attempts"]
+            for row in task_rows
+        ),
+        "verified_memory_repair_successes": sum(
+            row["verified_memory_repair_successes"]
+            for row in task_rows
+        ),
         "baseline_evaluator_success_rows": sum(
             1 for row in task_rows if row["baseline_evaluator_success"]
         ),
@@ -669,6 +783,16 @@ def _aggregate_summary(
         ),
         "avg_memory_health_score": _mean(
             row["memory_health_score"] for row in task_rows
+        ),
+        "avg_baseline_structured_memory_score": _mean(
+            row["baseline_structured_memory_score"]
+            for row in task_rows
+            if row["baseline_structured_memory_score"] is not None
+        ),
+        "avg_verified_structured_memory_score": _mean(
+            row["verified_structured_memory_score"]
+            for row in task_rows
+            if row["verified_structured_memory_score"] is not None
         ),
         "avg_semantic_drift_score": _mean(
             row["semantic_drift_score"] for row in task_rows

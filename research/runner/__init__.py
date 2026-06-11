@@ -10,6 +10,7 @@ from .metrics import (
     compute_attribution_accuracy,
     compute_false_completion_rate,
     compute_semantic_drift_score,
+    compute_structured_memory_metrics,
     compute_task_state_accuracy,
     compute_temporal_accuracy,
 )
@@ -73,6 +74,7 @@ __all__ = [
     "compute_attribution_accuracy",
     "compute_false_completion_rate",
     "compute_semantic_drift_score",
+    "compute_structured_memory_metrics",
     "compute_task_state_accuracy",
     "compute_temporal_accuracy",
     "retrieval_consistency_score",

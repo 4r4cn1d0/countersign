@@ -279,6 +279,8 @@ def score_task_state_probe(payload: dict | None, expected: dict) -> dict:
             "criterion_recall": 0.0,
             "subtask_state_accuracy": 0.0,
             "latest_test_accuracy": 0.0,
+            "latest_evidence_selection_accuracy": 0.0,
+            "temporal_ordering_accuracy": 0.0,
             "changed_file_f1": 0.0,
             "evidence_attribution_accuracy": 0.0,
         }
@@ -298,9 +300,11 @@ def score_task_state_probe(payload: dict | None, expected: dict) -> dict:
 
     predicted_test = payload.get("latest_test", {})
     expected_test = expected["latest_test"]
-    latest_test_accuracy = _accuracy(
+    latest_evidence_selection_accuracy = float(
+        predicted_test.get("status") == expected_test["status"]
+    )
+    temporal_ordering_accuracy = _accuracy(
         [
-            predicted_test.get("status") == expected_test["status"],
             predicted_test.get("is_current") == expected_test["is_current"],
             predicted_test.get("workspace_revision")
             == expected_test["workspace_revision"],
@@ -321,7 +325,8 @@ def score_task_state_probe(payload: dict | None, expected: dict) -> dict:
     components = [
         criterion_recall,
         subtask_accuracy,
-        latest_test_accuracy,
+        latest_evidence_selection_accuracy,
+        temporal_ordering_accuracy,
         changed_file_f1,
         attribution_accuracy,
     ]
@@ -330,7 +335,23 @@ def score_task_state_probe(payload: dict | None, expected: dict) -> dict:
         "overall_accuracy": round(mean(components), 4),
         "criterion_recall": round(criterion_recall, 4),
         "subtask_state_accuracy": round(subtask_accuracy, 4),
-        "latest_test_accuracy": round(latest_test_accuracy, 4),
+        "latest_test_accuracy": round(
+            mean(
+                [
+                    latest_evidence_selection_accuracy,
+                    temporal_ordering_accuracy,
+                ]
+            ),
+            4,
+        ),
+        "latest_evidence_selection_accuracy": round(
+            latest_evidence_selection_accuracy,
+            4,
+        ),
+        "temporal_ordering_accuracy": round(
+            temporal_ordering_accuracy,
+            4,
+        ),
         "changed_file_f1": round(changed_file_f1, 4),
         "evidence_attribution_accuracy": round(
             attribution_accuracy,
@@ -362,6 +383,22 @@ def summarize_probe_scores(probes: list[dict]) -> dict:
         "mean_latest_test_accuracy": _mean_metric(
             eligible,
             "latest_test_accuracy",
+        ),
+        "mean_criterion_recall": _mean_metric(
+            eligible,
+            "criterion_recall",
+        ),
+        "mean_latest_evidence_selection_accuracy": _mean_metric(
+            eligible,
+            "latest_evidence_selection_accuracy",
+        ),
+        "mean_temporal_ordering_accuracy": _mean_metric(
+            eligible,
+            "temporal_ordering_accuracy",
+        ),
+        "mean_changed_file_f1": _mean_metric(
+            eligible,
+            "changed_file_f1",
         ),
         "mean_evidence_attribution_accuracy": _mean_metric(
             eligible,

@@ -20,6 +20,10 @@ from research.runner.memory_pressure import (
     MEMORY_CONDITIONS,
     build_agent_memory_view,
 )
+from research.runner.operational_memory import (
+    apply_event_to_memory,
+    plan_memory_repair,
+)
 from research.runner.task_state_probes import score_task_state_probe
 
 
@@ -108,6 +112,53 @@ def test_temporal_corruption_reorders_stale_test_without_changing_canonical_data
     assert recalled_test["temporal_metadata_lost"] is True
     assert "workspace_revision" not in recalled_test
     assert ledger[0]["workspace_revision"] == 0
+
+
+def test_operational_memory_invalidates_revision_bound_test_evidence():
+    test_event = {
+        "event_id": "event-test",
+        "event_type": "tool_call",
+        "sequence_number": 4,
+        "tool_name": "run_tests",
+        "command": "python -m unittest discover -s .",
+        "covered_files": ["service.py", "test_service.py"],
+        "status": "success",
+        "returncode": 0,
+        "workspace_revision": 0,
+        "source_type": "tool_output",
+    }
+    write_event = {
+        "event_id": "event-write",
+        "event_type": "file_state_change",
+        "sequence_number": 5,
+        "tool_name": "write_file",
+        "path": "service.py",
+        "status": "success",
+        "workspace_revision": 1,
+        "source_type": "file_state",
+    }
+
+    memory = apply_event_to_memory([], test_event, label="run_tests")
+    memory = apply_event_to_memory(
+        memory,
+        write_event,
+        label="write_file:service.py",
+    )
+
+    stale_test = memory[0]
+    assert stale_test["claim"].startswith("Visible tests success")
+    assert stale_test["repository_revision"] == 0
+    assert stale_test["stale"] is True
+    assert stale_test["support_status"] == "stale"
+    assert stale_test["invalidation_dependencies"] == [
+        "service.py",
+        "test_service.py",
+    ]
+    assert stale_test["invalidated_by_event_ids"] == ["event-write"]
+    plan = plan_memory_repair(["stale evidence"], memory)
+    assert plan["repairable"] is True
+    assert plan["action"] == {"action": "run_tests"}
+    assert stale_test["memory_id"] in plan["target_memory_ids"]
 
 
 def test_probe_scoring_penalizes_wrong_state_and_lost_attribution():
@@ -223,9 +274,11 @@ def test_real_runtime_shadow_probe_is_measured_without_steering_main_loop(
 
         def __init__(self):
             self.action_index = 0
+            self.probe_token_budgets = []
 
         def generate(self, request):
             if "AGENT_MEMORY_SHADOW_STATE_PROBE" in request.prompt:
+                self.probe_token_budgets.append(request.max_tokens)
                 subtask_id = request.response_schema["properties"][
                     "subtasks"
                 ]["items"]["properties"]["subtask_id"]["enum"][0]
@@ -262,9 +315,10 @@ def test_real_runtime_shadow_probe_is_measured_without_steering_main_loop(
                 raw_response={"test_adapter": True},
             )
 
+    adapter = ProbeAwareAdapter()
     with patch(
         "research.runner.benchmark_runner.create_model_adapter",
-        return_value=ProbeAwareAdapter(),
+        return_value=adapter,
     ):
         run = runner.run_task_id(
             "coding_stale_tests_001",
@@ -276,6 +330,7 @@ def test_real_runtime_shadow_probe_is_measured_without_steering_main_loop(
                 workspace_root=str(tmp_path),
                 task_state_probes=True,
                 probe_interval=2,
+                probe_max_tokens=640,
             ),
         )
 
@@ -292,4 +347,5 @@ def test_real_runtime_shadow_probe_is_measured_without_steering_main_loop(
     assert run["task_state_probe_summary"]["eligible_probe_count"] == len(
         probe_events
     )
+    assert set(adapter.probe_token_budgets) == {640}
     assert run["interaction_metrics"]["evaluator_success"] is True

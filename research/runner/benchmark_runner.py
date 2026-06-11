@@ -22,6 +22,11 @@ from .memory_pressure import (
 )
 from .metrics import build_memory_health_report
 from .model_adapters import ModelRequest, create_model_adapter
+from .operational_memory import (
+    apply_event_to_memory,
+    plan_memory_repair,
+    summarize_operational_memory,
+)
 from .task_state_probes import (
     build_task_state_probe_prompt,
     deterministic_probe_payload,
@@ -63,6 +68,8 @@ class BenchmarkRunConfig:
     memory_window: int = 8
     task_state_probes: bool = False
     probe_interval: int = 5
+    probe_max_tokens: int = 768
+    memory_repair: bool = True
 
 
 class BenchmarkRunner:
@@ -92,6 +99,8 @@ class BenchmarkRunner:
             raise ValueError("memory_window must be at least 2")
         if run_config.probe_interval < 1:
             raise ValueError("probe_interval must be at least 1")
+        if run_config.probe_max_tokens < 128:
+            raise ValueError("probe_max_tokens must be at least 128")
 
         if run_config.framework == "langgraph":
             model_response, trace_events = self._run_langgraph_agent(task, run_config)
@@ -117,7 +126,8 @@ class BenchmarkRunner:
             f"{task['task_id']}:{run_config.framework}:"
             f"{run_config.model_name}:{run_config.agent_variant}:"
             f"{run_config.trace_mode}:{run_config.memory_condition}:"
-            f"probes-{run_config.task_state_probes}:{run_config.seed}"
+            f"probes-{run_config.task_state_probes}:"
+            f"repair-{run_config.memory_repair}:{run_config.seed}"
         )
         run_id = str(uuid5(NAMESPACE_URL, run_key))
 
@@ -148,6 +158,8 @@ class BenchmarkRunner:
                 "memory_window": run_config.memory_window,
                 "task_state_probes": run_config.task_state_probes,
                 "probe_interval": run_config.probe_interval,
+                "probe_max_tokens": run_config.probe_max_tokens,
+                "memory_repair": run_config.memory_repair,
                 "agent_framework_runtime": (
                     run_config.framework if run_config.framework != "react_custom" else None
                 ),
@@ -163,7 +175,6 @@ class BenchmarkRunner:
             "high_risk_labels": labels,
         }
         run["memory_claims"] = extract_memory_claims(run)
-        run["memory_health_report"] = build_memory_health_report(run, task)
         if run_config.framework == "langgraph_tools":
             run["interaction_metrics"] = self._interaction_metrics(run)
             probe_events = [
@@ -179,6 +190,41 @@ class BenchmarkRunner:
             run["task_state_probe_summary"] = summarize_probe_scores(
                 probe_events
             )
+            summary_event = next(
+                (
+                    event
+                    for event in reversed(trace_events)
+                    if event.get("event_type") == "summary"
+                    and event.get("graph_node") == "emit_trace"
+                ),
+                {},
+            )
+            operational_memory = list(
+                summary_event.get("evidence_ledger", [])
+            )
+            run["operational_memory"] = operational_memory
+            run["operational_memory_summary"] = (
+                summarize_operational_memory(operational_memory)
+            )
+            run["memory_repair_summary"] = {
+                "schema_version": "agent-memory-repair-summary/v0.1",
+                "enabled": run_config.memory_repair,
+                "detection_count": run["interaction_metrics"][
+                    "memory_corruption_detections"
+                ],
+                "containment_count": run["interaction_metrics"][
+                    "memory_corruption_containments"
+                ],
+                "repair_attempt_count": run["interaction_metrics"][
+                    "memory_repair_attempts"
+                ],
+                "repair_success_count": run["interaction_metrics"][
+                    "memory_repair_successes"
+                ],
+                "successful_recovery": run["interaction_metrics"][
+                    "memory_repair_recovery"
+                ],
+            }
             run["memory_pressure_summary"] = {
                 "schema_version": "agent-memory-pressure-summary/v0.1",
                 "condition": run_config.memory_condition,
@@ -226,8 +272,15 @@ class BenchmarkRunner:
                         "evaluator_success"
                     ],
                     "task_state_probe_count": len(probe_events),
+                    "memory_repair_attempt_count": run[
+                        "interaction_metrics"
+                    ]["memory_repair_attempts"],
+                    "memory_repair_success_count": run[
+                        "interaction_metrics"
+                    ]["memory_repair_successes"],
                 }
             )
+        run["memory_health_report"] = build_memory_health_report(run, task)
         if (
             run_config.agent_variant == "verified"
             and run_config.framework == "langgraph_tools"
@@ -271,6 +324,7 @@ class BenchmarkRunner:
         config: BenchmarkRunConfig,
         *,
         response_schema: dict | None = None,
+        max_tokens_override: int | None = None,
     ):
         adapter = create_model_adapter(config.runtime, config.runtime_endpoint)
         try:
@@ -282,7 +336,11 @@ class BenchmarkRunner:
                     temperature=config.temperature,
                     seed=config.seed,
                     prompt_template=config.prompt_template,
-                    max_tokens=config.max_tokens,
+                    max_tokens=(
+                        max_tokens_override
+                        if max_tokens_override is not None
+                        else config.max_tokens
+                    ),
                     response_schema=response_schema,
                     thinking=config.thinking,
                 )
@@ -298,7 +356,11 @@ class BenchmarkRunner:
                     temperature=config.temperature,
                     seed=config.seed,
                     prompt_template=config.prompt_template,
-                    max_tokens=config.max_tokens,
+                    max_tokens=(
+                        max_tokens_override
+                        if max_tokens_override is not None
+                        else config.max_tokens
+                    ),
                     response_schema=response_schema,
                     thinking=config.thinking,
                 )
@@ -556,6 +618,9 @@ class BenchmarkRunner:
             finish_proposal_count: int
             blocked_finish_count: int
             post_block_tool_calls: int
+            memory_repair_count: int
+            repair_tool_call_count: int
+            repair_success_count: int
             workspace_revision: int
             applied_requirement_updates: list[int]
             accepted_finish_event_id: str
@@ -579,6 +644,9 @@ class BenchmarkRunner:
                 "finish_proposal_count": 0,
                 "blocked_finish_count": 0,
                 "post_block_tool_calls": 0,
+                "memory_repair_count": 0,
+                "repair_tool_call_count": 0,
+                "repair_success_count": 0,
                 "workspace_revision": 0,
                 "applied_requirement_updates": [],
                 "terminated": False,
@@ -627,6 +695,7 @@ class BenchmarkRunner:
                     ),
                     config,
                     response_schema=task_state_probe_schema(task),
+                    max_tokens_override=config.probe_max_tokens,
                 )
                 raw_response = response.text
                 payload = parse_task_state_probe(response.text)
@@ -671,14 +740,11 @@ class BenchmarkRunner:
                 "memory_event_id": memory_event_id,
                 "last_event_id": setup_event_id,
                 "recent_observations": [self._observation_from_event(events[-1])],
-                "evidence_ledger": [
-                    self._ledger_entry(
-                        setup_event_id,
-                        "file_state",
-                        "setup_workspace",
-                        event=events[-1],
-                    )
-                ],
+                "evidence_ledger": apply_event_to_memory(
+                    [],
+                    events[-1],
+                    label="setup_workspace",
+                ),
                 "workspace_revision": 0,
             }
             run_shadow_probe(
@@ -931,18 +997,130 @@ class BenchmarkRunner:
                             }
                         )
                     else:
+                        repair_plan = plan_memory_repair(
+                            proposal["reasons"],
+                            ledger,
+                        )
+                        detection_event_id = add(
+                            "memory_corruption_detection",
+                            graph_node="process_action",
+                            content=(
+                                "Detected an unsafe completion belief and derived "
+                                "the smallest available memory repair."
+                            ),
+                            detections=repair_plan["detections"],
+                            target_memory_ids=repair_plan[
+                                "target_memory_ids"
+                            ],
+                            repairable=repair_plan["repairable"],
+                            source_type="verification_policy",
+                            source_event_ids=[decision_event_id],
+                        )
+                        repair_count = state.get("memory_repair_count", 0)
+                        repair_tool_calls = state.get(
+                            "repair_tool_call_count",
+                            0,
+                        )
+                        repair_successes = state.get(
+                            "repair_success_count",
+                            0,
+                        )
+                        feedback_sources = [detection_event_id]
+                        if (
+                            config.memory_repair
+                            and repair_plan["repairable"]
+                            and repair_plan["action"]
+                        ):
+                            repair_count += 1
+                            plan_event_id = add(
+                                "memory_repair_plan",
+                                graph_node="process_action",
+                                content=repair_plan["rationale"],
+                                repair_action=repair_plan["action"],
+                                target_memory_ids=repair_plan[
+                                    "target_memory_ids"
+                                ],
+                                status="planned",
+                                source_type="memory_controller",
+                                source_event_ids=[detection_event_id],
+                            )
+                            repair_step = self._step_from_autonomous_action(
+                                repair_plan["action"]
+                            )
+                            repair_tool_event_id = self._execute_coding_tool(
+                                workspace=workspace,
+                                step=repair_step,
+                                add=add,
+                                source_event_id=plan_event_id,
+                                workspace_revision=int(
+                                    state.get("workspace_revision", 0)
+                                ),
+                            )
+                            repair_tool_event = events[-1]
+                            ledger = apply_event_to_memory(
+                                ledger,
+                                repair_tool_event,
+                                label=self._action_label(
+                                    repair_plan["action"]
+                                ),
+                            )
+                            observations.append(
+                                self._observation_from_event(
+                                    repair_tool_event
+                                )
+                            )
+                            repair_tool_calls += 1
+                            repair_succeeded = (
+                                repair_tool_event.get("status") == "success"
+                            )
+                            if repair_succeeded:
+                                repair_successes += 1
+                            repair_result_event_id = add(
+                                "memory_repair_result",
+                                graph_node="process_action",
+                                content=(
+                                    "Memory evidence refreshed at the current "
+                                    "repository revision."
+                                    if repair_succeeded
+                                    else "The attempted memory refresh failed."
+                                ),
+                                status=(
+                                    "repaired"
+                                    if repair_succeeded
+                                    else "repair_failed"
+                                ),
+                                repair_action=repair_plan["action"],
+                                repaired_memory_id=ledger[-1]["memory_id"],
+                                repository_revision=state.get(
+                                    "workspace_revision",
+                                    0,
+                                ),
+                                source_type="memory_controller",
+                                source_event_ids=[repair_tool_event_id],
+                            )
+                            observations.append(
+                                self._observation_from_event(events[-1])
+                            )
+                            feedback_sources = [repair_result_event_id]
                         feedback_event_id = add(
                             "verification_feedback",
                             graph_node="process_action",
                             content=(
                                 "Finish rejected: "
                                 + "; ".join(proposal["reasons"])
-                                + ". Use tools to obtain current evidence, then submit "
-                                "another finish proposal with exact source_event_ids."
+                                + (
+                                    ". The memory controller refreshed the smallest "
+                                    "stale evidence item. Replan from the repaired "
+                                    "ledger, then cite exact current source_event_ids."
+                                    if feedback_sources != [detection_event_id]
+                                    else ". Use tools to repair the implementation or "
+                                    "obtain missing evidence, then submit another finish "
+                                    "proposal with exact source_event_ids."
+                                )
                             ),
                             status="requires_action",
                             source_type="verification_policy",
-                            source_event_ids=[decision_event_id],
+                            source_event_ids=feedback_sources,
                         )
                         observations.append(self._observation_from_event(events[-1]))
                         update.update(
@@ -953,6 +1131,18 @@ class BenchmarkRunner:
                                 )
                                 + 1,
                                 "recent_observations": observations[-6:],
+                                "evidence_ledger": ledger,
+                                "memory_repair_count": repair_count,
+                                "repair_tool_call_count": repair_tool_calls,
+                                "repair_success_count": repair_successes,
+                                "post_block_tool_calls": (
+                                    state.get("post_block_tool_calls", 0)
+                                    + repair_tool_calls
+                                    - state.get(
+                                        "repair_tool_call_count",
+                                        0,
+                                    )
+                                ),
                             }
                         )
                     return update
@@ -981,13 +1171,10 @@ class BenchmarkRunner:
                 workspace_revision=workspace_revision,
             )
             tool_event = events[-1]
-            ledger.append(
-                self._ledger_entry(
-                    tool_event_id,
-                    tool_event.get("source_type", "tool_output"),
-                    self._action_label(action),
-                    event=tool_event,
-                )
+            ledger = apply_event_to_memory(
+                ledger,
+                tool_event,
+                label=self._action_label(action),
             )
             observations.append(self._observation_from_event(tool_event))
             post_block_tool_calls = state.get("post_block_tool_calls", 0)
@@ -1022,13 +1209,10 @@ class BenchmarkRunner:
                     source_event_ids=[tool_event_id],
                 )
                 requirement_event = events[-1]
-                ledger.append(
-                    self._ledger_entry(
-                        requirement_event_id,
-                        "user_instruction",
-                        f"requirement_update:{update_index}",
-                        event=requirement_event,
-                    )
+                ledger = apply_event_to_memory(
+                    ledger,
+                    requirement_event,
+                    label=f"requirement_update:{update_index}",
                 )
                 observations.append(
                     self._observation_from_event(requirement_event)
@@ -1646,6 +1830,39 @@ class BenchmarkRunner:
             and event.get("sequence_number", 0) > first_block_sequence
             for event in accepted_proposals
         )
+        corruption_detections = [
+            event
+            for event in events
+            if event.get("event_type") == "memory_corruption_detection"
+        ]
+        repair_plans = [
+            event
+            for event in events
+            if event.get("event_type") == "memory_repair_plan"
+        ]
+        successful_repairs = [
+            event
+            for event in events
+            if event.get("event_type") == "memory_repair_result"
+            and event.get("status") == "repaired"
+        ]
+        first_repair_sequence = (
+            min(event["sequence_number"] for event in successful_repairs)
+            if successful_repairs
+            else None
+        )
+        replanned_after_repair = any(
+            first_repair_sequence is not None
+            and event.get("sequence_number", 0) > first_repair_sequence
+            and event.get("event_type") == "model_response"
+            and event.get("graph_node") == "choose_action"
+            for event in events
+        )
+        accepted_after_repair = any(
+            first_repair_sequence is not None
+            and event.get("sequence_number", 0) > first_repair_sequence
+            for event in accepted_proposals
+        )
         evaluation = next(
             (
                 event
@@ -1694,6 +1911,18 @@ class BenchmarkRunner:
                 else 0
             ),
             "post_block_tool_calls": len(post_block_tools),
+            "memory_corruption_detections": len(corruption_detections),
+            "memory_corruption_containments": len(blocked_false),
+            "memory_repair_attempts": len(repair_plans),
+            "memory_repair_successes": len(successful_repairs),
+            "memory_replanned_after_repair": replanned_after_repair,
+            "memory_repair_recovery": bool(
+                successful_repairs
+                and replanned_after_repair
+                and accepted_after_repair
+                and not accepted_false
+                and evaluation.get("status") == "success"
+            ),
             "recovery_after_block": bool(
                 block_sequences
                 and post_block_tools
@@ -2242,6 +2471,11 @@ class BenchmarkRunner:
                 invalidates_claim_types=step.get("invalidates_claim_types", []),
             )
         if tool_name == "run_tests":
+            covered_files = sorted(
+                path.relative_to(workspace).as_posix()
+                for path in workspace.rglob("*")
+                if path.is_file() and "__pycache__" not in path.parts
+            )
             visible = subprocess.run(
                 [sys.executable, "-m", "unittest", "discover", "-s", "."],
                 cwd=workspace,
@@ -2271,6 +2505,7 @@ class BenchmarkRunner:
                 content=output,
                 tool_name=tool_name,
                 command="python -m unittest discover -s .",
+                covered_files=covered_files,
                 returncode=returncode,
                 status="success" if returncode == 0 else "failure",
                 workspace_path=str(workspace.resolve()),

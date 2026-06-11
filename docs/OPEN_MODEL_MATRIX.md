@@ -11,7 +11,8 @@ Configured in `research/agents/model_matrix.json`:
 |---|---|---|
 | Qwen | `qwen2.5-coder:7b` | coding/tool-use baseline |
 | Llama | `llama3.2:3b` | small instruction-following baseline |
-| Mistral | `mistral:7b` | general instruction baseline |
+| Mistral | `devstral-small-2:24b` | primary local software-engineering agent |
+| Mistral | `mistral:7b` | disabled historical general baseline |
 | DeepSeek | `deepseek-r1:8b` | reasoning-heavy baseline |
 | Gemma | `gemma3:4b` | compact reasoning baseline |
 | Gemma | `gemma4:12b-mlx` | larger heavyweight local stress test |
@@ -20,9 +21,9 @@ Configured in `research/agents/model_matrix.json`:
 Several models are open-weight rather than OSI open-source. For publication, report exact
 tags and licenses separately.
 
-## First Five Counted Models
+## Historical First Five
 
-The current clean five-model LangGraph comparison counts:
+The June 4, 2026 clean five-model LangGraph comparison counted:
 
 - `qwen2.5-coder:7b`
 - `llama3.2:3b`
@@ -32,7 +33,13 @@ The current clean five-model LangGraph comparison counts:
 
 These rows succeeded across all three seed tasks with real LangGraph/Ollama artifacts.
 
-## Current Result
+The current configuration replaces the active Mistral row with
+`devstral-small-2:24b`. On June 11, 2026 it completed a real eight-action
+`langgraph_tools` coding run with valid structured actions and independent evaluator
+success. It fits narrowly on the 24 GB M4 Air at roughly 15.5 GiB total model/runtime
+memory, so broad sweeps should run it sequentially.
+
+## Historical Result
 
 Manifest:
 
@@ -80,7 +87,9 @@ Interpretation:
 
 After the coding tool loop is stable, rerun:
 
-- First-five clean comparison with `--agent langgraph_tools --task coding_stale_tests_001`.
+- A five-family controlled comparison over the 10-task benchmark.
+- At least full-history and one corruption condition per task.
+- Task-state probes with an explicit `--probe-max-tokens` budget.
 - Gemma 4 12B heavyweight comparison.
 - Optional DeepSeek row if runtime performance is acceptable.
 - A second framework adapter such as AutoGen or CrewAI.

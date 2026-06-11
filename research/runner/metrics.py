@@ -20,26 +20,23 @@ def build_memory_health_report(run: dict, task: dict | None = None) -> dict:
     )
     trace_events = run.get("trace_events", [])
 
-    semantic_drift_score = compute_semantic_drift_score(run, task)
     task_state_accuracy = compute_task_state_accuracy(memory_claims)
     attribution_accuracy = compute_attribution_accuracy(memory_claims)
     temporal_accuracy = compute_temporal_accuracy(memory_claims)
+    structured_metrics = compute_structured_memory_metrics(
+        run,
+        memory_claims,
+    )
+    semantic_drift_score = compute_semantic_drift_score(run, task)
 
     metrics = {
-        "semantic_drift_score": semantic_drift_score,
-        "goal_fidelity": 1.0 - semantic_drift_score,
         "task_state_accuracy": task_state_accuracy,
         "attribution_accuracy": attribution_accuracy,
         "temporal_accuracy": temporal_accuracy,
         "false_completion_rate": compute_false_completion_rate(memory_claims),
-        "memory_health_score": mean(
-            [
-                1.0 - semantic_drift_score,
-                task_state_accuracy,
-                attribution_accuracy,
-                temporal_accuracy,
-            ]
-        ),
+        "memory_health_score": structured_metrics[
+            "structured_memory_score"
+        ],
     }
 
     unsupported_claims = [
@@ -51,10 +48,17 @@ def build_memory_health_report(run: dict, task: dict | None = None) -> dict:
     ]
 
     return {
-        "schema_version": "agent-memory-health/v0.1",
+        "schema_version": "agent-memory-health/v0.2",
         "run_id": run.get("run_id"),
         "task_id": run.get("task_id") or (task or {}).get("task_id"),
         "metrics": metrics,
+        "headline_metrics": structured_metrics,
+        "exploratory_metrics": {
+            "semantic_drift_score": semantic_drift_score,
+            "goal_fidelity": _round_score(1.0 - semantic_drift_score),
+            "method": "lexical_jaccard",
+            "confirmatory": False,
+        },
         "claim_counts": {
             "total": len(memory_claims),
             "unsupported": len(unsupported_claims),
@@ -70,6 +74,107 @@ def build_memory_health_report(run: dict, task: dict | None = None) -> dict:
         "contradicted_claims": contradicted_claims,
         "recovery_opportunities": _build_recovery_opportunities(memory_claims),
         "trace_event_count": len(trace_events),
+    }
+
+
+def compute_structured_memory_metrics(
+    run: dict,
+    memory_claims: Iterable[dict] | None = None,
+) -> dict:
+    """Compute fact-based memory outcomes from probes and explicit citations."""
+
+    claims = list(
+        memory_claims
+        if memory_claims is not None
+        else run.get("memory_claims", [])
+    )
+    probe_summary = run.get("task_state_probe_summary", {})
+    operational_items = list(run.get("operational_memory", []))
+    items_by_event_id = {
+        item.get("event_id"): item
+        for item in operational_items
+        if item.get("event_id")
+    }
+    decision_events = [
+        event
+        for event in run.get("trace_events", [])
+        if event.get("event_type") == "completion_claim"
+        and event.get("tool_name") == "finish"
+    ]
+    cited_items = [
+        items_by_event_id[event_id]
+        for event in decision_events
+        for event_id in event.get("source_event_ids", [])
+        if event_id in items_by_event_id
+    ]
+    unsupported_count = sum(
+        claim.get("support_status") == "unsupported"
+        for claim in claims
+    )
+    contradicted_used = sum(
+        item.get("support_status") == "contradicted"
+        for item in cited_items
+    )
+    stale_used = sum(bool(item.get("stale")) for item in cited_items)
+    belief_count = len(claims)
+    cited_count = len(cited_items)
+
+    requirement_recall = probe_summary.get("mean_criterion_recall")
+    subtask_accuracy = probe_summary.get(
+        "mean_subtask_state_accuracy"
+    )
+    latest_evidence_accuracy = probe_summary.get(
+        "mean_latest_evidence_selection_accuracy"
+    )
+    source_attribution_accuracy = probe_summary.get(
+        "mean_evidence_attribution_accuracy"
+    )
+    temporal_ordering_accuracy = probe_summary.get(
+        "mean_temporal_ordering_accuracy"
+    )
+    components = [
+        value
+        for value in [
+            requirement_recall,
+            subtask_accuracy,
+            latest_evidence_accuracy,
+            source_attribution_accuracy,
+            temporal_ordering_accuracy,
+            1.0 - (unsupported_count / belief_count)
+            if belief_count
+            else 1.0,
+            1.0 - (contradicted_used / cited_count)
+            if cited_count
+            else 1.0,
+            1.0 - (stale_used / cited_count)
+            if cited_count
+            else 1.0,
+        ]
+        if value is not None
+    ]
+    return {
+        "structured_memory_score": _round_score(mean(components)),
+        "requirement_recall": requirement_recall,
+        "subtask_state_accuracy": subtask_accuracy,
+        "latest_evidence_selection_accuracy": latest_evidence_accuracy,
+        "source_attribution_accuracy": source_attribution_accuracy,
+        "temporal_ordering_accuracy": temporal_ordering_accuracy,
+        "unsupported_repository_belief_count": unsupported_count,
+        "unsupported_repository_belief_rate": _rate(
+            unsupported_count,
+            belief_count,
+        ),
+        "contradicted_beliefs_used_for_decisions": contradicted_used,
+        "contradicted_decision_use_rate": _rate(
+            contradicted_used,
+            cited_count,
+        ),
+        "stale_observations_used_after_invalidation": stale_used,
+        "stale_decision_use_rate": _rate(stale_used, cited_count),
+        "explicitly_cited_memory_item_count": cited_count,
+        "eligible_probe_count": int(
+            probe_summary.get("eligible_probe_count", 0)
+        ),
     }
 
 
@@ -234,3 +339,7 @@ def _jaccard_similarity(left: str, right: str) -> float:
 
 def _round_score(value: float) -> float:
     return round(max(0.0, min(1.0, value)), 4)
+
+
+def _rate(count: int, total: int) -> float:
+    return _round_score(count / total) if total else 0.0

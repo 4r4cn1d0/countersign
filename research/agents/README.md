@@ -31,7 +31,8 @@ model-authored claims create the scored trace events:
 |---|---|---:|---|
 | Qwen | `qwen2.5-coder:7b` | 4.7 GB | coding/tool-use baseline |
 | Llama | `llama3.2:3b` | 2.0 GB | small instruction-following baseline |
-| Mistral | `mistral:7b` | 4.4 GB | general instruction/function-calling baseline |
+| Mistral | `devstral-small-2:24b` | 15 GB | primary local software-engineering agent |
+| Mistral | `mistral:7b` | 4.4 GB | disabled historical general baseline |
 | DeepSeek | `deepseek-r1:8b` | 5.2 GB | reasoning-heavy baseline |
 | Gemma | `gemma3:4b` | 3.3 GB | compact multilingual reasoning baseline |
 | Gemma | `gemma4:12b-mlx` | 10.0 GB | larger local agentic reasoning and long-context pressure baseline |
@@ -48,11 +49,29 @@ python3 scripts/agent_memory.py matrix --out runs/langgraph-qwen-pressure --agen
 python3 scripts/agent_memory.py matrix --out runs/langgraph-first-five --agent langgraph --model qwen2.5-coder:7b --model llama3.2:3b --model mistral:7b --model gemma3:4b --model phi4-mini:latest --trace-mode model_driven --prompt-template memory_pressure_v0 --minimum-successful-models 5 --fail-under-minimum
 python3 scripts/agent_memory.py matrix-report --manifest runs/langgraph-first-five/model_matrix_manifest.json --out runs/langgraph-first-five/report.md --format markdown
 python3 scripts/agent_memory.py run --task coding_stale_tests_001 --agent langgraph_tools --trace-mode model_driven --out runs/langgraph-tools-coding --format json
+python3 scripts/agent_memory.py run --task coding_stale_tests_001 --agent langgraph_tools --runtime ollama --runtime-endpoint http://127.0.0.1:11435 --model-family mistral --model devstral-small-2:24b --memory-condition temporal_corruption --memory-pressure-start 2 --task-state-probes --probe-max-tokens 768 --out runs/devstral-coding --format json
 ```
 
 The matrix runner disables deterministic fallback. Missing local models are skipped unless
 `--pull-missing` is set, and only `succeeded` rows count as real-runtime evidence. Use
 `--trace-mode scripted` only for deterministic trace-shape regression checks.
+
+The current matrix defaults to full-history memory with shadow probes enabled. Repeat
+`--memory-condition` to compare controlled treatments. Conditions are part of trial IDs,
+artifact paths, frozen protocols, reports, and the statistical pairing key.
+
+## Devstral Small 2 Checkpoint
+
+On 2026-06-11, `devstral-small-2:24b` was pulled and executed on the MacBook M4 Air:
+
+- Ollama artifact: 24B `Q4_K_M`, approximately 15 GB.
+- Working runtime: Ollama Desktop `0.24.0` on `http://127.0.0.1:11435`.
+- Tool-loop result: 8 valid model actions, 0 invalid actions, accepted finish, and
+  independent evaluator success on `coding_stale_tests_001`.
+- Probe result: the initial 256-token shared budget truncated JSON. After adding the
+  explicit 768-token probe budget, the live probe parsed and scored `0.9333`.
+- Runtime caveat: Homebrew Ollama `0.30.4` can pull/list the model but cannot generate on
+  this machine because that package is missing `llama-server`.
 
 Gemma 4 12B MLX is included as a single-model heavyweight check because it is new, larger,
 and expected to stress the MacBook Air more than the 3B-8B rows. The current Ollama tag

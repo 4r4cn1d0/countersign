@@ -158,6 +158,14 @@ def build_paired_statistics(rows: list[dict]) -> dict:
             lambda row: row["verified_protocol_completion_status"]
             == "action_budget_exhausted",
         ),
+        "independently_verified_memory_recovery": (
+            lambda row: bool(
+                row.get("baseline_memory_repair_recovery", False)
+            ),
+            lambda row: bool(
+                row.get("verified_memory_repair_recovery", False)
+            ),
+        ),
     }
     binary_results = {}
     for name, (baseline_getter, verified_getter) in binary_metrics.items():
@@ -218,6 +226,35 @@ def build_paired_statistics(rows: list[dict]) -> dict:
         continuous_results[name] = paired_bootstrap_mean_difference(
             [float(row[baseline_key]) for row in probe_rows],
             [float(row[verified_key]) for row in probe_rows],
+        )
+    structured_metrics = {
+        "structured_memory_score": (
+            "baseline_structured_memory_score",
+            "verified_structured_memory_score",
+        ),
+        "requirement_recall": (
+            "baseline_requirement_recall",
+            "verified_requirement_recall",
+        ),
+        "temporal_ordering_accuracy": (
+            "baseline_temporal_ordering_accuracy",
+            "verified_temporal_ordering_accuracy",
+        ),
+        "stale_decision_use_rate": (
+            "baseline_stale_decision_use_rate",
+            "verified_stale_decision_use_rate",
+        ),
+    }
+    for name, (baseline_key, verified_key) in structured_metrics.items():
+        metric_rows = [
+            row
+            for row in eligible
+            if row.get(baseline_key) is not None
+            and row.get(verified_key) is not None
+        ]
+        continuous_results[name] = paired_bootstrap_mean_difference(
+            [float(row[baseline_key]) for row in metric_rows],
+            [float(row[verified_key]) for row in metric_rows],
         )
     return {
         "schema_version": "agent-memory-paired-statistics/v0.1",

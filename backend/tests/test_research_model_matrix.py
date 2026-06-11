@@ -215,6 +215,7 @@ def test_model_matrix_treats_memory_condition_as_a_paired_experiment_axis(
         memory_pressure_start=2,
         task_state_probes=True,
         probe_interval=2,
+        probe_max_tokens=640,
         minimum_successful_models=1,
         trace_mode="model_driven",
     )
@@ -225,6 +226,7 @@ def test_model_matrix_treats_memory_condition_as_a_paired_experiment_axis(
         "temporal_corruption",
     ]
     assert manifest["planned_run_count"] == 4
+    assert manifest["probe_max_tokens"] == 640
     assert model["completed_pair_count"] == 2
     assert {
         run["memory_condition"] for run in model["runs"]
@@ -244,6 +246,33 @@ def test_model_matrix_treats_memory_condition_as_a_paired_experiment_axis(
         report["paired_statistics"]["analysis_unit"]
         == "model-task-memory-condition-seed pair"
     )
+
+
+def test_model_matrix_rejects_probe_budget_too_small(tmp_path: Path):
+    matrix_path = tmp_path / "matrix.json"
+    matrix_path.write_text(
+        json.dumps(
+            {
+                "runtime": "deterministic",
+                "models": [
+                    {
+                        "model_family": "qwen",
+                        "model_name": "qwen2.5-coder:7b",
+                        "enabled": True,
+                    }
+                ],
+            }
+        )
+    )
+
+    with pytest.raises(ValueError, match="probe_max_tokens"):
+        run_model_matrix(
+            tmp_path / "out",
+            matrix_path=matrix_path,
+            task_ids=["coding_stale_tests_001"],
+            variants=["baseline"],
+            probe_max_tokens=64,
+        )
 
 
 def test_artifact_audit_detects_tampering(tmp_path: Path):
