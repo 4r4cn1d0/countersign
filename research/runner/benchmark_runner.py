@@ -14,9 +14,23 @@ from typing import Optional, TypedDict
 from uuid import NAMESPACE_URL, uuid5
 
 from .claims import extract_memory_claims
+from .coding_scenarios import load_fixture_scenario
 from .labeling import label_high_risk_claims
+from .memory_pressure import (
+    build_agent_memory_view,
+    validate_memory_condition,
+)
 from .metrics import build_memory_health_report
 from .model_adapters import ModelRequest, create_model_adapter
+from .task_state_probes import (
+    build_task_state_probe_prompt,
+    deterministic_probe_payload,
+    expected_task_state,
+    parse_task_state_probe,
+    score_task_state_probe,
+    summarize_probe_scores,
+    task_state_probe_schema,
+)
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -44,6 +58,11 @@ class BenchmarkRunConfig:
     workspace_root: str | None = None
     constrained_actions: bool = True
     thinking: bool = False
+    memory_condition: str = "full_history"
+    memory_pressure_start: int = 6
+    memory_window: int = 8
+    task_state_probes: bool = False
+    probe_interval: int = 5
 
 
 class BenchmarkRunner:
@@ -66,6 +85,13 @@ class BenchmarkRunner:
         run_config = config or BenchmarkRunConfig()
         stack = self._load_json(self.stack_path)
         self._validate_open_source_stack(stack, run_config)
+        validate_memory_condition(run_config.memory_condition)
+        if run_config.memory_pressure_start < 0:
+            raise ValueError("memory_pressure_start must be non-negative")
+        if run_config.memory_window < 2:
+            raise ValueError("memory_window must be at least 2")
+        if run_config.probe_interval < 1:
+            raise ValueError("probe_interval must be at least 1")
 
         if run_config.framework == "langgraph":
             model_response, trace_events = self._run_langgraph_agent(task, run_config)
@@ -90,7 +116,8 @@ class BenchmarkRunner:
         run_key = (
             f"{task['task_id']}:{run_config.framework}:"
             f"{run_config.model_name}:{run_config.agent_variant}:"
-            f"{run_config.trace_mode}:{run_config.seed}"
+            f"{run_config.trace_mode}:{run_config.memory_condition}:"
+            f"probes-{run_config.task_state_probes}:{run_config.seed}"
         )
         run_id = str(uuid5(NAMESPACE_URL, run_key))
 
@@ -116,6 +143,11 @@ class BenchmarkRunner:
                 "trace_mode": run_config.trace_mode,
                 "constrained_actions": run_config.constrained_actions,
                 "thinking": run_config.thinking,
+                "memory_condition": run_config.memory_condition,
+                "memory_pressure_start": run_config.memory_pressure_start,
+                "memory_window": run_config.memory_window,
+                "task_state_probes": run_config.task_state_probes,
+                "probe_interval": run_config.probe_interval,
                 "agent_framework_runtime": (
                     run_config.framework if run_config.framework != "react_custom" else None
                 ),
@@ -134,6 +166,48 @@ class BenchmarkRunner:
         run["memory_health_report"] = build_memory_health_report(run, task)
         if run_config.framework == "langgraph_tools":
             run["interaction_metrics"] = self._interaction_metrics(run)
+            probe_events = [
+                event
+                for event in trace_events
+                if event.get("event_type") == "task_state_probe"
+            ]
+            pressure_events = [
+                event
+                for event in trace_events
+                if event.get("event_type") == "memory_pressure"
+            ]
+            run["task_state_probe_summary"] = summarize_probe_scores(
+                probe_events
+            )
+            run["memory_pressure_summary"] = {
+                "schema_version": "agent-memory-pressure-summary/v0.1",
+                "condition": run_config.memory_condition,
+                "activation_action_count": (
+                    run_config.memory_pressure_start
+                ),
+                "event_count": len(pressure_events),
+                "induced_corruption_event_count": sum(
+                    bool(event.get("induced_corruption"))
+                    for event in pressure_events
+                ),
+                "operations": sorted(
+                    {
+                        operation
+                        for event in pressure_events
+                        for operation in event.get("operations", [])
+                    }
+                ),
+                "dropped_evidence_ids": sorted(
+                    {
+                        evidence_id
+                        for event in pressure_events
+                        for evidence_id in event.get(
+                            "dropped_evidence_ids",
+                            [],
+                        )
+                    }
+                ),
+            }
             run["run_metadata"].update(
                 {
                     "termination_reason": run["interaction_metrics"][
@@ -151,6 +225,7 @@ class BenchmarkRunner:
                     "evaluator_success": run["interaction_metrics"][
                         "evaluator_success"
                     ],
+                    "task_state_probe_count": len(probe_events),
                 }
             )
         if (
@@ -481,6 +556,8 @@ class BenchmarkRunner:
             finish_proposal_count: int
             blocked_finish_count: int
             post_block_tool_calls: int
+            workspace_revision: int
+            applied_requirement_updates: list[int]
             accepted_finish_event_id: str
             termination_reason: str
             terminated: bool
@@ -502,8 +579,78 @@ class BenchmarkRunner:
                 "finish_proposal_count": 0,
                 "blocked_finish_count": 0,
                 "post_block_tool_calls": 0,
+                "workspace_revision": 0,
+                "applied_requirement_updates": [],
                 "terminated": False,
             }
+
+        def run_shadow_probe(
+            state: ToolAgentState,
+            *,
+            checkpoint: str,
+            source_event_id: str,
+        ) -> None:
+            if not config.task_state_probes:
+                return
+            action_count = int(state.get("action_count", 0))
+            workspace_revision = int(state.get("workspace_revision", 0))
+            canonical_ledger = list(state.get("evidence_ledger", []))
+            canonical_observations = list(
+                state.get("recent_observations", [])
+            )
+            memory_view = build_agent_memory_view(
+                canonical_ledger,
+                canonical_observations,
+                condition=config.memory_condition,
+                action_count=action_count,
+                start_after=config.memory_pressure_start,
+                window=config.memory_window,
+                seed=config.seed,
+            )
+            expected = expected_task_state(
+                task,
+                canonical_ledger,
+                workspace_revision=workspace_revision,
+            )
+            if config.runtime == "deterministic":
+                payload = deterministic_probe_payload(task, expected)
+                raw_response = json.dumps(payload, sort_keys=True)
+                probe_origin = "deterministic_oracle"
+                eligible = False
+            else:
+                response = self._generate_model_response_for_prompt(
+                    build_task_state_probe_prompt(
+                        task,
+                        memory_view,
+                        action_count=action_count,
+                        workspace_revision=workspace_revision,
+                    ),
+                    config,
+                    response_schema=task_state_probe_schema(task),
+                )
+                raw_response = response.text
+                payload = parse_task_state_probe(response.text)
+                probe_origin = "model_shadow_fork"
+                eligible = response.error is None
+            scores = score_task_state_probe(payload, expected)
+            add(
+                "task_state_probe",
+                graph_node="shadow_probe",
+                checkpoint=checkpoint,
+                action_count=action_count,
+                workspace_revision=workspace_revision,
+                memory_condition=config.memory_condition,
+                memory_view_active=memory_view["active"],
+                memory_operations=memory_view["operations"],
+                probe_origin=probe_origin,
+                eligible_for_empirical_analysis=eligible,
+                raw_response=raw_response,
+                parsed_state=payload,
+                expected_state=expected,
+                source_type="measurement",
+                source_event_ids=[source_event_id],
+                **scores,
+            )
 
         def retrieve_memory(state: ToolAgentState) -> dict:
             memory_event_id = add(
@@ -520,7 +667,7 @@ class BenchmarkRunner:
                 add,
                 state["goal_event_id"],
             )
-            return {
+            update = {
                 "memory_event_id": memory_event_id,
                 "last_event_id": setup_event_id,
                 "recent_observations": [self._observation_from_event(events[-1])],
@@ -532,7 +679,14 @@ class BenchmarkRunner:
                         event=events[-1],
                     )
                 ],
+                "workspace_revision": 0,
             }
+            run_shadow_probe(
+                update,
+                checkpoint="initial_workspace",
+                source_event_id=setup_event_id,
+            )
+            return update
 
         def choose_action(state: ToolAgentState) -> dict:
             deterministic_action = self._deterministic_action_for_state(
@@ -544,12 +698,42 @@ class BenchmarkRunner:
                 state.get("evidence_ledger", []),
                 state.get("recent_observations", []),
             )
+            memory_view = build_agent_memory_view(
+                list(state.get("evidence_ledger", [])),
+                list(state.get("recent_observations", [])),
+                condition=config.memory_condition,
+                action_count=state.get("action_count", 0),
+                start_after=config.memory_pressure_start,
+                window=config.memory_window,
+                seed=config.seed,
+            )
+            pressure_event_id = None
+            if memory_view["active"] and memory_view["operations"]:
+                pressure_event_id = add(
+                    "memory_pressure",
+                    graph_node="choose_action",
+                    condition=config.memory_condition,
+                    induced_corruption=memory_view["induced_corruption"],
+                    operations=memory_view["operations"],
+                    dropped_evidence_ids=memory_view[
+                        "dropped_evidence_ids"
+                    ],
+                    canonical_evidence_count=memory_view[
+                        "canonical_evidence_count"
+                    ],
+                    visible_evidence_count=memory_view[
+                        "visible_evidence_count"
+                    ],
+                    action_count=state.get("action_count", 0),
+                    source_type="experimental_intervention",
+                    source_event_ids=[state["last_event_id"]],
+                )
             action_response = self._generate_model_response_for_prompt(
                 self._tool_action_prompt(
                     task,
                     scenario,
-                    state.get("evidence_ledger", []),
-                    state.get("recent_observations", []),
+                    memory_view["evidence_ledger"],
+                    memory_view["recent_observations"],
                     config,
                     action_count=state.get("action_count", 0),
                     deterministic_action=deterministic_action,
@@ -572,7 +756,14 @@ class BenchmarkRunner:
                 graph_node="choose_action",
                 response=action_response.text,
                 source_type="agent_inference",
-                source_event_ids=[state["last_event_id"]],
+                source_event_ids=[
+                    source_id
+                    for source_id in [
+                        state["last_event_id"],
+                        pressure_event_id,
+                    ]
+                    if source_id
+                ],
                 runtime=config.runtime,
                 model_name=config.model_name,
                 prompt_template=config.prompt_template,
@@ -584,6 +775,9 @@ class BenchmarkRunner:
                 parsed_claim_count=0,
                 structured_output_requested=config.constrained_actions,
                 available_actions=available_actions,
+                memory_condition=config.memory_condition,
+                memory_view_active=memory_view["active"],
+                memory_operations=memory_view["operations"],
             )
             add(
                 "decision_point",
@@ -776,11 +970,15 @@ class BenchmarkRunner:
                 return update
 
             step = self._step_from_autonomous_action(action)
+            workspace_revision = int(state.get("workspace_revision", 0))
+            if action["action"] == "write_file":
+                workspace_revision += 1
             tool_event_id = self._execute_coding_tool(
                 workspace=workspace,
                 step=step,
                 add=add,
                 source_event_id=state["current_model_event_id"],
+                workspace_revision=workspace_revision,
             )
             tool_event = events[-1]
             ledger.append(
@@ -803,14 +1001,58 @@ class BenchmarkRunner:
                 source_type="agent_summary",
                 source_event_ids=[tool_event_id],
             )
+            applied_updates = list(
+                state.get("applied_requirement_updates", [])
+            )
+            for update_index, requirement_update in enumerate(
+                scenario.get("requirement_updates", [])
+            ):
+                if (
+                    update_index in applied_updates
+                    or int(requirement_update["after_action"]) > action_count
+                ):
+                    continue
+                requirement_event_id = add(
+                    "user_requirement_update",
+                    graph_node="process_action",
+                    content=requirement_update["content"],
+                    status="active",
+                    workspace_revision=workspace_revision,
+                    source_type="user_instruction",
+                    source_event_ids=[tool_event_id],
+                )
+                requirement_event = events[-1]
+                ledger.append(
+                    self._ledger_entry(
+                        requirement_event_id,
+                        "user_instruction",
+                        f"requirement_update:{update_index}",
+                        event=requirement_event,
+                    )
+                )
+                observations.append(
+                    self._observation_from_event(requirement_event)
+                )
+                applied_updates.append(update_index)
             update.update(
                 {
                     "last_event_id": tool_event_id,
                     "evidence_ledger": ledger,
                     "recent_observations": observations[-6:],
                     "post_block_tool_calls": post_block_tool_calls,
+                    "workspace_revision": workspace_revision,
+                    "applied_requirement_updates": applied_updates,
                 }
             )
+            if (
+                config.task_state_probes
+                and action_count % config.probe_interval == 0
+            ):
+                run_shadow_probe(
+                    {**state, **update},
+                    checkpoint=f"after_action_{action_count}",
+                    source_event_id=tool_event_id,
+                )
             return update
 
         def decide_continue_or_terminate(state: ToolAgentState) -> dict:
@@ -857,6 +1099,11 @@ class BenchmarkRunner:
             return "evaluate" if state.get("terminated") else "continue"
 
         def evaluate_outcome(state: ToolAgentState) -> dict:
+            run_shadow_probe(
+                state,
+                checkpoint="final_pre_evaluation",
+                source_event_id=state["last_event_id"],
+            )
             evaluation = self._evaluate_coding_workspace(
                 workspace,
                 task["task_id"],
@@ -1614,6 +1861,9 @@ class BenchmarkRunner:
 
     def _coding_tool_scenario(self, task: dict) -> dict:
         task_id = task["task_id"]
+        fixture_scenario = load_fixture_scenario(task_id)
+        if fixture_scenario:
+            return fixture_scenario
         if task_id == "coding_stale_tests_001":
             return {
                 "initial_files": {
@@ -1930,6 +2180,7 @@ class BenchmarkRunner:
             status="success",
             workspace_path=str(workspace.resolve()),
             files=sorted(initial_files),
+            workspace_revision=0,
             source_type="file_state",
             source_event_ids=[goal_event_id],
         )
@@ -1941,6 +2192,7 @@ class BenchmarkRunner:
         step: dict,
         add,
         source_event_id: str,
+        workspace_revision: int,
     ) -> str:
         tool_name = step["tool_name"]
         if tool_name == "list_files":
@@ -1952,6 +2204,7 @@ class BenchmarkRunner:
                 tool_name=tool_name,
                 status="success",
                 workspace_path=str(workspace.resolve()),
+                workspace_revision=workspace_revision,
                 source_type="tool_output",
                 source_event_ids=[source_event_id],
             )
@@ -1966,6 +2219,7 @@ class BenchmarkRunner:
                 path=str(relative_path),
                 status="success",
                 workspace_path=str(workspace.resolve()),
+                workspace_revision=workspace_revision,
                 source_type="tool_output",
                 source_event_ids=[source_event_id],
             )
@@ -1982,6 +2236,7 @@ class BenchmarkRunner:
                 path=relative_path.as_posix(),
                 status="success",
                 workspace_path=str(workspace.resolve()),
+                workspace_revision=workspace_revision,
                 source_type="file_state",
                 source_event_ids=[source_event_id],
                 invalidates_claim_types=step.get("invalidates_claim_types", []),
@@ -2019,6 +2274,7 @@ class BenchmarkRunner:
                 returncode=returncode,
                 status="success" if returncode == 0 else "failure",
                 workspace_path=str(workspace.resolve()),
+                workspace_revision=workspace_revision,
                 source_type="tool_output",
                 source_event_ids=[source_event_id],
                 contradicts_claim_types=(
@@ -2033,6 +2289,7 @@ class BenchmarkRunner:
                 tool_name=tool_name,
                 status="success",
                 workspace_path=str(workspace.resolve()),
+                workspace_revision=workspace_revision,
                 source_type="agent_inference",
                 source_event_ids=step.get("source_event_ids") or [source_event_id],
                 verification_gate="final_answer",
@@ -2040,6 +2297,24 @@ class BenchmarkRunner:
         raise ValueError(f"Unsupported coding tool: {tool_name}")
 
     def _run_hidden_validation(self, workspace: Path, task_id: str) -> subprocess.CompletedProcess:
+        fixture_scenario = load_fixture_scenario(task_id)
+        if fixture_scenario:
+            return subprocess.run(
+                [
+                    sys.executable,
+                    "-c",
+                    (
+                        "import runpy, sys; "
+                        "runpy.run_path(sys.argv[1], run_name='__main__')"
+                    ),
+                    fixture_scenario["hidden_validation_path"],
+                ],
+                cwd=workspace,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
         validators = {
             "coding_stale_tests_001": self._hidden_parser_validation_source(),
             "coding_multifile_edit_001": self._hidden_multifile_validation_source(),
@@ -2120,6 +2395,7 @@ class BenchmarkRunner:
                 "status": event.get("status"),
                 "path": event.get("path"),
                 "returncode": event.get("returncode"),
+                "workspace_revision": event.get("workspace_revision"),
                 "content": content,
                 "rejected_response": event.get("rejected_response"),
                 "rejected_action": event.get("rejected_action"),
@@ -2149,6 +2425,7 @@ class BenchmarkRunner:
                 "status",
                 "path",
                 "returncode",
+                "workspace_revision",
             ]:
                 if event.get(key) is not None:
                     entry[key] = event[key]

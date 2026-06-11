@@ -22,6 +22,7 @@ from .experiment_protocol import (
     write_frozen_protocol,
 )
 from .metrics import build_memory_health_report
+from .memory_pressure import validate_memory_condition
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -55,6 +56,11 @@ def run_model_matrix(
     prompt_template: str | None = None,
     constrained_actions: bool | None = None,
     thinking: bool | None = None,
+    memory_conditions: list[str] | None = None,
+    memory_pressure_start: int | None = None,
+    memory_window: int | None = None,
+    task_state_probes: bool | None = None,
+    probe_interval: int | None = None,
     runner: BenchmarkRunner | None = None,
 ) -> dict:
     """Run paired baseline/verified trials under a frozen experiment protocol."""
@@ -104,6 +110,37 @@ def run_model_matrix(
         if thinking is not None
         else bool(matrix.get("thinking", False))
     )
+    active_memory_conditions = list(
+        dict.fromkeys(
+            memory_conditions
+            if memory_conditions is not None
+            else matrix.get("memory_conditions", ["full_history"])
+        )
+    )
+    if not active_memory_conditions:
+        raise ValueError("At least one memory condition is required")
+    for condition in active_memory_conditions:
+        validate_memory_condition(condition)
+    active_memory_pressure_start = int(
+        memory_pressure_start
+        if memory_pressure_start is not None
+        else matrix.get("memory_pressure_start", 6)
+    )
+    active_memory_window = int(
+        memory_window
+        if memory_window is not None
+        else matrix.get("memory_window", 8)
+    )
+    active_task_state_probes = (
+        bool(task_state_probes)
+        if task_state_probes is not None
+        else bool(matrix.get("task_state_probes", False))
+    )
+    active_probe_interval = int(
+        probe_interval
+        if probe_interval is not None
+        else matrix.get("probe_interval", 5)
+    )
     minimum_successful = int(
         minimum_successful_models
         if minimum_successful_models is not None
@@ -138,6 +175,11 @@ def run_model_matrix(
         prompt_template=active_prompt_template,
         constrained_actions=active_constrained_actions,
         thinking=active_thinking,
+        memory_conditions=active_memory_conditions,
+        memory_pressure_start=active_memory_pressure_start,
+        memory_window=active_memory_window,
+        task_state_probes=active_task_state_probes,
+        probe_interval=active_probe_interval,
     )
     protocol_path = output_dir / "experiment_protocol.json"
     write_frozen_protocol(protocol_path, protocol)
@@ -165,6 +207,11 @@ def run_model_matrix(
             prompt_template=active_prompt_template,
             constrained_actions=active_constrained_actions,
             thinking=active_thinking,
+            memory_conditions=active_memory_conditions,
+            memory_pressure_start=active_memory_pressure_start,
+            memory_window=active_memory_window,
+            task_state_probes=active_task_state_probes,
+            probe_interval=active_probe_interval,
             protocol_id=protocol["protocol_id"],
             pull_missing=pull_missing,
             installed_names=installed_names,
@@ -228,6 +275,11 @@ def run_model_matrix(
         "prompt_template": active_prompt_template,
         "constrained_actions": active_constrained_actions,
         "thinking": active_thinking,
+        "memory_conditions": active_memory_conditions,
+        "memory_pressure_start": active_memory_pressure_start,
+        "memory_window": active_memory_window,
+        "task_state_probes": active_task_state_probes,
+        "probe_interval": active_probe_interval,
         "pull_missing": pull_missing,
         "minimum_successful_models": minimum_successful,
         "successful_model_count": len(successful_models),
@@ -240,6 +292,7 @@ def run_model_matrix(
         "planned_run_count": (
             len(enabled_models)
             * len(active_task_ids)
+            * len(active_memory_conditions)
             * len(active_seeds)
             * len(active_variants)
         ),
@@ -287,6 +340,11 @@ def _run_one_model(
     prompt_template: str,
     constrained_actions: bool,
     thinking: bool,
+    memory_conditions: list[str],
+    memory_pressure_start: int,
+    memory_window: int,
+    task_state_probes: bool,
+    probe_interval: int,
     protocol_id: str,
     pull_missing: bool,
     installed_names: set[str],
@@ -299,7 +357,12 @@ def _run_one_model(
         model_name,
         installed_names,
     )
-    planned_run_count = len(task_ids) * len(seeds) * len(variants)
+    planned_run_count = (
+        len(task_ids)
+        * len(memory_conditions)
+        * len(seeds)
+        * len(variants)
+    )
     result: dict[str, Any] = {
         "model_family": model["model_family"],
         "model_name": model_name,
@@ -336,152 +399,180 @@ def _run_one_model(
         result["skip_reason"] = f"model not installed locally: {model_name}"
         return result
 
-    run_paths: dict[tuple[str, int, str], Path] = {}
+    run_paths: dict[tuple[str, str, int, str], Path] = {}
     for task_id in task_ids:
-        for seed in seeds:
-            trial_id = f"{model_slug}:{task_id}:seed-{seed}"
-            for variant in variants:
-                run_config = BenchmarkRunConfig(
-                    framework=framework,
-                    model_family=model["model_family"],
-                    model_name=model_name,
-                    agent_variant=variant,
-                    seed=seed,
-                    runtime=runtime,
-                    runtime_endpoint=runtime_endpoint,
-                    prompt_template=prompt_template,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    action_budget=action_budget,
-                    allow_runtime_fallback=False,
-                    trace_mode=trace_mode,
-                    workspace_root=str(output_dir / "workspaces"),
-                    constrained_actions=constrained_actions,
-                    thinking=thinking,
+        for memory_condition in memory_conditions:
+            for seed in seeds:
+                trial_id = (
+                    f"{model_slug}:{task_id}:{memory_condition}:seed-{seed}"
                 )
-                seed_dir = f"seed-{seed}"
-                run_path = (
-                    output_dir
-                    / "runs"
-                    / model_slug
-                    / seed_dir
-                    / variant
-                    / f"{task_id}.json"
-                )
-                try:
-                    run = runner.run_task_id(task_id, run_config)
-                except RuntimeError as exc:
-                    result["failed_run_count"] += 1
-                    result["errors"].append(
-                        {
-                            "task_id": task_id,
-                            "seed": seed,
-                            "variant": variant,
-                            "trial_id": trial_id,
-                            "error_type": "runtime_error",
-                            "error": str(exc),
-                        }
+                for variant in variants:
+                    run_config = BenchmarkRunConfig(
+                        framework=framework,
+                        model_family=model["model_family"],
+                        model_name=model_name,
+                        agent_variant=variant,
+                        seed=seed,
+                        runtime=runtime,
+                        runtime_endpoint=runtime_endpoint,
+                        prompt_template=prompt_template,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                        action_budget=action_budget,
+                        allow_runtime_fallback=False,
+                        trace_mode=trace_mode,
+                        workspace_root=str(output_dir / "workspaces"),
+                        constrained_actions=constrained_actions,
+                        thinking=thinking,
+                        memory_condition=memory_condition,
+                        memory_pressure_start=memory_pressure_start,
+                        memory_window=memory_window,
+                        task_state_probes=task_state_probes,
+                        probe_interval=probe_interval,
                     )
-                    continue
+                    seed_dir = f"seed-{seed}"
+                    run_path = (
+                        output_dir
+                        / "runs"
+                        / model_slug
+                        / memory_condition
+                        / seed_dir
+                        / variant
+                        / f"{task_id}.json"
+                    )
+                    try:
+                        run = runner.run_task_id(task_id, run_config)
+                    except RuntimeError as exc:
+                        result["failed_run_count"] += 1
+                        result["errors"].append(
+                            {
+                                "task_id": task_id,
+                                "memory_condition": memory_condition,
+                                "seed": seed,
+                                "variant": variant,
+                                "trial_id": trial_id,
+                                "error_type": "runtime_error",
+                                "error": str(exc),
+                            }
+                        )
+                        continue
 
-                run["experiment_context"] = {
-                    "protocol_id": protocol_id,
-                    "trial_id": trial_id,
-                    "seed": seed,
-                    "variant": variant,
-                }
-                _write_json(run_path, run)
-                run_paths[(task_id, seed, variant)] = run_path
-                run_info = indexed_artifact(
-                    run_path,
-                    output_dir=output_dir,
-                    extra={
-                        "task_id": task_id,
+                    run["experiment_context"] = {
+                        "protocol_id": protocol_id,
+                        "trial_id": trial_id,
+                        "memory_condition": memory_condition,
                         "seed": seed,
                         "variant": variant,
-                        "trial_id": trial_id,
-                        "runtime_error": run["run_metadata"].get(
-                            "runtime_error"
-                        ),
-                        "termination_reason": run["run_metadata"].get(
-                            "termination_reason"
-                        ),
-                        "evaluator_success": run["run_metadata"].get(
-                            "evaluator_success"
-                        ),
-                    },
-                )
-                result["runs"].append(run_info)
-                result["completed_run_count"] += 1
-
-                if variant == "baseline":
-                    score_path = (
-                        output_dir
-                        / "scores"
-                        / model_slug
-                        / seed_dir
-                        / f"{task_id}.json"
-                    )
-                    _write_json(score_path, build_memory_health_report(run))
-                    run_info["score_json"] = str(score_path.resolve())
-                    run_info["score_sha256"] = sha256_file(score_path)
-                if variant == "verified":
-                    verification_path = (
-                        output_dir
-                        / "verifications"
-                        / model_slug
-                        / seed_dir
-                        / f"{task_id}.json"
-                    )
-                    _write_json(
-                        verification_path,
-                        run.get("verification_report", {}),
-                    )
-                    run_info["verification_json"] = str(
-                        verification_path.resolve()
-                    )
-                    run_info["verification_sha256"] = sha256_file(
-                        verification_path
-                    )
-
-            baseline_path = run_paths.get((task_id, seed, "baseline"))
-            verified_path = run_paths.get((task_id, seed, "verified"))
-            if baseline_path and verified_path:
-                comparison_path = (
-                    output_dir
-                    / "comparisons"
-                    / model_slug
-                    / f"seed-{seed}"
-                    / f"{task_id}.json"
-                )
-                baseline = _read_json(baseline_path)
-                verified = _read_json(verified_path)
-                comparison = compare_runs(baseline, verified)
-                comparison["experiment_context"] = {
-                    "protocol_id": protocol_id,
-                    "trial_id": trial_id,
-                    "seed": seed,
-                }
-                _write_json(comparison_path, comparison)
-                result["comparisons"].append(
-                    indexed_artifact(
-                        comparison_path,
+                    }
+                    _write_json(run_path, run)
+                    run_paths[
+                        (task_id, memory_condition, seed, variant)
+                    ] = run_path
+                    run_info = indexed_artifact(
+                        run_path,
                         output_dir=output_dir,
                         extra={
                             "task_id": task_id,
+                            "memory_condition": memory_condition,
                             "seed": seed,
+                            "variant": variant,
                             "trial_id": trial_id,
-                            "blocked_actions": comparison[
-                                "verification_overhead"
-                            ]["blocked_actions"],
-                            "metric_deltas": comparison["metric_deltas"],
-                            "behavioral_outcomes": comparison[
-                                "behavioral_outcomes"
-                            ],
+                            "runtime_error": run["run_metadata"].get(
+                                "runtime_error"
+                            ),
+                            "termination_reason": run["run_metadata"].get(
+                                "termination_reason"
+                            ),
+                            "evaluator_success": run["run_metadata"].get(
+                                "evaluator_success"
+                            ),
                         },
                     )
+                    result["runs"].append(run_info)
+                    result["completed_run_count"] += 1
+
+                    if variant == "baseline":
+                        score_path = (
+                            output_dir
+                            / "scores"
+                            / model_slug
+                            / memory_condition
+                            / seed_dir
+                            / f"{task_id}.json"
+                        )
+                        _write_json(
+                            score_path,
+                            build_memory_health_report(run),
+                        )
+                        run_info["score_json"] = str(score_path.resolve())
+                        run_info["score_sha256"] = sha256_file(score_path)
+                    if variant == "verified":
+                        verification_path = (
+                            output_dir
+                            / "verifications"
+                            / model_slug
+                            / memory_condition
+                            / seed_dir
+                            / f"{task_id}.json"
+                        )
+                        _write_json(
+                            verification_path,
+                            run.get("verification_report", {}),
+                        )
+                        run_info["verification_json"] = str(
+                            verification_path.resolve()
+                        )
+                        run_info["verification_sha256"] = sha256_file(
+                            verification_path
+                        )
+
+                baseline_path = run_paths.get(
+                    (task_id, memory_condition, seed, "baseline")
                 )
-                result["completed_pair_count"] += 1
+                verified_path = run_paths.get(
+                    (task_id, memory_condition, seed, "verified")
+                )
+                if baseline_path and verified_path:
+                    comparison_path = (
+                        output_dir
+                        / "comparisons"
+                        / model_slug
+                        / memory_condition
+                        / f"seed-{seed}"
+                        / f"{task_id}.json"
+                    )
+                    baseline = _read_json(baseline_path)
+                    verified = _read_json(verified_path)
+                    comparison = compare_runs(baseline, verified)
+                    comparison["experiment_context"] = {
+                        "protocol_id": protocol_id,
+                        "trial_id": trial_id,
+                        "memory_condition": memory_condition,
+                        "seed": seed,
+                    }
+                    _write_json(comparison_path, comparison)
+                    result["comparisons"].append(
+                        indexed_artifact(
+                            comparison_path,
+                            output_dir=output_dir,
+                            extra={
+                                "task_id": task_id,
+                                "memory_condition": memory_condition,
+                                "seed": seed,
+                                "trial_id": trial_id,
+                                "blocked_actions": comparison[
+                                    "verification_overhead"
+                                ]["blocked_actions"],
+                                "metric_deltas": comparison[
+                                    "metric_deltas"
+                                ],
+                                "behavioral_outcomes": comparison[
+                                    "behavioral_outcomes"
+                                ],
+                            },
+                        )
+                    )
+                    result["completed_pair_count"] += 1
 
     if result["completed_run_count"] == planned_run_count and not result["errors"]:
         result["status"] = "succeeded"
@@ -584,6 +675,8 @@ def _model_matrix_summary(manifest: dict) -> str:
         f"- Seeds: `{manifest['seeds']}`",
         f"- Constrained actions: `{manifest['constrained_actions']}`",
         f"- Thinking mode: `{manifest['thinking']}`",
+        f"- Memory conditions: `{manifest['memory_conditions']}`",
+        f"- Task-state probes: `{manifest['task_state_probes']}`",
         f"- Planned runs: `{manifest['planned_run_count']}`",
         f"- Completed runs: `{manifest['completed_run_count']}`",
         f"- Failed runs: `{manifest['failed_run_count']}`",

@@ -1,0 +1,19 @@
+{
+  "task_id": "coding_retry_policy_001",
+  "final_test_step_id": "final_tests",
+  "steps": [
+    {"step_id": "list_workspace", "tool_name": "list_files", "description": "List the retry worker repository."},
+    {"step_id": "read_docs", "tool_name": "read_file", "path": "docs/retries.md", "description": "Inspect retry documentation and identify stale guidance."},
+    {"step_id": "read_errors", "tool_name": "read_file", "path": "errors.py", "description": "Inspect transient and permanent error types."},
+    {"step_id": "read_backoff", "tool_name": "read_file", "path": "backoff.py", "description": "Inspect delay calculation."},
+    {"step_id": "read_policy", "tool_name": "read_file", "path": "policy.py", "description": "Inspect retry eligibility."},
+    {"step_id": "read_worker", "tool_name": "read_file", "path": "worker.py", "description": "Inspect attempt-state lifecycle."},
+    {"step_id": "old_tests", "tool_name": "run_tests", "description": "Run the incomplete retry tests."},
+    {"step_id": "write_backoff", "tool_name": "write_file", "path": "backoff.py", "content_from": "solution/backoff.py", "description": "Implement capped exponential delay."},
+    {"step_id": "write_policy", "tool_name": "write_file", "path": "policy.py", "content_from": "solution/policy.py", "description": "Prevent retries for permanent failures."},
+    {"step_id": "write_worker", "tool_name": "write_file", "path": "worker.py", "content_from": "solution/worker.py", "description": "Reset attempt state after success."},
+    {"step_id": "write_tests", "tool_name": "write_file", "path": "test_worker.py", "content_from": "solution/test_worker.py", "description": "Add cross-module retry regression tests."},
+    {"step_id": "final_tests", "tool_name": "run_tests", "description": "Run visible and hidden tests after all retry edits.", "hidden_validation": "coding_retry_policy_001"},
+    {"step_id": "finish", "tool_name": "finish", "description": "Finish with current retry evidence.", "claim": "Retry delays, permanent-error handling, and attempt reset are implemented and verified."}
+  ]
+}

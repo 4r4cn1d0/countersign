@@ -6,7 +6,8 @@
     "execution": "sequential",
     "notes": [
       "Run one model at a time on local Ollama.",
-      "Prefer 3B-12B quantized models for thermal and memory headroom.",
+      "Prefer 3B-12B quantized models for routine sweeps.",
+      "Run Devstral Small 2 24B alone; its roughly 15 GB quantized footprint leaves limited but workable headroom on 24 GB unified memory.",
       "Run Gemma 4 12B MLX as a single-model check when thermal throttling or memory pressure is a concern.",
       "Do not count skipped or deterministic-fallback runs as real-runtime evidence."
     ]
@@ -21,6 +22,11 @@
   "action_budget": 20,
   "constrained_actions": true,
   "thinking": false,
+  "memory_conditions": ["full_history"],
+  "memory_pressure_start": 6,
+  "memory_window": 8,
+  "task_state_probes": true,
+  "probe_interval": 5,
   "minimum_successful_models": 5,
   "models": [
     {
@@ -51,6 +57,16 @@
       "license_note": "Apache-2.0.",
       "role": "general instruction and function-calling baseline",
       "pull_command": "ollama pull mistral:7b",
+      "enabled": false
+    },
+    {
+      "model_family": "mistral",
+      "model_name": "devstral-small-2:24b",
+      "display_name": "Devstral Small 2 24B",
+      "approx_size_gb": 15.0,
+      "license_note": "Apache-2.0; Mistral's local agentic coding model.",
+      "role": "primary Mistral-family software-engineering agent",
+      "pull_command": "ollama pull devstral-small-2:24b",
       "enabled": true
     },
     {

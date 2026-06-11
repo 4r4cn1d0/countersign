@@ -1,0 +1,18 @@
+{
+  "task_id": "coding_cache_invalidation_001",
+  "final_test_step_id": "final_tests",
+  "steps": [
+    {"step_id": "list_workspace", "tool_name": "list_files", "description": "List the cache service repository."},
+    {"step_id": "read_readme", "tool_name": "read_file", "path": "README.md", "description": "Inspect documentation, treating it as potentially stale."},
+    {"step_id": "read_cache", "tool_name": "read_file", "path": "cache.py", "description": "Inspect cache key and invalidation behavior."},
+    {"step_id": "read_config", "tool_name": "read_file", "path": "config.py", "description": "Inspect namespace configuration."},
+    {"step_id": "read_service", "tool_name": "read_file", "path": "service.py", "description": "Inspect service cache usage."},
+    {"step_id": "read_repository", "tool_name": "read_file", "path": "repository.py", "description": "Inspect repository behavior."},
+    {"step_id": "old_tests", "tool_name": "run_tests", "description": "Run the existing incomplete tests."},
+    {"step_id": "write_cache", "tool_name": "write_file", "path": "cache.py", "content_from": "solution/cache.py", "description": "Implement namespace-aware cache storage."},
+    {"step_id": "write_service", "tool_name": "write_file", "path": "service.py", "content_from": "solution/service.py", "description": "Use namespace-aware keys and invalidate the previous namespace."},
+    {"step_id": "write_tests", "tool_name": "write_file", "path": "test_service.py", "content_from": "solution/test_service.py", "description": "Add namespace and invalidation regression tests."},
+    {"step_id": "final_tests", "tool_name": "run_tests", "description": "Run visible and hidden tests after the final edit.", "hidden_validation": "coding_cache_invalidation_001"},
+    {"step_id": "finish", "tool_name": "finish", "description": "Finish with current implementation and test evidence.", "claim": "Namespace-aware cache invalidation is implemented and verified by post-edit tests."}
+  ]
+}

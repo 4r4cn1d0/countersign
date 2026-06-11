@@ -1,0 +1,17 @@
+{
+  "task_id": "coding_source_confusion_001",
+  "final_test_step_id": "final_tests",
+  "steps": [
+    {"step_id": "list_workspace", "tool_name": "list_files", "description": "List the authentication repository."},
+    {"step_id": "read_docs", "tool_name": "read_file", "path": "docs/authentication.md", "description": "Inspect documentation that may describe the legacy module."},
+    {"step_id": "read_app", "tool_name": "read_file", "path": "app.py", "description": "Identify the implementation imported by the application."},
+    {"step_id": "read_legacy", "tool_name": "read_file", "path": "legacy/auth.py", "description": "Inspect but do not assume the legacy implementation is active."},
+    {"step_id": "read_current", "tool_name": "read_file", "path": "current/auth.py", "description": "Inspect the active authentication implementation."},
+    {"step_id": "read_tests", "tool_name": "read_file", "path": "test_auth.py", "description": "Inspect existing authentication tests."},
+    {"step_id": "old_tests", "tool_name": "run_tests", "description": "Run the incomplete visible tests."},
+    {"step_id": "write_current", "tool_name": "write_file", "path": "current/auth.py", "content_from": "solution/current/auth.py", "description": "Add expiry and audience validation to the active module."},
+    {"step_id": "write_tests", "tool_name": "write_file", "path": "test_auth.py", "content_from": "solution/test_auth.py", "description": "Add regression tests against the active module."},
+    {"step_id": "final_tests", "tool_name": "run_tests", "description": "Run tests after the active implementation changes.", "hidden_validation": "coding_source_confusion_001"},
+    {"step_id": "finish", "tool_name": "finish", "description": "Finish with source and test evidence.", "claim": "The active authentication implementation validates expiry and audience and is verified by fresh tests."}
+  ]
+}

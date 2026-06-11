@@ -29,24 +29,36 @@ def build_experiment_protocol(
     prompt_template: str,
     constrained_actions: bool,
     thinking: bool,
+    memory_conditions: list[str] | None = None,
+    memory_pressure_start: int = 6,
+    memory_window: int = 8,
+    task_state_probes: bool = False,
+    probe_interval: int = 5,
 ) -> dict:
     """Build a predeclared protocol whose identifier excludes wall-clock time."""
 
+    active_memory_conditions = memory_conditions or ["full_history"]
     protocol_body = {
         "schema_version": "agent-memory-experiment-protocol/v0.1",
         "research_question": (
-            "Does in-loop evidence verification reduce accepted false-completion "
-            "claims in open-source coding agents under stale-memory pressure?"
+            "How do controlled memory-pressure conditions affect task-state "
+            "accuracy and false-completion behavior in open-source coding agents, "
+            "and does in-loop evidence verification reduce unsafe completion?"
         ),
         "design": {
-            "unit_of_analysis": "model-task-seed pair",
-            "pairing": "baseline and verified variants share model, task, and seed",
+            "unit_of_analysis": "model-task-memory-condition-seed pair",
+            "pairing": (
+                "Baseline and verified variants share model, task, memory "
+                "condition, and seed."
+            ),
             "runtime": runtime,
             "framework": framework,
             "variants": variants,
             "seeds": seeds,
+            "memory_conditions": active_memory_conditions,
             "execution_order": (
-                "For each model, task, and seed, execute variants in the declared order."
+                "For each model, task, memory condition, and seed, execute "
+                "variants in the declared order."
             ),
         },
         "generation": {
@@ -58,6 +70,28 @@ def build_experiment_protocol(
             "constrained_actions": constrained_actions,
             "thinking": thinking,
             "runtime_fallback_allowed": False,
+        },
+        "memory_pressure": {
+            "conditions": active_memory_conditions,
+            "activation_action_count": memory_pressure_start,
+            "visible_evidence_window": memory_window,
+            "canonical_evaluator_state_is_never_transformed": True,
+            "treatment_scope": (
+                "Only model-visible evidence and observations are transformed."
+            ),
+        },
+        "task_state_probes": {
+            "enabled": task_state_probes,
+            "interval_actions": probe_interval,
+            "method": (
+                "A non-intervening model fork reconstructs structured task state "
+                "from the same visible memory and is scored against canonical "
+                "executable state."
+            ),
+            "deterministic_probe_policy": (
+                "Deterministic oracle probes validate instrumentation and are "
+                "excluded from empirical probe outcomes."
+            ),
         },
         "datasets": {
             "benchmark": {
@@ -91,6 +125,10 @@ def build_experiment_protocol(
                 "recovery_after_block",
                 "action_compliance_rate",
                 "extra_model_actions",
+                "task_state_probe_accuracy",
+                "subtask_state_probe_accuracy",
+                "latest_test_probe_accuracy",
+                "evidence_attribution_probe_accuracy",
             ],
         },
         "analysis_plan": {
@@ -119,7 +157,7 @@ def build_experiment_protocol(
             ],
             "reporting": (
                 "Every excluded pair must appear in the exclusion ledger with its "
-                "model, task, seed, and reason."
+                "model, task, memory condition, seed, and reason."
             ),
         },
         "source_revision": git_revision(),

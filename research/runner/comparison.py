@@ -34,6 +34,8 @@ def compare_runs(baseline_run: dict, verified_run: dict) -> dict:
         behavioral_evidence_available,
     )
     effective_report = verified_run.get("effective_memory_health_report")
+    baseline_probe = baseline_run.get("task_state_probe_summary", {})
+    verified_probe = verified_run.get("task_state_probe_summary", {})
 
     return {
         "schema_version": "agent-memory-comparison/v0.2",
@@ -59,6 +61,26 @@ def compare_runs(baseline_run: dict, verified_run: dict) -> dict:
         ),
         "behavioral_evidence_available": behavioral_evidence_available,
         "behavioral_outcomes": behavioral_outcomes,
+        "task_state_probe_comparison": {
+            "baseline": baseline_probe or None,
+            "verified": verified_probe or None,
+            "overall_accuracy_delta": _optional_delta(
+                baseline_probe.get("mean_overall_accuracy"),
+                verified_probe.get("mean_overall_accuracy"),
+            ),
+            "latest_test_accuracy_delta": _optional_delta(
+                baseline_probe.get("mean_latest_test_accuracy"),
+                verified_probe.get("mean_latest_test_accuracy"),
+            ),
+            "evidence_attribution_accuracy_delta": _optional_delta(
+                baseline_probe.get(
+                    "mean_evidence_attribution_accuracy"
+                ),
+                verified_probe.get(
+                    "mean_evidence_attribution_accuracy"
+                ),
+            ),
+        },
         "verification_decision_counts": verified_run.get(
             "verification_report", {}
         ).get("decision_counts", {}),
@@ -147,3 +169,12 @@ def _model_action_count(run: dict) -> int:
         if event.get("event_type") == "model_response"
         and event.get("graph_node") == "choose_action"
     )
+
+
+def _optional_delta(
+    baseline: float | None,
+    verified: float | None,
+) -> float | None:
+    if baseline is None or verified is None:
+        return None
+    return round(float(verified) - float(baseline), 4)

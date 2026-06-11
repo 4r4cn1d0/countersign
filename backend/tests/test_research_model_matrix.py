@@ -184,6 +184,68 @@ def test_model_matrix_runs_paired_multi_seed_trials_with_hashes(tmp_path: Path):
     assert audit_model_matrix_manifest(Path(manifest["manifest_path"]))["valid"] is True
 
 
+def test_model_matrix_treats_memory_condition_as_a_paired_experiment_axis(
+    tmp_path: Path,
+):
+    matrix_path = tmp_path / "matrix.json"
+    matrix_path.write_text(
+        json.dumps(
+            {
+                "runtime": "deterministic",
+                "minimum_successful_models": 1,
+                "models": [
+                    {
+                        "model_family": "qwen",
+                        "model_name": "qwen2.5-coder:7b",
+                        "enabled": True,
+                    }
+                ],
+            }
+        )
+    )
+
+    manifest = run_model_matrix(
+        tmp_path / "out",
+        matrix_path=matrix_path,
+        framework="langgraph_tools",
+        task_ids=["coding_stale_tests_001"],
+        variants=["baseline", "verified"],
+        seeds=[5],
+        memory_conditions=["full_history", "temporal_corruption"],
+        memory_pressure_start=2,
+        task_state_probes=True,
+        probe_interval=2,
+        minimum_successful_models=1,
+        trace_mode="model_driven",
+    )
+
+    model = manifest["models"][0]
+    assert manifest["memory_conditions"] == [
+        "full_history",
+        "temporal_corruption",
+    ]
+    assert manifest["planned_run_count"] == 4
+    assert model["completed_pair_count"] == 2
+    assert {
+        run["memory_condition"] for run in model["runs"]
+    } == {"full_history", "temporal_corruption"}
+    assert len({run["trial_id"] for run in model["runs"]}) == 2
+    assert all(
+        run["memory_condition"] in run["relative_path"]
+        for run in model["runs"]
+    )
+
+    report = analyze_model_matrix_manifest(Path(manifest["manifest_path"]))
+    assert report["planned_pair_count"] == 2
+    assert {
+        row["memory_condition"] for row in report["tasks"]
+    } == {"full_history", "temporal_corruption"}
+    assert (
+        report["paired_statistics"]["analysis_unit"]
+        == "model-task-memory-condition-seed pair"
+    )
+
+
 def test_artifact_audit_detects_tampering(tmp_path: Path):
     matrix_path = tmp_path / "matrix.json"
     matrix_path.write_text(

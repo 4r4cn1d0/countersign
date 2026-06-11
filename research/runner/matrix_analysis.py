@@ -24,6 +24,10 @@ def analyze_model_matrix_manifest(manifest_path: Path) -> dict:
             model,
             manifest_dir,
             task_ids=manifest.get("task_ids", []),
+            memory_conditions=manifest.get(
+                "memory_conditions",
+                ["full_history"],
+            ),
             seeds=manifest.get("seeds", [0]),
         )
         task_rows.extend(rows)
@@ -45,6 +49,11 @@ def analyze_model_matrix_manifest(manifest_path: Path) -> dict:
         "prompt_template": manifest.get("prompt_template"),
         "constrained_actions": manifest.get("constrained_actions"),
         "thinking": manifest.get("thinking"),
+        "memory_conditions": manifest.get(
+            "memory_conditions",
+            ["full_history"],
+        ),
+        "task_state_probes": manifest.get("task_state_probes", False),
         "seeds": manifest.get("seeds", [0]),
         "model_count": len(model_rows),
         "successful_model_count": len(successful_rows),
@@ -94,6 +103,8 @@ def format_model_matrix_analysis_markdown(report: dict) -> str:
         f"- Framework: `{report.get('framework')}`",
         f"- Runtime: `{report.get('runtime')}`",
         f"- Seeds: `{report.get('seeds')}`",
+        f"- Memory conditions: `{report.get('memory_conditions')}`",
+        f"- Task-state probes: `{report.get('task_state_probes')}`",
         f"- Constrained actions: `{report.get('constrained_actions')}`",
         f"- Thinking mode: `{report.get('thinking')}`",
         f"- Fully successful models: `{report['successful_model_count']}`",
@@ -154,15 +165,16 @@ def format_model_matrix_analysis_markdown(report: dict) -> str:
             "",
             "## Coding-Agent Intervention Matrix",
             "",
-            "| Model | Task | Seed | Eligible | Baseline Outcome | Verified Outcome | Baseline Accepted False | Verified Proposed False | Blocked False | Verified Accepted False | Extra Actions |",
-            "|---|---|---:|---:|---|---|---:|---:|---:|---:|---:|",
+            "| Model | Task | Memory | Seed | Eligible | Baseline Outcome | Verified Outcome | Baseline Accepted False | Verified Proposed False | Blocked False | Verified Accepted False | Baseline Probe | Verified Probe | Extra Actions |",
+            "|---|---|---|---:|---:|---|---|---:|---:|---:|---:|---:|---:|---:|",
         ]
     )
     for row in report["tasks"]:
         lines.append(
-            "| `{model}` | `{task}` | {seed} | {eligible} | `{baseline_outcome}` | `{verified_outcome}` | {baseline_false} | {verified_proposed} | {blocked_false} | {verified_false} | {actions} |".format(
+            "| `{model}` | `{task}` | `{memory}` | {seed} | {eligible} | `{baseline_outcome}` | `{verified_outcome}` | {baseline_false} | {verified_proposed} | {blocked_false} | {verified_false} | {baseline_probe} | {verified_probe} | {actions} |".format(
                 model=row["model_name"],
                 task=row["task_id"],
+                memory=row["memory_condition"],
                 seed=row["seed"],
                 eligible=row["pair_eligible"],
                 baseline_outcome=row["baseline_task_outcome"],
@@ -171,6 +183,8 @@ def format_model_matrix_analysis_markdown(report: dict) -> str:
                 verified_proposed=row["verified_false_finish_proposals"],
                 blocked_false=row["verified_blocked_false_finishes"],
                 verified_false=row["verified_accepted_false_finishes"],
+                baseline_probe=row["baseline_probe_overall_accuracy"],
+                verified_probe=row["verified_probe_overall_accuracy"],
                 actions=row["extra_model_actions"],
             )
         )
@@ -194,9 +208,10 @@ def format_model_matrix_analysis_markdown(report: dict) -> str:
     lines.extend(["", "## Exclusion Ledger", ""])
     if statistics["exclusion_ledger"]:
         lines.extend(
-            "- `{model}` / `{task}` / seed `{seed}`: {reason}".format(
+            "- `{model}` / `{task}` / `{memory}` / seed `{seed}`: {reason}".format(
                 model=item["model_name"],
                 task=item["task_id"],
+                memory=item.get("memory_condition", "full_history"),
                 seed=item["seed"],
                 reason=item["reason"],
             )
@@ -221,26 +236,43 @@ def _task_rows_for_model(
     manifest_dir: Path,
     *,
     task_ids: list[str],
+    memory_conditions: list[str],
     seeds: list[int],
 ) -> list[dict]:
-    runs_by_pair: dict[tuple[str, int], dict[str, dict]] = defaultdict(dict)
+    runs_by_pair: dict[
+        tuple[str, str, int],
+        dict[str, dict],
+    ] = defaultdict(dict)
     for task_id in task_ids:
-        for seed in seeds:
-            runs_by_pair[(task_id, int(seed))]
+        for memory_condition in memory_conditions:
+            for seed in seeds:
+                runs_by_pair[
+                    (task_id, memory_condition, int(seed))
+                ]
     for run_info in model.get("runs", []):
         seed = int(run_info.get("seed", 0))
-        runs_by_pair[(run_info["task_id"], seed)][
+        memory_condition = run_info.get(
+            "memory_condition",
+            "full_history",
+        )
+        runs_by_pair[(run_info["task_id"], memory_condition, seed)][
             run_info["variant"]
         ] = run_info
     for error in model.get("errors", []):
-        key = (error["task_id"], int(error.get("seed", 0)))
+        key = (
+            error["task_id"],
+            error.get("memory_condition", "full_history"),
+            int(error.get("seed", 0)),
+        )
         runs_by_pair[key].setdefault(
             f"{error.get('variant')}_error",
             error,
         )
 
     rows = []
-    for (task_id, seed), pair in sorted(runs_by_pair.items()):
+    for (task_id, memory_condition, seed), pair in sorted(
+        runs_by_pair.items()
+    ):
         baseline_info = pair.get("baseline")
         verified_info = pair.get("verified")
         baseline = _read_run_info(baseline_info, manifest_dir)
@@ -250,6 +282,8 @@ def _task_rows_for_model(
         baseline_interaction = baseline.get("interaction_metrics", {})
         verified_interaction = verified.get("interaction_metrics", {})
         baseline_health = baseline.get("memory_health_report", {})
+        baseline_probe = baseline.get("task_state_probe_summary", {})
+        verified_probe = verified.get("task_state_probe_summary", {})
         metrics = baseline_health.get("metrics", {})
         verification_report = verified.get("verification_report", {})
         baseline_counts = baseline_health.get("claim_counts", {})
@@ -279,6 +313,7 @@ def _task_rows_for_model(
                 "model_name": model["model_name"],
                 "model_family": model.get("model_family"),
                 "task_id": task_id,
+                "memory_condition": memory_condition,
                 "seed": seed,
                 "trial_id": (
                     baseline_info or verified_info or {}
@@ -383,6 +418,40 @@ def _task_rows_for_model(
                 ),
                 "verified_action_compliance_rate": float(
                     verified_interaction.get("action_compliance_rate", 0.0)
+                ),
+                "baseline_probe_eligible_count": int(
+                    baseline_probe.get("eligible_probe_count", 0)
+                ),
+                "verified_probe_eligible_count": int(
+                    verified_probe.get("eligible_probe_count", 0)
+                ),
+                "baseline_probe_overall_accuracy": baseline_probe.get(
+                    "mean_overall_accuracy"
+                ),
+                "verified_probe_overall_accuracy": verified_probe.get(
+                    "mean_overall_accuracy"
+                ),
+                "baseline_probe_subtask_accuracy": baseline_probe.get(
+                    "mean_subtask_state_accuracy"
+                ),
+                "verified_probe_subtask_accuracy": verified_probe.get(
+                    "mean_subtask_state_accuracy"
+                ),
+                "baseline_probe_latest_test_accuracy": baseline_probe.get(
+                    "mean_latest_test_accuracy"
+                ),
+                "verified_probe_latest_test_accuracy": verified_probe.get(
+                    "mean_latest_test_accuracy"
+                ),
+                "baseline_probe_evidence_attribution_accuracy": (
+                    baseline_probe.get(
+                        "mean_evidence_attribution_accuracy"
+                    )
+                ),
+                "verified_probe_evidence_attribution_accuracy": (
+                    verified_probe.get(
+                        "mean_evidence_attribution_accuracy"
+                    )
                 ),
                 "extra_model_actions": (
                     verified_iterations - baseline_iterations

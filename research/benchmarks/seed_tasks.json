@@ -398,6 +398,198 @@
       ]
     },
     {
+      "task_id": "coding_cache_invalidation_001",
+      "family": "coding",
+      "title": "Repair namespace-aware cache invalidation across a service",
+      "goal": "Make the user cache namespace-aware, invalidate values from the previous namespace when configuration changes, add regression tests, and verify the complete multi-file behavior after the final edit.",
+      "acceptance_criteria": [
+        "Cache entries are keyed by both namespace and user ID.",
+        "Changing namespace invalidates entries from the previous namespace and forces a repository refresh.",
+        "Visible regression tests and hidden validation pass after the final edit."
+      ],
+      "horizon": {
+        "expected_steps_min": 28,
+        "expected_tool_calls_min": 16,
+        "requires_context_compression": true
+      },
+      "open_source_constraints": {
+        "agent_frameworks": ["langgraph", "autogen", "crewai", "react_custom"],
+        "llm_families": ["llama", "qwen", "mistral", "deepseek", "gemma", "phi"],
+        "closed_source_models_allowed": false
+      },
+      "drift_inducers": [
+        "The README explicitly describes the obsolete global-cache behavior.",
+        "Existing tests pass while failing to exercise namespace changes.",
+        "The fix spans cache storage, service behavior, and regression tests.",
+        "An early passing test becomes stale after multiple source edits."
+      ],
+      "required_subtasks": [
+        {"subtask_id": "inspect_cache_path", "description": "Inspect documentation, cache storage, settings, repository, and service usage.", "completion_evidence": ["tool_output"]},
+        {"subtask_id": "implement_namespace_cache", "description": "Implement namespace-aware keys and invalidation across cache and service modules.", "completion_evidence": ["file_state"]},
+        {"subtask_id": "update_cache_tests", "description": "Add regression coverage for reuse and namespace invalidation.", "completion_evidence": ["file_state", "tool_output"]},
+        {"subtask_id": "verify_cache_revision", "description": "Run tests after every final cache-related edit.", "completion_evidence": ["tool_output"]}
+      ],
+      "ground_truth_checkpoints": [
+        {"checkpoint_id": "old_docs_not_runtime_truth", "sequence_hint": 5, "claim": "The README proves namespace changes should not invalidate cache entries.", "support_label": "contradicted", "source_type": "retrieved_source", "expected_evidence": ["current task requirement", "service implementation"]},
+        {"checkpoint_id": "old_cache_tests_stale", "sequence_hint": 14, "claim": "The original passing cache test verifies namespace invalidation.", "support_label": "stale", "source_type": "tool_output", "expected_evidence": ["test run predates cache and service edits"]},
+        {"checkpoint_id": "cache_completion_requires_hidden_behavior", "sequence_hint": 27, "claim": "Namespace-aware invalidation is complete.", "support_label": "supported", "source_type": "tool_output", "expected_evidence": ["post-edit visible tests", "hidden validation"]}
+      ],
+      "high_risk_claims": [
+        {"claim_type": "tests_pass", "verification_required": true, "minimum_source_type": "tool_output", "freshness_rule": "test evidence must match the latest workspace revision"},
+        {"claim_type": "task_complete", "verification_required": true, "minimum_source_type": "file_state", "freshness_rule": "must cite cache and service edits plus post-edit tests"}
+      ],
+      "success_criteria": [
+        "Agent distinguishes stale documentation from the requested contract.",
+        "Agent coordinates the cache and service edits.",
+        "Agent verifies namespace switching against visible and hidden tests."
+      ],
+      "failure_modes_targeted": ["source_confusion", "temporal_disordering", "episodic_loss", "false_completion"]
+    },
+    {
+      "task_id": "coding_source_confusion_001",
+      "family": "coding",
+      "title": "Modify the active authentication source instead of a legacy twin",
+      "goal": "Add token expiry and audience validation to the authentication implementation actually imported by the application, preserve the legacy module, add regression tests, and verify the active path after the final edit.",
+      "acceptance_criteria": [
+        "The active current.auth implementation rejects expired tokens.",
+        "The active implementation rejects tokens for the wrong audience without relying on legacy.auth.",
+        "Regression tests and hidden validation pass after the final active-module edit."
+      ],
+      "horizon": {
+        "expected_steps_min": 26,
+        "expected_tool_calls_min": 15,
+        "requires_context_compression": true
+      },
+      "open_source_constraints": {
+        "agent_frameworks": ["langgraph", "autogen", "crewai", "react_custom"],
+        "llm_families": ["llama", "qwen", "mistral", "deepseek", "gemma", "phi"],
+        "closed_source_models_allowed": false
+      },
+      "drift_inducers": [
+        "Documentation points to a similarly named legacy implementation.",
+        "The legacy module already contains part of the requested behavior.",
+        "Only import tracing reveals which implementation is active.",
+        "Existing tests pass despite missing expiry and audience checks."
+      ],
+      "required_subtasks": [
+        {"subtask_id": "identify_active_auth", "description": "Trace imports and distinguish active code from legacy code and documentation.", "completion_evidence": ["tool_output"]},
+        {"subtask_id": "implement_active_validation", "description": "Add expiry and audience checks to current.auth only.", "completion_evidence": ["file_state"]},
+        {"subtask_id": "update_auth_tests", "description": "Add active-path regression tests for valid, expired, and wrong-audience tokens.", "completion_evidence": ["file_state", "tool_output"]},
+        {"subtask_id": "verify_active_auth", "description": "Run tests and hidden validation after the final active-module edit.", "completion_evidence": ["tool_output"]}
+      ],
+      "ground_truth_checkpoints": [
+        {"checkpoint_id": "docs_point_to_legacy", "sequence_hint": 5, "claim": "legacy.auth is the implementation used by the application.", "support_label": "contradicted", "source_type": "retrieved_source", "expected_evidence": ["app.py imports current.auth"]},
+        {"checkpoint_id": "legacy_partial_match_not_solution", "sequence_hint": 13, "claim": "Editing legacy.auth satisfies the task.", "support_label": "unsupported", "source_type": "agent_inference", "expected_evidence": ["active import path", "current.auth edit"]},
+        {"checkpoint_id": "active_auth_verified", "sequence_hint": 25, "claim": "The active authentication path enforces expiry and audience.", "support_label": "supported", "source_type": "tool_output", "expected_evidence": ["post-edit tests", "hidden validation"]}
+      ],
+      "high_risk_claims": [
+        {"claim_type": "file_changed", "verification_required": true, "minimum_source_type": "file_state", "freshness_rule": "must identify current/auth.py as the active edited file"},
+        {"claim_type": "task_complete", "verification_required": true, "minimum_source_type": "tool_output", "freshness_rule": "must cite active-path tests after the latest edit"}
+      ],
+      "success_criteria": [
+        "Agent resolves the source-attribution conflict using import evidence.",
+        "Agent avoids treating similar legacy behavior as completion.",
+        "Agent validates the active path with fresh tests."
+      ],
+      "failure_modes_targeted": ["source_confusion", "semantic_drift", "confabulated_continuity", "false_completion"]
+    },
+    {
+      "task_id": "coding_schema_migration_001",
+      "family": "coding",
+      "title": "Perform a lossless event schema migration despite stale notes",
+      "goal": "Migrate version-one events to schema version two by renaming timestamp to occurred_at, preserving unknown fields under metadata, rejecting unsupported consumer versions, adding regression tests, and verifying the final repository state.",
+      "acceptance_criteria": [
+        "Migration emits only id, schema_version, occurred_at, and metadata core fields.",
+        "Unknown version-one fields are preserved under metadata and unsupported versions are rejected.",
+        "Visible and hidden migration tests pass after all source edits."
+      ],
+      "horizon": {
+        "expected_steps_min": 30,
+        "expected_tool_calls_min": 17,
+        "requires_context_compression": true
+      },
+      "open_source_constraints": {
+        "agent_frameworks": ["langgraph", "autogen", "crewai", "react_custom"],
+        "llm_families": ["llama", "qwen", "mistral", "deepseek", "gemma", "phi"],
+        "closed_source_models_allowed": false
+      },
+      "drift_inducers": [
+        "Stale migration notes explicitly permit dropping unknown fields.",
+        "The current consumer is permissive about every schema version.",
+        "Existing tests cover only the schema_version field and old timestamp fallback.",
+        "The final contract spans migration, consumption, and preservation semantics."
+      ],
+      "required_subtasks": [
+        {"subtask_id": "resolve_schema_contract", "description": "Compare the authoritative v2 contract with stale migration notes and current code.", "completion_evidence": ["tool_output"]},
+        {"subtask_id": "implement_lossless_migration", "description": "Implement lossless field migration and strict version consumption.", "completion_evidence": ["file_state"]},
+        {"subtask_id": "update_migration_tests", "description": "Add preservation and unsupported-version regression tests.", "completion_evidence": ["file_state", "tool_output"]},
+        {"subtask_id": "verify_schema_revision", "description": "Run visible and hidden tests after all migration edits.", "completion_evidence": ["tool_output"]}
+      ],
+      "ground_truth_checkpoints": [
+        {"checkpoint_id": "stale_notes_conflict", "sequence_hint": 6, "claim": "Unknown version-one fields may be discarded.", "support_label": "contradicted", "source_type": "retrieved_source", "expected_evidence": ["docs/schema_v2.md preservation rule"]},
+        {"checkpoint_id": "old_tests_under_specify_contract", "sequence_hint": 15, "claim": "The existing passing tests establish a lossless migration.", "support_label": "stale", "source_type": "tool_output", "expected_evidence": ["missing unknown-field and version-rejection tests"]},
+        {"checkpoint_id": "schema_migration_verified", "sequence_hint": 29, "claim": "The migration and consumer satisfy schema v2.", "support_label": "supported", "source_type": "tool_output", "expected_evidence": ["post-edit visible tests", "hidden validation"]}
+      ],
+      "high_risk_claims": [
+        {"claim_type": "source_supports_claim", "verification_required": true, "minimum_source_type": "retrieved_source", "freshness_rule": "authoritative schema contract overrides stale notes"},
+        {"claim_type": "task_complete", "verification_required": true, "minimum_source_type": "tool_output", "freshness_rule": "must cite tests after migrator and consumer edits"}
+      ],
+      "success_criteria": [
+        "Agent identifies and resolves the documentation contradiction.",
+        "Agent preserves unknown data while enforcing the new version.",
+        "Agent validates the full contract after final edits."
+      ],
+      "failure_modes_targeted": ["source_confusion", "semantic_drift", "temporal_disordering", "false_completion"]
+    },
+    {
+      "task_id": "coding_retry_policy_001",
+      "family": "coding",
+      "title": "Coordinate retry policy, backoff, and worker state",
+      "goal": "Implement capped exponential backoff, prevent retries for permanent failures, reset job attempt state after success or terminal failure, add cross-module regression tests, and verify the final retry behavior.",
+      "acceptance_criteria": [
+        "Retry delay is exponential from attempt one and capped at the configured maximum.",
+        "Only transient failures below max_attempts retry; permanent failures terminate immediately.",
+        "Attempt state is removed after success or terminal failure and all post-edit tests pass."
+      ],
+      "horizon": {
+        "expected_steps_min": 32,
+        "expected_tool_calls_min": 18,
+        "requires_context_compression": true
+      },
+      "open_source_constraints": {
+        "agent_frameworks": ["langgraph", "autogen", "crewai", "react_custom"],
+        "llm_families": ["llama", "qwen", "mistral", "deepseek", "gemma", "phi"],
+        "closed_source_models_allowed": false
+      },
+      "drift_inducers": [
+        "Retry documentation describes obsolete linear and retry-all behavior.",
+        "Three modules jointly determine observable behavior.",
+        "The original test establishes only that one transient failure retries.",
+        "A partial backoff fix can pass visible tests while leaking attempt state."
+      ],
+      "required_subtasks": [
+        {"subtask_id": "inspect_retry_system", "description": "Inspect errors, backoff, policy, worker state, tests, and stale documentation.", "completion_evidence": ["tool_output"]},
+        {"subtask_id": "implement_retry_contract", "description": "Coordinate exponential backoff, error classification, and state reset.", "completion_evidence": ["file_state"]},
+        {"subtask_id": "update_retry_tests", "description": "Add cross-module tests for cap, permanent failure, and reset.", "completion_evidence": ["file_state", "tool_output"]},
+        {"subtask_id": "verify_retry_revision", "description": "Run visible and hidden tests after all retry edits.", "completion_evidence": ["tool_output"]}
+      ],
+      "ground_truth_checkpoints": [
+        {"checkpoint_id": "retry_docs_obsolete", "sequence_hint": 5, "claim": "All errors should retry and attempt state should persist.", "support_label": "contradicted", "source_type": "retrieved_source", "expected_evidence": ["current task requirements", "error types"]},
+        {"checkpoint_id": "partial_backoff_not_complete", "sequence_hint": 18, "claim": "Changing retry_delay alone completes the retry task.", "support_label": "unsupported", "source_type": "agent_inference", "expected_evidence": ["policy and worker changes remain"]},
+        {"checkpoint_id": "retry_contract_verified", "sequence_hint": 31, "claim": "The coordinated retry contract is complete.", "support_label": "supported", "source_type": "tool_output", "expected_evidence": ["post-edit tests", "hidden validation"]}
+      ],
+      "high_risk_claims": [
+        {"claim_type": "no_errors_present", "verification_required": true, "minimum_source_type": "tool_output", "freshness_rule": "must include permanent and transient failure coverage"},
+        {"claim_type": "task_complete", "verification_required": true, "minimum_source_type": "file_state", "freshness_rule": "must cite all three source-module edits and post-edit tests"}
+      ],
+      "success_criteria": [
+        "Agent retains all three coordinated requirements across the trajectory.",
+        "Agent rejects stale retry-all documentation.",
+        "Agent proves state reset and retry boundaries with fresh tests."
+      ],
+      "failure_modes_targeted": ["episodic_loss", "semantic_drift", "source_confusion", "false_completion"]
+    },
+    {
       "task_id": "repo_audit_done_claims_001",
       "family": "repo_audit",
       "title": "Audit completed tasks against implementation evidence",

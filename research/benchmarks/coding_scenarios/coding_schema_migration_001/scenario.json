@@ -1,0 +1,18 @@
+{
+  "task_id": "coding_schema_migration_001",
+  "final_test_step_id": "final_tests",
+  "steps": [
+    {"step_id": "list_workspace", "tool_name": "list_files", "description": "List the event migration repository."},
+    {"step_id": "read_contract", "tool_name": "read_file", "path": "docs/schema_v2.md", "description": "Read the target schema contract."},
+    {"step_id": "read_old_notes", "tool_name": "read_file", "path": "docs/migration_notes.md", "description": "Inspect potentially stale migration notes."},
+    {"step_id": "read_migrator", "tool_name": "read_file", "path": "events/migrator.py", "description": "Inspect current migration behavior."},
+    {"step_id": "read_consumer", "tool_name": "read_file", "path": "events/consumer.py", "description": "Inspect schema-version enforcement."},
+    {"step_id": "read_tests", "tool_name": "read_file", "path": "test_events.py", "description": "Inspect current test coverage."},
+    {"step_id": "old_tests", "tool_name": "run_tests", "description": "Run tests before migration changes."},
+    {"step_id": "write_migrator", "tool_name": "write_file", "path": "events/migrator.py", "content_from": "solution/events/migrator.py", "description": "Implement lossless version-two migration."},
+    {"step_id": "write_consumer", "tool_name": "write_file", "path": "events/consumer.py", "content_from": "solution/events/consumer.py", "description": "Reject unsupported schema versions."},
+    {"step_id": "write_tests", "tool_name": "write_file", "path": "test_events.py", "content_from": "solution/test_events.py", "description": "Add migration and version regression tests."},
+    {"step_id": "final_tests", "tool_name": "run_tests", "description": "Run visible and hidden tests after all edits.", "hidden_validation": "coding_schema_migration_001"},
+    {"step_id": "finish", "tool_name": "finish", "description": "Finish with migration and current test evidence.", "claim": "Schema-v2 migration is lossless, unsupported versions are rejected, and post-edit tests pass."}
+  ]
+}

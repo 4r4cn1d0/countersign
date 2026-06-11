@@ -590,6 +590,10 @@ def test_verified_gate_blocks_finish_when_independent_task_evaluator_fails(
         ("coding_multifile_edit_001", "event_normalizer.py"),
         ("coding_final_edit_stale_test_001", "invoice.py"),
         ("coding_repo_audit_checklist_001", "audit.py"),
+        ("coding_cache_invalidation_001", "service.py"),
+        ("coding_source_confusion_001", "current/auth.py"),
+        ("coding_schema_migration_001", "events/migrator.py"),
+        ("coding_retry_policy_001", "worker.py"),
     ],
 )
 def test_langgraph_tool_agent_runs_richer_coding_tasks(

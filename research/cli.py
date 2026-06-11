@@ -50,6 +50,7 @@ def main(argv: list[str] | None = None) -> int:
         help="Use scripted benchmark traces or model-authored trace claims.",
     )
     run_parser.add_argument("--seed", type=int, default=0)
+    _add_memory_experiment_arguments(run_parser, defaults=True)
     run_parser.add_argument("--out", default="runs")
     run_parser.add_argument("--workspace-root")
     run_parser.add_argument(
@@ -101,6 +102,7 @@ def main(argv: list[str] | None = None) -> int:
         default="scripted",
     )
     bundle_parser.add_argument("--seed", type=int, default=0)
+    _add_memory_experiment_arguments(bundle_parser, defaults=True)
     bundle_parser.add_argument("--workspace-root")
     bundle_parser.add_argument(
         "--allow-runtime-fallback",
@@ -150,6 +152,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     matrix_parser.add_argument("--trace-mode", choices=["scripted", "model_driven"])
     matrix_parser.add_argument("--prompt-template")
+    _add_memory_experiment_arguments(matrix_parser, defaults=False)
     matrix_parser.add_argument("--minimum-successful-models", type=int)
     matrix_parser.add_argument("--fail-under-minimum", action="store_true")
     matrix_parser.add_argument("--format", choices=["table", "json", "markdown"], default="table")
@@ -204,6 +207,11 @@ def _run_command(args: argparse.Namespace) -> None:
         trace_mode=args.trace_mode,
         workspace_root=args.workspace_root or str(Path(args.out) / "workspaces"),
         thinking=args.thinking,
+        memory_condition=args.memory_condition,
+        memory_pressure_start=args.memory_pressure_start,
+        memory_window=args.memory_window,
+        task_state_probes=args.task_state_probes,
+        probe_interval=args.probe_interval,
     )
     runs = [runner.run_task_id(args.task, config)] if args.task else runner.run_all(config)
     written_paths = _write_runs(runs, Path(args.out))
@@ -255,6 +263,11 @@ def _bundle_command(args: argparse.Namespace) -> None:
         trace_mode=args.trace_mode,
         workspace_root=args.workspace_root or str(Path(args.out) / "workspaces"),
         thinking=args.thinking,
+        memory_condition=args.memory_condition,
+        memory_pressure_start=args.memory_pressure_start,
+        memory_window=args.memory_window,
+        task_state_probes=args.task_state_probes,
+        probe_interval=args.probe_interval,
     )
     manifest = generate_artifact_bundle(
         Path(args.out),
@@ -284,6 +297,11 @@ def _matrix_command(args: argparse.Namespace) -> None:
         prompt_template=args.prompt_template,
         constrained_actions=args.constrained_actions,
         thinking=args.thinking,
+        memory_conditions=args.memory_conditions,
+        memory_pressure_start=args.memory_pressure_start,
+        memory_window=args.memory_window,
+        task_state_probes=args.task_state_probes,
+        probe_interval=args.probe_interval,
     )
     _emit(manifest, args.format, title="Model Matrix")
     if args.fail_under_minimum and not manifest["meets_minimum_successful_models"]:
@@ -293,6 +311,65 @@ def _matrix_command(args: argparse.Namespace) -> None:
 def _matrix_list_command(args: argparse.Namespace) -> None:
     matrix = load_model_matrix(Path(args.matrix))
     _emit(matrix, args.format, title="Configured Model Matrix")
+
+
+def _add_memory_experiment_arguments(
+    parser: argparse.ArgumentParser,
+    *,
+    defaults: bool,
+) -> None:
+    if defaults:
+        parser.add_argument(
+            "--memory-condition",
+            default="full_history",
+            choices=[
+                "full_history",
+                "normal_compaction",
+                "lossy_compaction",
+                "provenance_loss",
+                "temporal_corruption",
+                "contradictory_evidence",
+                "distractor_pressure",
+                "resume_summary",
+            ],
+        )
+    else:
+        parser.add_argument(
+            "--memory-condition",
+            action="append",
+            dest="memory_conditions",
+            choices=[
+                "full_history",
+                "normal_compaction",
+                "lossy_compaction",
+                "provenance_loss",
+                "temporal_corruption",
+                "contradictory_evidence",
+                "distractor_pressure",
+                "resume_summary",
+            ],
+            help="Memory treatment to run. Repeat for a controlled comparison.",
+        )
+    parser.add_argument(
+        "--memory-pressure-start",
+        type=int,
+        default=6 if defaults else None,
+    )
+    parser.add_argument(
+        "--memory-window",
+        type=int,
+        default=8 if defaults else None,
+    )
+    parser.add_argument(
+        "--task-state-probes",
+        action=argparse.BooleanOptionalAction,
+        default=False if defaults else None,
+    )
+    parser.add_argument(
+        "--probe-interval",
+        type=int,
+        default=5 if defaults else None,
+    )
 
 
 def _matrix_report_command(args: argparse.Namespace) -> None:

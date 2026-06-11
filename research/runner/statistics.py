@@ -119,6 +119,10 @@ def build_paired_statistics(rows: list[dict]) -> dict:
         {
             "model_name": row.get("model_name"),
             "task_id": row.get("task_id"),
+            "memory_condition": row.get(
+                "memory_condition",
+                "full_history",
+            ),
             "seed": row.get("seed"),
             "reason": row.get("exclusion_reason") or "unspecified",
         }
@@ -186,9 +190,38 @@ def build_paired_statistics(rows: list[dict]) -> dict:
             [row["verified_model_action_count"] for row in eligible],
         ),
     }
+    probe_metrics = {
+        "task_state_probe_accuracy": (
+            "baseline_probe_overall_accuracy",
+            "verified_probe_overall_accuracy",
+        ),
+        "subtask_state_probe_accuracy": (
+            "baseline_probe_subtask_accuracy",
+            "verified_probe_subtask_accuracy",
+        ),
+        "latest_test_probe_accuracy": (
+            "baseline_probe_latest_test_accuracy",
+            "verified_probe_latest_test_accuracy",
+        ),
+        "evidence_attribution_probe_accuracy": (
+            "baseline_probe_evidence_attribution_accuracy",
+            "verified_probe_evidence_attribution_accuracy",
+        ),
+    }
+    for name, (baseline_key, verified_key) in probe_metrics.items():
+        probe_rows = [
+            row
+            for row in eligible
+            if row.get(baseline_key) is not None
+            and row.get(verified_key) is not None
+        ]
+        continuous_results[name] = paired_bootstrap_mean_difference(
+            [float(row[baseline_key]) for row in probe_rows],
+            [float(row[verified_key]) for row in probe_rows],
+        )
     return {
         "schema_version": "agent-memory-paired-statistics/v0.1",
-        "analysis_unit": "model-task-seed pair",
+        "analysis_unit": "model-task-memory-condition-seed pair",
         "planned_pair_count": len(rows),
         "eligible_pair_count": len(eligible),
         "excluded_pair_count": len(exclusions),
