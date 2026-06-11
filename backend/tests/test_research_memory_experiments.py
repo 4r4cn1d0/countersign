@@ -148,6 +148,7 @@ def test_operational_memory_invalidates_revision_bound_test_evidence():
     stale_test = memory[0]
     assert stale_test["claim"].startswith("Visible tests success")
     assert stale_test["repository_revision"] == 0
+    assert stale_test["workspace_revision"] == 0
     assert stale_test["stale"] is True
     assert stale_test["support_status"] == "stale"
     assert stale_test["invalidation_dependencies"] == [

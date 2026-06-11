@@ -495,7 +495,7 @@ def _format_markdown(payload: dict, title: str) -> str:
 
 def _report_title(payload: dict) -> str:
     schema_version = payload.get("schema_version", "")
-    if schema_version == "agent-memory-health/v0.1":
+    if str(schema_version).startswith("agent-memory-health/"):
         return "Memory Health Report"
     if schema_version == "agent-memory-verification/v0.1":
         return "Verification Report"

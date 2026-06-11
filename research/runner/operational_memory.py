@@ -57,6 +57,7 @@ def build_memory_item(event: dict, *, label: str) -> dict:
     status = str(event.get("status", "observed"))
     path = event.get("path")
     dependencies = _invalidation_dependencies(event)
+    repository_revision = int(event.get("workspace_revision", 0))
     item = {
         "memory_id": f"{event_id}:memory",
         "evidence_id": f"{event_id}:evidence",
@@ -67,7 +68,8 @@ def build_memory_item(event: dict, *, label: str) -> dict:
         "source_type": event.get("source_type", "unknown"),
         "observation_time": int(event.get("sequence_number", 0)),
         "sequence_number": int(event.get("sequence_number", 0)),
-        "repository_revision": int(event.get("workspace_revision", 0)),
+        "repository_revision": repository_revision,
+        "workspace_revision": repository_revision,
         "confidence": _confidence_for_event(event),
         "support_status": "supported",
         "invalidation_dependencies": dependencies,

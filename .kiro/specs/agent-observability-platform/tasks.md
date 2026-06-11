@@ -1077,60 +1077,197 @@ Acceptance bar for unfinished research tasks:
     - _Research Requirements: implementation-backed completion_
     - _Status: Verified. Focused research suite passes: 54 passed, 1 skipped, 4 warnings (`python3 -m pytest backend/tests/test_research_benchmark_seed.py backend/tests/test_research_benchmark_runner.py backend/tests/test_research_memory_claims.py backend/tests/test_research_memory_metrics.py backend/tests/test_research_verification_and_cli.py backend/tests/test_research_runtime_and_bundle.py backend/tests/test_research_model_matrix.py -q`). Full backend suite passes: 285 passed, 1 skipped, 4 warnings (`python3 -m pytest -q` from `backend/`)._
 
-- [x] 32. Expand the benchmark and measure task-state corruption directly
-  - [x] 32.1 Build a substantial fixture-backed coding suite
-    - Expand the dataset to at least 8 coding tasks and 10 total tasks
-    - Add realistic multi-file repositories with stale documentation, source confusion,
-      schema migration, cache invalidation, and retry-policy failure modes
-    - Keep visible tests incomplete and evaluate final work with independent hidden validators
-    - _Status: `seed_tasks.json` now contains 10 tasks, including 8 coding tasks. Four
-      repository fixtures live under `research/benchmarks/coding_scenarios/`; deterministic
-      tool-loop runs pass their visible and hidden evaluators after the scripted repairs._
+- [ ] 32. Complete research roadmap foundations 1-6
+  - [ ] 32.1 Build a genuinely long-horizon fixture-backed coding suite
+    - Keep at least 8 coding tasks and 10 total tasks
+    - Require 20-50 meaningful model actions per coding task
+    - Use multiple source and test files, independent subtasks, a plausible false lead,
+      stale evidence, delayed validation, context compaction, hidden tests, and an executable
+      evaluator in every counted coding task
+    - Include requirement changes, resume-from-summary, source confusion, and rollback tasks
+    - _Status: Partial. The dataset contains 10 tasks and 8 coding tasks, but current
+      deterministic coding trajectories require only 7-13 model actions. Four tasks use the
+      richer checked-in fixture/hidden-validator format. This does not yet satisfy the
+      stronger 20-50-action benchmark definition._
 
   - [x] 32.2 Add controlled model-visible memory pressure
     - Implement full history, normal compaction, lossy compaction, provenance loss,
       temporal corruption, contradictory evidence, distractor pressure, and resume summary
     - Transform only model-visible memory; never alter canonical evaluator or verifier state
     - Record each operation, dropped evidence ID, activation point, and condition in artifacts
-    - _Status: Added `research/runner/memory_pressure.py`, CLI flags, run summaries, frozen
-      protocol fields, and matrix pairing by model/task/memory-condition/seed._
+    - _Status: Implemented. All eight conditions execute in the real LangGraph tool loop.
+      The June 12, 2026 audit found and fixed a revision-field mismatch that had prevented
+      temporal corruption from activating against operational-memory records._
 
-  - [x] 32.3 Add non-intervening task-state probes
+  - [ ] 32.3 Complete non-intervening task-state probes
     - Fork the model at fixed action intervals without feeding probe output back into the agent
-    - Measure remembered criteria, subtask state, current test state, changed files, and
-      evidence attribution against canonical executable state
+    - Measure objective, criteria, completed/pending/failed subtasks, failed attempts,
+      repository assumptions, current and stale evidence, uncertainty, and intended next action
+    - Score trajectories against canonical executable state
     - Exclude deterministic oracle probes from empirical outcomes
-    - Give probes an explicit generation budget separate from short tool-action responses
-    - _Status: Added `research/runner/task_state_probes.py`, per-run trajectories, paired
-      matrix metrics, `--probe-interval`, and `--probe-max-tokens`. A live Devstral audit
-      exposed 256-token truncation; probes now default to a separately frozen 768-token
-      budget. The live recheck returned complete JSON and scored `0.9333` against canonical
-      initial task state._
+    - _Status: Partial. Probes currently measure criteria, subtask state, current test state,
+      changed files, evidence attribution, temporal ordering, uncertainty, and next action.
+      Explicit failed-attempt, repository-assumption, and agent-identified-stale-belief fields
+      remain to be implemented._
 
-  - [x] 32.4 Add auditable condition-level matrix artifacts
-    - Include memory condition in trial IDs, paths, comparisons, exclusion ledgers, reports,
-      and the statistical unit of analysis
-    - Hash all protocol and output artifacts and reject incompatible output-directory reuse
-    - _Status: A deterministic two-condition smoke generated 4 runs, 2 paired comparisons,
-      and 24 indexed artifacts at `/tmp/agent-memory-repo-audit`; `matrix-audit` validated
-      every protocol and artifact hash._
+  - [x] 32.4 Replace weak headline semantic metrics
+    - Use structured requirement recall, subtask-state accuracy, latest-evidence selection,
+      source attribution, temporal ordering, unsupported beliefs, contradicted belief use,
+      and stale-evidence use as headline outcomes
+    - Keep lexical or embedding similarity exploratory only
+    - _Status: Implemented at MVP level in `agent-memory-health/v0.2`. Structured metrics
+      determine `memory_health_score`; lexical Jaccard drift is labeled non-confirmatory._
 
-  - [x] 32.5 Add and execute the strongest feasible local Mistral coding model
-    - Use the best Mistral model that fits the MacBook M4 Air with 24 GB unified memory
-    - Do not count installation or deterministic fallback as model evidence
-    - _Status: Added and pulled `devstral-small-2:24b` (24B, Q4_K_M, approximately 15 GB).
-      Ollama Desktop `0.24.0` loaded all 41 layers and completed a real 8-action
-      `langgraph_tools` run with 8 valid actions, 0 invalid actions, no runtime error,
-      accepted finish, and independent evaluator success. Homebrew Ollama `0.30.4` remains
-      unusable for generation on this machine because its package lacks `llama-server`._
+  - [x] 32.5 Build revision-aware operational memory
+    - Store claim, source event IDs, source type, observation time, repository revision,
+      confidence, support status, invalidation dependencies, last verification time,
+      contradictions, and invalidation history
+    - Automatically stale test evidence when a covered file changes
+    - _Status: Implemented at MVP level in `research/runner/operational_memory.py`.
+      Test evidence records command, return code, revision, covered files, dependencies, and
+      automatic invalidation. Dependency coverage is currently file-level rather than a full
+      code/test dependency graph._
 
-  - [x] 32.6 Audit the repository with live infrastructure
-    - Run focused research tests, the full backend suite with PostgreSQL/TimescaleDB,
-      frontend tests, frontend build, deterministic artifact audit, and a real-model smoke
-    - Restore any accidentally deleted tracked documentation
-    - _Status: Verified June 11, 2026: focused research 101 passed/1 skipped; full backend
-      332 passed/1 skipped with Docker services healthy; frontend 26 passed and production
-      build succeeded. Restored this task log after the latest merge accidentally deleted it._
+  - [ ] 32.6 Complete active memory repair
+    - Detect, contain, repair, update memory, replan, and continue toward verified completion
+    - Measure detection, containment, repair attempt, repair success, and independently
+      verified recovery separately
+    - Support stale tests, lost provenance, contradictory evidence, missing requirements,
+      and implementation/evaluator failures
+    - _Status: Partial. The loop now performs active stale-test repair and all 8 deterministic
+      coding runs recovered to independently evaluated success. Repair strategies for lost
+      provenance, contradictions, missing requirements, and implementation failure remain.
+      A fresh real-model repair audit is also pending because Homebrew Ollama `0.30.4`
+      currently fails generation without its `llama-server` binary._
+
+- [ ] 33. Finish the real long-horizon benchmark
+  - [ ] 33.1 Convert all eight coding tasks to checked-in fixture repositories
+  - [ ] 33.2 Expand each counted trajectory to 20-50 meaningful actions
+  - [ ] 33.3 Add hidden validators and repository hashes for every task
+  - [ ] 33.4 Add explicit false leads, stale-evidence transitions, and delayed validation
+  - [ ] 33.5 Add requirement-change, lossy-resume, and rollback scenarios
+  - [ ] 33.6 Verify that baseline local models can fail for memory reasons rather than only
+    coding incapability
+  - _Completion evidence: task manifests, fixture repositories, hidden evaluators, action
+    counts from real-model runs, and per-task failure-mode labels._
+
+- [ ] 34. Run a controlled memory-pressure study
+  - [ ] 34.1 Label natural corruption separately from induced corruption
+  - [ ] 34.2 Define and freeze pressure severity levels before model execution
+  - [ ] 34.3 Run full-history and pressure conditions on identical model/task/seed tuples
+  - [ ] 34.4 Measure dose-response effects over action number and trajectory length
+  - [ ] 34.5 Report runtime errors, invalid actions, budget exhaustion, and missing artifacts
+    without removing them from denominators
+  - _Completion evidence: frozen protocol, audited matrix manifest, paired condition effects,
+    confidence intervals, and a natural-versus-induced corruption table._
+
+- [ ] 35. Complete shadow task-state measurement
+  - [ ] 35.1 Add failed attempts and blocked attempts to the probe schema
+  - [ ] 35.2 Add current repository assumptions with source event IDs
+  - [ ] 35.3 Ask the model which evidence it considers stale or uncertain
+  - [ ] 35.4 Score objective fidelity and intended-next-action appropriateness
+  - [ ] 35.5 Generate per-run memory-accuracy curves without steering the main trajectory
+  - [ ] 35.6 Validate probe scoring on manually labeled checkpoints
+
+- [ ] 36. Complete structured scientific metrics
+  - [ ] 36.1 Extract repository-state beliefs beyond finish claims
+  - [ ] 36.2 Link beliefs to the decisions that actually consumed them
+  - [ ] 36.3 Count unsupported, stale, and contradicted beliefs used for tool decisions
+  - [ ] 36.4 Add manually validated metric fixtures and adversarial edge cases
+  - [ ] 36.5 Keep lexical and embedding similarity outside confirmatory claims
+
+- [ ] 37. Strengthen operational memory
+  - [ ] 37.1 Model file, symbol, test, command, and requirement dependencies
+  - [ ] 37.2 Track which tests cover which changed files or symbols
+  - [ ] 37.3 Invalidate only dependent beliefs where possible
+  - [ ] 37.4 Persist and restore memory across resume checkpoints
+  - [ ] 37.5 Reconcile contradictory memories instead of only retaining contradiction flags
+  - [ ] 37.6 Test dependency invalidation, supersession, contradiction, and resume behavior
+
+- [ ] 38. Generalize active memory repair
+  - [ ] 38.1 Repair stale test evidence with targeted or full tests
+  - [ ] 38.2 Repair lost provenance by rereading the smallest relevant source
+  - [ ] 38.3 Resolve contradictory evidence by obtaining a discriminating observation
+  - [ ] 38.4 Recover forgotten or changed requirements from user/task history
+  - [ ] 38.5 Convert evaluator failures into a bounded diagnosis-and-fix loop
+  - [ ] 38.6 Require model replanning from repaired memory
+  - [ ] 38.7 Demonstrate recovery with real local models, not only deterministic control runs
+
+- [ ] 39. Implement intervention ablations
+  - [ ] 39.1 Ordinary conversational-memory baseline
+  - [ ] 39.2 Provenance tracking only
+  - [ ] 39.3 Freshness invalidation only
+  - [ ] 39.4 Contradiction detection only
+  - [ ] 39.5 Uncertainty-triggered retrieval only
+  - [ ] 39.6 Full verification and repair
+  - [ ] 39.7 Oracle-memory upper bound
+  - [ ] 39.8 Random-extra-tool-call control
+  - _Goal: show which mechanism causes improvement and whether extra inspection alone explains
+    the effect._
+
+- [ ] 40. Verify consequential decisions before execution
+  - [ ] 40.1 Gate declarations that tests pass or subtasks are complete
+  - [ ] 40.2 Gate edits based on remembered API contracts
+  - [ ] 40.3 Gate destructive file replacement or deletion
+  - [ ] 40.4 Gate abandonment of unresolved requirements
+  - [ ] 40.5 Gate selection between contradictory observations
+  - [ ] 40.6 Gate claims of user approval and final completion
+  - [ ] 40.7 Measure prevented unsafe actions separately from prevented unsafe wording
+
+- [ ] 41. Strengthen the coding-agent environment
+  - [ ] 41.1 Add `search_code`, `git_diff`, and `git_status`
+  - [ ] 41.2 Add `read_test_failure`, `run_targeted_tests`, and `run_full_tests`
+  - [ ] 41.3 Add `inspect_dependency` and `read_structured_file`
+  - [ ] 41.4 Add a bounded `apply_patch` tool
+  - [ ] 41.5 Return structured, timestamped, revision-aware tool outputs
+  - [ ] 41.6 Start every run from a known Git commit
+  - [ ] 41.7 Retain final diff, test output, hidden-evaluator result, and repository hash
+
+- [ ] 42. Run a defensible multi-model experiment
+  - [ ] 42.1 Repair or replace the local Ollama runtime so real generation is reproducible
+  - [ ] 42.2 Freeze 5 models, 8 tasks, 3 seeds, and 4 intervention conditions
+  - [ ] 42.3 Execute the planned 480 runs without deterministic fallback
+  - [ ] 42.4 Predeclare completion, safety, memory, recovery, and cost endpoints
+  - [ ] 42.5 Keep failed, invalid, and budget-exhausted runs in denominators
+  - [ ] 42.6 Report Wilson intervals, paired tests, effect sizes, and exclusion ledgers
+  - [ ] 42.7 Audit protocol and artifact hashes after execution
+
+- [ ] 43. Add human validation
+  - [ ] 43.1 Sample 10-20% of trajectories using a frozen random seed
+  - [ ] 43.2 Label support, staleness, task-state accuracy, completion justification, and repair
+    appropriateness
+  - [ ] 43.3 Use a second reviewer for a smaller overlapping subset
+  - [ ] 43.4 Report agreement and adjudication rules
+  - [ ] 43.5 Compare automatic labels against human labels
+
+- [ ] 44. Produce scientific visual evidence
+  - [ ] 44.1 Plot task success versus trajectory length
+  - [ ] 44.2 Plot memory and attribution accuracy versus action number
+  - [ ] 44.3 Plot false completion versus pressure severity
+  - [ ] 44.4 Plot recovery probability after corruption detection
+  - [ ] 44.5 Plot success versus verification overhead
+  - [ ] 44.6 Generate per-model task/intervention heatmaps and failure-mode distributions
+  - [ ] 44.7 Add a time-to-first-corrupted-belief survival-style plot
+  - [ ] 44.8 Generate one complete baseline-versus-repair trajectory for the walkthrough
+
+- [ ] 45. Keep the AI-safety claim precise
+  - [ ] 45.1 Use “confabulation-like source, temporal, and task-state failures” rather than
+    claiming models have dementia
+  - [ ] 45.2 State the threat model and capability-preservation objective
+  - [ ] 45.3 Separate instrumentation results, deterministic harness checks, and real-model
+    empirical evidence
+  - [ ] 45.4 Document benchmark, model, evaluator, and external-validity limitations
+  - [ ] 45.5 Ensure README, report, application text, and walkthrough use the same claims
+
+- [ ] 46. Final MATS application work-sample checkpoint
+  - [ ] 46.1 Produce a concise research report with hypothesis, method, results, limitations,
+    and next experiments
+  - [ ] 46.2 Create a reproducible terminal command that regenerates the core result
+  - [ ] 46.3 Create a five-minute walkthrough showing code, a saved trajectory, repair, and plots
+  - [ ] 46.4 Publish the frozen protocol, artifact manifest, report, and exact source commit
+  - [ ] 46.5 Rerun backend, frontend, artifact audit, and real-model smoke checks
+  - [ ] 46.6 Confirm the GitHub `main` branch contains every submitted source and documentation
+    artifact
 
 ## Notes
 
@@ -1143,7 +1280,8 @@ Acceptance bar for unfinished research tasks:
 - Core infrastructure tasks (1-6) establish the trace ingestion, storage, API, and streaming foundation
 - SDK and serialization tasks (7-10) support instrumented agent runs and trace persistence
 - Dashboard tasks (11-15) provide the current observability MVP for sessions, graphs, reasoning traces, and tool calls
-- Research MVP tasks (16-32) measure and reduce long-horizon memory corruption with terminal-first reproducibility
+- Research MVP and study-hardening tasks (16-46) measure and reduce long-horizon memory
+  corruption with terminal-first reproducibility
 
 
 ## Task Dependency Graph
@@ -1306,6 +1444,42 @@ Acceptance bar for unfinished research tasks:
     {
       "id": 38,
       "tasks": ["32"]
+    },
+    {
+      "id": 39,
+      "tasks": ["33", "35"]
+    },
+    {
+      "id": 40,
+      "tasks": ["34", "36"]
+    },
+    {
+      "id": 41,
+      "tasks": ["37", "41"]
+    },
+    {
+      "id": 42,
+      "tasks": ["38", "40"]
+    },
+    {
+      "id": 43,
+      "tasks": ["39"]
+    },
+    {
+      "id": 44,
+      "tasks": ["42"]
+    },
+    {
+      "id": 45,
+      "tasks": ["43", "44"]
+    },
+    {
+      "id": 46,
+      "tasks": ["45"]
+    },
+    {
+      "id": 47,
+      "tasks": ["46"]
     }
   ]
 }

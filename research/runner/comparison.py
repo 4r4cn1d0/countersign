@@ -23,6 +23,21 @@ def compare_runs(baseline_run: dict, verified_run: dict) -> dict:
         metric: round(verified_metrics.get(metric, 0.0) - baseline_metrics.get(metric, 0.0), 4)
         for metric in sorted(set(baseline_metrics) | set(verified_metrics))
     }
+    baseline_exploratory = baseline_report.get("exploratory_metrics", {})
+    verified_exploratory = verified_raw_report.get(
+        "exploratory_metrics",
+        {},
+    )
+    exploratory_metric_deltas = {
+        metric: round(
+            float(verified_exploratory.get(metric, 0.0))
+            - float(baseline_exploratory.get(metric, 0.0)),
+            4,
+        )
+        for metric in ["semantic_drift_score", "goal_fidelity"]
+        if metric in baseline_exploratory or metric in verified_exploratory
+    }
+    metric_deltas.update(exploratory_metric_deltas)
     baseline_interaction = baseline_run.get("interaction_metrics")
     verified_interaction = verified_run.get("interaction_metrics")
     behavioral_evidence_available = bool(
@@ -51,6 +66,7 @@ def compare_runs(baseline_run: dict, verified_run: dict) -> dict:
         "baseline_metrics": baseline_metrics,
         "verified_raw_metrics": verified_metrics,
         "metric_deltas": metric_deltas,
+        "exploratory_metric_deltas": exploratory_metric_deltas,
         "baseline_claim_counts": baseline_report["claim_counts"],
         "verified_raw_claim_counts": verified_raw_report["claim_counts"],
         "verified_accepted_claim_metrics": (

@@ -314,7 +314,9 @@ def test_compare_reports_in_loop_block_and_recovery_without_erasing_raw_claims(
     assert outcomes["baseline_accepted_finish_evaluator_failures"] == 0
     assert outcomes["verified_accepted_finish_evaluator_failures"] == 0
     assert outcomes["verified_recovery_after_block"] is True
-    assert comparison["verification_overhead"]["extra_model_actions"] == 2
+    assert comparison["verification_overhead"]["extra_model_actions"] == 1
+    assert verified["interaction_metrics"]["memory_repair_attempts"] == 1
+    assert verified["interaction_metrics"]["memory_repair_recovery"] is True
 
 
 def test_later_file_evidence_does_not_make_old_test_evidence_fresh():

@@ -2788,9 +2788,14 @@ class BenchmarkRunner:
             None,
         )
         if latest_successful_test:
+            evidence_reference = (
+                latest_successful_test.get("event_id")
+                or latest_successful_test.get("memory_id")
+                or "current test evidence"
+            )
             return (
                 "A successful visible test run is newer than the latest write "
-                f"({latest_successful_test['event_id']}). If every acceptance "
+                f"({evidence_reference}). If every acceptance "
                 "criterion is satisfied, use finish and cite exact write/test event "
                 "IDs. Otherwise make only the edit still required."
             )
