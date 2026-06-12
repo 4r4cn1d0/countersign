@@ -15,6 +15,10 @@ from typing import Optional, TypedDict
 from uuid import NAMESPACE_URL, uuid5
 
 from .claims import extract_memory_claims
+from .decision_beliefs import (
+    extract_decision_beliefs,
+    summarize_decision_beliefs,
+)
 from .coding_environment import (
     CODING_TOOL_ACTIONS,
     apply_bounded_patch,
@@ -59,6 +63,7 @@ from .task_state_probes import (
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_BENCHMARK_PATH = ROOT / "research" / "benchmarks" / "seed_tasks.json"
 DEFAULT_STACK_PATH = ROOT / "research" / "agents" / "initial_stack.json"
+EVALUATOR_REPAIR_BUDGET = 2
 
 
 @dataclass(frozen=True)
@@ -251,6 +256,15 @@ class BenchmarkRunner:
                 "successes_by_type": run["interaction_metrics"][
                     "memory_repair_successes_by_type"
                 ],
+                "replans_required": run["interaction_metrics"][
+                    "memory_replans_required"
+                ],
+                "replans_completed": run["interaction_metrics"][
+                    "memory_replans_completed"
+                ],
+                "invalid_replans": run["interaction_metrics"][
+                    "memory_replans_invalid"
+                ],
             }
             run["memory_pressure_summary"] = {
                 "schema_version": "agent-memory-pressure-summary/v0.1",
@@ -321,6 +335,11 @@ class BenchmarkRunner:
                     ),
                 }
             )
+        run["decision_beliefs"] = extract_decision_beliefs(run)
+        run["decision_belief_summary"] = summarize_decision_beliefs(
+            run["decision_beliefs"],
+            trace_events=trace_events,
+        )
         run["memory_health_report"] = build_memory_health_report(run, task)
         if (
             run_config.agent_variant == "verified"
@@ -663,8 +682,12 @@ class BenchmarkRunner:
             blocked_finish_count: int
             post_block_tool_calls: int
             memory_repair_count: int
+            evaluator_repair_count: int
             repair_tool_call_count: int
             repair_success_count: int
+            pending_repair_result_event_id: str
+            pending_repair_memory_id: str
+            pending_repair_type: str
             workspace_revision: int
             applied_requirement_updates: list[int]
             accepted_finish_event_id: str
@@ -689,8 +712,12 @@ class BenchmarkRunner:
                 "blocked_finish_count": 0,
                 "post_block_tool_calls": 0,
                 "memory_repair_count": 0,
+                "evaluator_repair_count": 0,
                 "repair_tool_call_count": 0,
                 "repair_success_count": 0,
+                "pending_repair_result_event_id": "",
+                "pending_repair_memory_id": "",
+                "pending_repair_type": "",
                 "workspace_revision": 0,
                 "applied_requirement_updates": [],
                 "terminated": False,
@@ -901,6 +928,17 @@ class BenchmarkRunner:
                 window=config.memory_window,
                 seed=config.seed,
             )
+            pending_repair = {
+                "repair_result_event_id": state.get(
+                    "pending_repair_result_event_id"
+                ),
+                "repaired_memory_id": state.get("pending_repair_memory_id"),
+                "repair_type": state.get("pending_repair_type"),
+            }
+            replan_required = bool(
+                pending_repair["repair_result_event_id"]
+                and pending_repair["repaired_memory_id"]
+            )
             pressure_event_id = None
             if memory_view["active"] and memory_view["operations"]:
                 pressure_event_id = add(
@@ -932,6 +970,9 @@ class BenchmarkRunner:
                     action_count=state.get("action_count", 0),
                     deterministic_action=deterministic_action,
                     available_actions=available_actions,
+                    required_replan=(
+                        pending_repair if replan_required else None
+                    ),
                 ),
                 config,
                 response_schema=(
@@ -955,6 +996,9 @@ class BenchmarkRunner:
                     for source_id in [
                         state["last_event_id"],
                         pressure_event_id,
+                        pending_repair["repair_result_event_id"]
+                        if replan_required
+                        else None,
                     ]
                     if source_id
                 ],
@@ -972,7 +1016,43 @@ class BenchmarkRunner:
                 memory_condition=config.memory_condition,
                 memory_view_active=memory_view["active"],
                 memory_operations=memory_view["operations"],
+                replan_required=replan_required,
+                repaired_memory_id=(
+                    pending_repair["repaired_memory_id"]
+                    if replan_required
+                    else None
+                ),
+                repair_result_event_id=(
+                    pending_repair["repair_result_event_id"]
+                    if replan_required
+                    else None
+                ),
             )
+            if replan_required:
+                add(
+                    "memory_replan",
+                    graph_node="choose_action",
+                    content=(
+                        "Model selected a new action from the repaired memory."
+                        if action
+                        else "Model replanning response was invalid; replanning remains required."
+                    ),
+                    status="completed" if action else "invalid",
+                    repair_type=pending_repair["repair_type"],
+                    repaired_memory_id=pending_repair[
+                        "repaired_memory_id"
+                    ],
+                    repair_result_event_id=pending_repair[
+                        "repair_result_event_id"
+                    ],
+                    model_response_event_id=model_event_id,
+                    replanned_action=action,
+                    source_type="agent_inference",
+                    source_event_ids=[
+                        pending_repair["repair_result_event_id"],
+                        model_event_id,
+                    ],
+                )
             add(
                 "decision_point",
                 graph_node="choose_action",
@@ -987,12 +1067,21 @@ class BenchmarkRunner:
                 source_type="agent_inference",
                 source_event_ids=[model_event_id],
             )
-            return {
+            result = {
                 "current_action": action,
                 "current_model_event_id": model_event_id,
                 "current_parse_status": parsed_action["parse_status"],
                 "model_response": action_response,
             }
+            if replan_required and action:
+                result.update(
+                    {
+                        "pending_repair_result_event_id": "",
+                        "pending_repair_memory_id": "",
+                        "pending_repair_type": "",
+                    }
+                )
+            return result
 
         def process_action(state: ToolAgentState) -> dict:
             action_count = state.get("action_count", 0) + 1
@@ -1131,6 +1220,15 @@ class BenchmarkRunner:
                             recommended_actions=proposal[
                                 "recommended_actions"
                             ],
+                            claim_source_event_ids=action.get(
+                                "source_event_ids",
+                                [],
+                            ),
+                            repair_attempt=state.get(
+                                "evaluator_repair_count",
+                                0,
+                            ),
+                            repair_budget=EVALUATOR_REPAIR_BUDGET,
                         )
                         detection_event_id = add(
                             "memory_corruption_detection",
@@ -1145,10 +1243,19 @@ class BenchmarkRunner:
                             ],
                             repair_type=repair_plan["repair_type"],
                             repairable=repair_plan["repairable"],
+                            repair_attempt=repair_plan["repair_attempt"],
+                            repair_budget=repair_plan["repair_budget"],
+                            budget_exhausted=repair_plan[
+                                "budget_exhausted"
+                            ],
                             source_type="verification_policy",
                             source_event_ids=[decision_event_id],
                         )
                         repair_count = state.get("memory_repair_count", 0)
+                        evaluator_repair_count = state.get(
+                            "evaluator_repair_count",
+                            0,
+                        )
                         repair_tool_calls = state.get(
                             "repair_tool_call_count",
                             0,
@@ -1176,6 +1283,12 @@ class BenchmarkRunner:
                                 target_memory_ids=repair_plan[
                                     "target_memory_ids"
                                 ],
+                                repair_attempt=repair_plan[
+                                    "repair_attempt"
+                                ],
+                                repair_budget=repair_plan[
+                                    "repair_budget"
+                                ],
                                 status="planned",
                                 source_type="memory_controller",
                                 source_event_ids=[detection_event_id],
@@ -1200,6 +1313,8 @@ class BenchmarkRunner:
                                     evaluator_failure=proposal[
                                         "independent_evaluation"
                                     ],
+                                    evidence_ledger=ledger,
+                                    trace_events=events,
                                 )
                             )
                             repair_tool_event = events[-1]
@@ -1217,10 +1332,18 @@ class BenchmarkRunner:
                             )
                             repair_tool_calls += 1
                             repair_succeeded = (
-                                repair_tool_event.get("status") == "success"
+                                self._memory_repair_observation_succeeded(
+                                    repair_plan["action"],
+                                    repair_tool_event,
+                                )
                             )
                             if repair_succeeded:
                                 repair_successes += 1
+                            if (
+                                repair_plan["repair_type"]
+                                == "implementation_evaluator_failure"
+                            ):
+                                evaluator_repair_count += 1
                             repair_result_event_id = add(
                                 "memory_repair_result",
                                 graph_node="process_action",
@@ -1241,6 +1364,13 @@ class BenchmarkRunner:
                                     "success_criterion"
                                 ],
                                 repaired_memory_id=ledger[-1]["memory_id"],
+                                replan_required=repair_succeeded,
+                                repair_attempt=repair_plan[
+                                    "repair_attempt"
+                                ],
+                                repair_budget=repair_plan[
+                                    "repair_budget"
+                                ],
                                 repository_revision=state.get(
                                     "workspace_revision",
                                     0,
@@ -1252,6 +1382,20 @@ class BenchmarkRunner:
                                 self._observation_from_event(events[-1])
                             )
                             feedback_sources = [repair_result_event_id]
+                            if repair_succeeded:
+                                update.update(
+                                    {
+                                        "pending_repair_result_event_id": (
+                                            repair_result_event_id
+                                        ),
+                                        "pending_repair_memory_id": ledger[-1][
+                                            "memory_id"
+                                        ],
+                                        "pending_repair_type": repair_plan[
+                                            "repair_type"
+                                        ],
+                                    }
+                                )
                         feedback_event_id = add(
                             "verification_feedback",
                             graph_node="process_action",
@@ -1265,9 +1409,15 @@ class BenchmarkRunner:
                                     "the repaired ledger, then cite exact current "
                                     "source_event_ids."
                                     if feedback_sources != [detection_event_id]
-                                    else ". Use tools to repair the implementation or "
-                                    "obtain missing evidence, then submit another finish "
-                                    "proposal with exact source_event_ids."
+                                    else (
+                                        ". The bounded repair budget is exhausted; "
+                                        "do not repeat the completion claim. Continue "
+                                        "only with a model-authored diagnosis or fix."
+                                        if repair_plan["budget_exhausted"]
+                                        else ". Use tools to repair the implementation "
+                                        "or obtain missing evidence, then submit another "
+                                        "finish proposal with exact source_event_ids."
+                                    )
                                 )
                             ),
                             status="requires_action",
@@ -1297,6 +1447,9 @@ class BenchmarkRunner:
                                     )
                                 ),
                                 "memory_repair_count": repair_count,
+                                "evaluator_repair_count": (
+                                    evaluator_repair_count
+                                ),
                                 "repair_tool_call_count": repair_tool_calls,
                                 "repair_success_count": repair_successes,
                                 "post_block_tool_calls": (
@@ -2055,6 +2208,23 @@ class BenchmarkRunner:
             if event.get("event_type") == "memory_repair_result"
             and event.get("status") == "repaired"
         ]
+        required_replans = [
+            event
+            for event in successful_repairs
+            if event.get("replan_required")
+        ]
+        completed_replans = [
+            event
+            for event in events
+            if event.get("event_type") == "memory_replan"
+            and event.get("status") == "completed"
+        ]
+        invalid_replans = [
+            event
+            for event in events
+            if event.get("event_type") == "memory_replan"
+            and event.get("status") == "invalid"
+        ]
         repair_attempts_by_type: dict[str, int] = {}
         for event in repair_plans:
             repair_type = str(event.get("repair_type", "unclassified"))
@@ -2072,13 +2242,7 @@ class BenchmarkRunner:
             if successful_repairs
             else None
         )
-        replanned_after_repair = any(
-            first_repair_sequence is not None
-            and event.get("sequence_number", 0) > first_repair_sequence
-            and event.get("event_type") == "model_response"
-            and event.get("graph_node") == "choose_action"
-            for event in events
-        )
+        replanned_after_repair = bool(completed_replans)
         accepted_after_repair = any(
             first_repair_sequence is not None
             and event.get("sequence_number", 0) > first_repair_sequence
@@ -2139,6 +2303,9 @@ class BenchmarkRunner:
             "memory_repair_attempts_by_type": repair_attempts_by_type,
             "memory_repair_successes_by_type": repair_successes_by_type,
             "memory_replanned_after_repair": replanned_after_repair,
+            "memory_replans_required": len(required_replans),
+            "memory_replans_completed": len(completed_replans),
+            "memory_replans_invalid": len(invalid_replans),
             "memory_repair_recovery": bool(
                 successful_repairs
                 and replanned_after_repair
@@ -3030,37 +3197,104 @@ class BenchmarkRunner:
         workspace_revision: int,
         applied_requirement_updates: list[int],
         evaluator_failure: dict,
+        evidence_ledger: list[dict],
+        trace_events: list[dict],
     ) -> str:
-        if action["action"] != "refresh_requirements":
+        if action["action"] not in {
+            "refresh_requirements",
+            "diagnose_evaluator_failure",
+        }:
             return self._execute_coding_tool(
                 workspace=workspace,
                 step=self._step_from_autonomous_action(action),
                 add=add,
                 source_event_id=source_event_id,
                 workspace_revision=workspace_revision,
+                evidence_ledger=evidence_ledger,
             )
 
-        active_updates = [
-            update
-            for index, update in enumerate(
-                scenario.get("requirement_updates", [])
-            )
-            if index in applied_requirement_updates
+        requirement_snapshot = self._requirement_history_snapshot(
+            task,
+            scenario,
+            applied_requirement_updates,
+            trace_events,
+        )
+        requirement_source_ids = [
+            item["event_id"]
+            for item in requirement_snapshot["history"]
+            if item.get("event_id")
         ]
-        requirement_snapshot = {
-            "goal": task["goal"],
-            "acceptance_criteria": list(
-                task.get("acceptance_criteria", [])
-            ),
-            "required_subtasks": [
-                {
-                    "subtask_id": subtask["subtask_id"],
-                    "description": subtask["description"],
-                }
-                for subtask in task.get("required_subtasks", [])
-            ],
-            "active_requirement_updates": active_updates,
-        }
+        if action["action"] == "diagnose_evaluator_failure":
+            latest_test_failure = next(
+                (
+                    item
+                    for item in reversed(evidence_ledger)
+                    if item.get("tool_name")
+                    in {
+                        "run_tests",
+                        "run_full_tests",
+                        "run_targeted_tests",
+                    }
+                    and item.get("status") == "failure"
+                ),
+                None,
+            )
+            diff = git_diff(workspace)
+            failed_components = [
+                component
+                for component, status in [
+                    (
+                        "visible_tests",
+                        evaluator_failure.get("visible_test_status"),
+                    ),
+                    (
+                        "hidden_validation",
+                        evaluator_failure.get("hidden_validation_status"),
+                    ),
+                ]
+                if status == "failure"
+            ]
+            diagnosis = {
+                "failed_components": failed_components,
+                "evaluator_output": evaluator_failure.get("content", ""),
+                "changed_files": diff["changed_files"],
+                "current_diff": diff["diff"],
+                "latest_test_failure": (
+                    {
+                        "event_id": latest_test_failure.get("event_id"),
+                        "command": latest_test_failure.get("command"),
+                        "returncode": latest_test_failure.get("returncode"),
+                        "output": latest_test_failure.get("content", ""),
+                    }
+                    if latest_test_failure
+                    else None
+                ),
+                "requirement_snapshot": requirement_snapshot,
+            }
+            return add(
+                "evaluator_diagnosis",
+                graph_node="execute_memory_repair",
+                content=(
+                    "Diagnosed failed evaluator components "
+                    f"{', '.join(failed_components) or 'unknown'} against the "
+                    "current diff and authoritative requirement history."
+                ),
+                tool_name="diagnose_evaluator_failure",
+                status="success",
+                requirement_snapshot=requirement_snapshot,
+                evaluator_failure=evaluator_failure,
+                changed_files=diff["changed_files"],
+                structured_output=diagnosis,
+                workspace_path=str(workspace.resolve()),
+                workspace_revision=workspace_revision,
+                source_type="tool_output",
+                evaluator_source_type="independent_evaluator",
+                source_event_ids=[
+                    source_event_id,
+                    *requirement_source_ids,
+                ],
+            )
+
         return add(
             "requirement_refresh",
             graph_node="execute_memory_repair",
@@ -3076,8 +3310,65 @@ class BenchmarkRunner:
             workspace_path=str(workspace.resolve()),
             workspace_revision=workspace_revision,
             source_type="ground_truth",
-            source_event_ids=[source_event_id],
+            source_event_ids=[
+                source_event_id,
+                *requirement_source_ids,
+            ],
         )
+
+    @staticmethod
+    def _requirement_history_snapshot(
+        task: dict,
+        scenario: dict,
+        applied_requirement_updates: list[int],
+        trace_events: list[dict],
+    ) -> dict:
+        active_updates = [
+            update
+            for index, update in enumerate(
+                scenario.get("requirement_updates", [])
+            )
+            if index in applied_requirement_updates
+        ]
+        history = []
+        for event in trace_events:
+            if event.get("event_type") == "prompt":
+                history.append(
+                    {
+                        "event_id": event.get("event_id"),
+                        "event_type": "task_goal",
+                        "content": event.get("prompt", task["goal"]),
+                        "sequence_number": event.get("sequence_number"),
+                        "source_type": event.get("source_type"),
+                    }
+                )
+            elif event.get("event_type") == "user_requirement_update":
+                history.append(
+                    {
+                        "event_id": event.get("event_id"),
+                        "event_type": "user_requirement_update",
+                        "requirement_id": event.get("requirement_id"),
+                        "content": event.get("content"),
+                        "status": event.get("status"),
+                        "sequence_number": event.get("sequence_number"),
+                        "source_type": event.get("source_type"),
+                    }
+                )
+        return {
+            "goal": task["goal"],
+            "acceptance_criteria": list(
+                task.get("acceptance_criteria", [])
+            ),
+            "required_subtasks": [
+                {
+                    "subtask_id": subtask["subtask_id"],
+                    "description": subtask["description"],
+                }
+                for subtask in task.get("required_subtasks", [])
+            ],
+            "active_requirement_updates": active_updates,
+            "history": history,
+        }
 
     def _run_hidden_validation(self, workspace: Path, task_id: str) -> subprocess.CompletedProcess:
         fixture_scenario = load_fixture_scenario(task_id)
@@ -3225,6 +3516,7 @@ class BenchmarkRunner:
         action_count: int,
         deterministic_action: dict,
         available_actions: list[str] | None = None,
+        required_replan: dict | None = None,
     ) -> str:
         deterministic_hint = ""
         if config.runtime == "deterministic":
@@ -3243,6 +3535,15 @@ class BenchmarkRunner:
         available = available_actions or [
             *CODING_TOOL_ACTIONS,
         ]
+        replan_guidance = ""
+        if required_replan:
+            replan_guidance = (
+                "REPLAN_REQUIRED: A memory repair just completed. Base this next "
+                "action on the repaired ledger item "
+                f"{required_replan['repaired_memory_id']} and repair result "
+                f"{required_replan['repair_result_event_id']}. Do not reuse the "
+                "pre-repair plan without checking the repaired evidence.\n"
+            )
         return (
             "AGENT_MEMORY_TOOL_ACTION_REQUEST\n"
             "You are an autonomous coding agent. Choose exactly one next action as JSON.\n"
@@ -3259,6 +3560,7 @@ class BenchmarkRunner:
             "acceptance criterion is unmet, advance the task with write_file.\n"
             f"{unavailable_guidance}\n"
             f"{readiness_guidance}\n"
+            f"{replan_guidance}"
             "Schema examples:\n"
             '{"action":"list_files"}\n'
             '{"action":"read_file","path":"config_parser.py"}\n'
@@ -3273,9 +3575,15 @@ class BenchmarkRunner:
             '{"action":"run_full_tests"}\n'
             '{"action":"read_test_failure"}\n'
             '{"action":"finish","claim":"...","source_event_ids":["..."]}\n'
+            'Every action must also include "beliefs":[{"belief_type":"file_state",'
+            '"claim":"...","source_event_ids":["..."]}]. Include only beliefs '
+            "actually used to choose this action; use an empty list when none were "
+            "used. Belief types are file_state, test_state, requirement_state, "
+            "task_state, repository_state, or source_support.\n"
             "For write_file, content must be the complete replacement file contents.\n"
-            "For finish, write your own claim and cite the exact evidence event IDs you "
-            "are relying on. The run ends immediately if finish is accepted.\n"
+            "For every action, cite exact evidence event IDs in both the relevant "
+            "belief and top-level source_event_ids. For finish, write your own claim. "
+            "The run ends immediately if finish is accepted.\n"
             f"Task goal: {task['goal']}\n"
             f"Acceptance criteria: {json.dumps(task.get('acceptance_criteria', []))}\n"
             f"Required subtasks: {json.dumps(required_subtasks)}\n"
@@ -3477,6 +3785,44 @@ class BenchmarkRunner:
             if isinstance(source_event_ids, list)
             else []
         )
+        beliefs = parsed.get("beliefs", [])
+        if not isinstance(beliefs, list):
+            return {"parse_status": "invalid_schema"}
+        normalized_beliefs = []
+        for belief in beliefs:
+            if not isinstance(belief, dict):
+                return {"parse_status": "invalid_schema"}
+            belief_type = str(
+                belief.get("belief_type", "repository_state")
+            )
+            claim = str(belief.get("claim", "")).strip()
+            belief_sources = belief.get("source_event_ids", [])
+            if (
+                belief_type
+                not in {
+                    "file_state",
+                    "test_state",
+                    "requirement_state",
+                    "task_state",
+                    "repository_state",
+                    "source_support",
+                }
+                or not claim
+                or not isinstance(belief_sources, list)
+            ):
+                return {"parse_status": "invalid_schema"}
+            normalized_beliefs.append(
+                {
+                    "belief_type": belief_type,
+                    "claim": claim,
+                    "source_event_ids": [
+                        str(event_id)
+                        for event_id in belief_sources
+                        if str(event_id).strip()
+                    ],
+                }
+            )
+        payload["beliefs"] = normalized_beliefs
         return {"parse_status": parsed["_parse_status"], "action_payload": payload}
 
     @staticmethod
@@ -3505,8 +3851,39 @@ class BenchmarkRunner:
                     "type": "array",
                     "items": {"type": "string"},
                 },
+                "beliefs": {
+                    "type": "array",
+                    "maxItems": 8,
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "belief_type": {
+                                "type": "string",
+                                "enum": [
+                                    "file_state",
+                                    "test_state",
+                                    "requirement_state",
+                                    "task_state",
+                                    "repository_state",
+                                    "source_support",
+                                ],
+                            },
+                            "claim": {"type": "string"},
+                            "source_event_ids": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                            },
+                        },
+                        "required": [
+                            "belief_type",
+                            "claim",
+                            "source_event_ids",
+                        ],
+                        "additionalProperties": False,
+                    },
+                },
             },
-            "required": ["action"],
+            "required": ["action", "beliefs"],
             "additionalProperties": False,
         }
 
@@ -3589,7 +3966,7 @@ class BenchmarkRunner:
 
     @staticmethod
     def _tool_action_from_step(step: dict) -> dict:
-        action = {"action": step["tool_name"]}
+        action = {"action": step["tool_name"], "beliefs": []}
         for key in ["path", "content", "command"]:
             if key in step:
                 action[key] = step[key]
@@ -3649,6 +4026,21 @@ class BenchmarkRunner:
             return "run_tests"
         return action["action"]
 
+    @staticmethod
+    def _memory_repair_observation_succeeded(
+        action: dict,
+        event: dict,
+    ) -> bool:
+        if action.get("action") in {
+            "run_tests",
+            "run_full_tests",
+            "run_targeted_tests",
+        }:
+            return event.get("status") in {"success", "failure"} and (
+                event.get("returncode") is not None
+            )
+        return event.get("status") == "success"
+
     def _deterministic_action_for_state(
         self,
         scenario: dict,
@@ -3685,7 +4077,8 @@ class BenchmarkRunner:
         test_event_ids = [
             entry["event_id"]
             for entry in ledger
-            if entry.get("tool_name") == "run_tests"
+            if entry.get("tool_name")
+            in {"run_tests", "run_full_tests", "run_targeted_tests"}
             and entry.get("status") == "success"
         ]
 
@@ -3763,13 +4156,14 @@ class BenchmarkRunner:
         }
         if task.get("family") == "coding":
             if not any(
-                event.get("tool_name") == "run_tests"
+                event.get("tool_name")
+                in {"run_tests", "run_full_tests", "run_targeted_tests"}
                 and event.get("status") == "success"
                 for event in evidence_events
             ):
                 coding_reasons.append("missing successful test evidence")
             if not any(
-                event.get("tool_name") == "write_file"
+                event.get("tool_name") in {"write_file", "apply_patch"}
                 and event.get("status") == "success"
                 for event in evidence_events
             ):

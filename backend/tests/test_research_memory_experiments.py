@@ -179,7 +179,7 @@ def test_operational_memory_invalidates_revision_bound_test_evidence():
     assert stale_test["invalidated_by_event_ids"] == ["event-write"]
     plan = plan_memory_repair(["stale evidence"], memory)
     assert plan["repairable"] is True
-    assert plan["action"] == {"action": "run_tests"}
+    assert plan["action"] == {"action": "run_full_tests"}
     assert stale_test["memory_id"] in plan["target_memory_ids"]
 
 
@@ -360,7 +360,7 @@ def test_operational_memory_checkpoint_round_trip_and_integrity():
                 }
             ],
             "contradictory_evidence",
-            {"action": "run_tests"},
+            {"action": "run_full_tests"},
         ),
         (
             ["missing requirement context"],
@@ -372,7 +372,7 @@ def test_operational_memory_checkpoint_round_trip_and_integrity():
             ["independent task evaluator failed"],
             [],
             "implementation_evaluator_failure",
-            {"action": "refresh_requirements"},
+            {"action": "diagnose_evaluator_failure"},
         ),
     ],
 )
@@ -384,11 +384,184 @@ def test_memory_repair_plans_cover_non_stale_failure_modes(
 ):
     plan = plan_memory_repair(reasons, memory)
 
-    assert plan["schema_version"] == "agent-memory-repair-plan/v0.2"
+    assert plan["schema_version"] == "agent-memory-repair-plan/v0.3"
     assert plan["repairable"] is True
     assert plan["repair_type"] == repair_type
     assert plan["action"] == action
     assert plan["success_criterion"]
+
+
+def test_stale_targeted_test_repair_preserves_the_recorded_scope():
+    memory = [
+        {
+            "memory_id": "targeted-test-memory",
+            "event_id": "targeted-test-event",
+            "tool_name": "run_targeted_tests",
+            "test_targets": ["test_service.py"],
+            "stale": True,
+            "support_status": "stale",
+        }
+    ]
+
+    plan = plan_memory_repair(["stale evidence"], memory)
+
+    assert plan["repair_type"] == "stale_test_evidence"
+    assert plan["action"] == {
+        "action": "run_targeted_tests",
+        "targets": ["test_service.py"],
+    }
+
+
+def test_lost_provenance_rereads_cited_source_not_newer_unrelated_file():
+    memory = [
+        {
+            "memory_id": "relevant-memory",
+            "event_id": "relevant-event",
+            "tool_name": "write_file",
+            "path": "service.py",
+            "stale": False,
+            "support_status": "supported",
+        },
+        {
+            "memory_id": "unrelated-memory",
+            "event_id": "unrelated-event",
+            "tool_name": "read_file",
+            "path": "notes.py",
+            "stale": False,
+            "support_status": "supported",
+        },
+    ]
+
+    plan = plan_memory_repair(
+        ["lost provenance"],
+        memory,
+        claim_source_event_ids=["relevant-event"],
+    )
+
+    assert plan["repair_type"] == "lost_provenance"
+    assert plan["target_memory_ids"] == ["relevant-memory"]
+    assert plan["action"] == {"action": "read_file", "path": "service.py"}
+
+
+def test_contradicted_targeted_test_gets_discriminating_rerun():
+    memory = [
+        {
+            "memory_id": "contradicted-test",
+            "event_id": "test-event",
+            "tool_name": "run_targeted_tests",
+            "test_targets": ["test_service.py"],
+            "stale": True,
+            "support_status": "contradicted",
+        }
+    ]
+
+    plan = plan_memory_repair(["contradicted claim"], memory)
+
+    assert plan["repair_type"] == "contradictory_evidence"
+    assert plan["action"] == {
+        "action": "run_targeted_tests",
+        "targets": ["test_service.py"],
+    }
+
+
+def test_discriminating_source_read_reconciles_contradicted_file_memory():
+    contradicted = {
+        "event_id": "old-source",
+        "event_type": "tool_call",
+        "sequence_number": 2,
+        "tool_name": "read_file",
+        "path": "service.py",
+        "status": "success",
+        "workspace_revision": 1,
+        "source_type": "tool_output",
+    }
+    memory = apply_event_to_memory([], contradicted, label="read_file:service.py")
+    memory[0]["support_status"] = "contradicted"
+    memory[0]["reconciliation_status"] = "unresolved"
+    refreshed = {
+        **contradicted,
+        "event_id": "fresh-source",
+        "sequence_number": 5,
+        "workspace_revision": 2,
+    }
+
+    reconciled = apply_event_to_memory(
+        memory,
+        refreshed,
+        label="read_file:service.py",
+    )
+
+    assert reconciled[0]["support_status"] == "superseded"
+    assert reconciled[0]["reconciliation_status"] == "resolved"
+    assert reconciled[0]["reconciled_by_event_ids"] == ["fresh-source"]
+    assert reconciled[1]["reconciles_memory_ids"] == [
+        reconciled[0]["memory_id"]
+    ]
+
+
+def test_requirement_refresh_reconciles_contradicted_requirement_memory():
+    requirement = {
+        "event_id": "requirement-update",
+        "event_type": "user_requirement_update",
+        "sequence_number": 3,
+        "requirement_id": "requirement_update_0",
+        "content": "Preserve duplicate-key last-write-wins behavior.",
+        "status": "active",
+        "workspace_revision": 1,
+        "source_type": "user_instruction",
+    }
+    memory = apply_event_to_memory(
+        [],
+        requirement,
+        label="requirement_update:0",
+    )
+    memory[0]["support_status"] = "contradicted"
+    memory[0]["reconciliation_status"] = "unresolved"
+    refresh = {
+        "event_id": "requirement-refresh",
+        "event_type": "requirement_refresh",
+        "sequence_number": 6,
+        "tool_name": "refresh_requirements",
+        "status": "success",
+        "workspace_revision": 1,
+        "requirement_snapshot": {
+            "required_subtasks": [
+                {
+                    "subtask_id": "implement_parser",
+                    "description": "Implement parser behavior.",
+                }
+            ]
+        },
+        "source_type": "ground_truth",
+    }
+
+    reconciled = apply_event_to_memory(
+        memory,
+        refresh,
+        label="refresh_requirements",
+    )
+
+    assert reconciled[0]["support_status"] == "superseded"
+    assert reconciled[0]["reconciliation_status"] == "resolved"
+    assert reconciled[1]["reconciles_memory_ids"] == [
+        reconciled[0]["memory_id"]
+    ]
+
+
+def test_evaluator_repair_budget_stops_controller_diagnosis_loop():
+    plan = plan_memory_repair(
+        ["independent task evaluator failed"],
+        [],
+        repair_attempt=2,
+        repair_budget=2,
+    )
+
+    assert plan["repair_type"] == "implementation_evaluator_failure"
+    assert plan["repairable"] is False
+    assert plan["action"] is None
+    assert plan["budget_exhausted"] is True
+    assert plan["repair_attempt"] == 2
+    assert plan["repair_budget"] == 2
 
 
 def test_probe_scoring_penalizes_wrong_state_and_lost_attribution():
@@ -620,6 +793,7 @@ def test_expected_probe_state_tracks_failures_repository_and_stale_evidence():
     assert expected["next_action"] == {
         "action": "run_tests",
         "path": None,
+        "targets": [],
     }
 
 
@@ -635,21 +809,88 @@ def test_probe_schema_requires_complete_state_measurement():
         "uncertainties",
         "next_action",
     }.issubset(schema["required"])
-    assert schema["properties"]["next_action"]["properties"]["action"][
-        "enum"
-    ] == [
+    next_actions = set(
+        schema["properties"]["next_action"]["properties"]["action"][
+            "enum"
+        ]
+    )
+    assert {
         "list_files",
         "read_file",
+        "search_code",
+        "git_diff",
+        "git_status",
         "write_file",
+        "apply_patch",
+        "read_test_failure",
+        "run_targeted_tests",
+        "run_full_tests",
         "run_tests",
+        "inspect_dependency",
+        "read_structured_file",
         "finish",
         "none",
-    ]
+    } == next_actions
     assert schema["properties"]["evidence_state"]["required"] == [
         "current_event_ids",
         "stale_event_ids",
         "uncertain_event_ids",
     ]
+
+
+def test_probe_ground_truth_tracks_targeted_tests_and_bounded_patches():
+    task = BenchmarkRunner().get_task("coding_stale_tests_001")
+    ledger = [
+        {
+            "event_id": "patch-1",
+            "sequence_number": 2,
+            "tool_name": "apply_patch",
+            "paths": ["config_parser.py"],
+            "status": "success",
+            "workspace_revision": 1,
+            "stale": False,
+        },
+        {
+            "event_id": "targeted-test-2",
+            "sequence_number": 3,
+            "tool_name": "run_targeted_tests",
+            "test_targets": ["test_config_parser.py"],
+            "status": "success",
+            "workspace_revision": 1,
+            "stale": False,
+        },
+    ]
+
+    expected = expected_task_state(
+        task,
+        ledger,
+        workspace_revision=1,
+        expected_next_action={
+            "action": "run_targeted_tests",
+            "targets": ["test_config_parser.py"],
+        },
+    )
+
+    assert expected["latest_test"] == {
+        "status": "passed",
+        "source_event_id": "targeted-test-2",
+        "workspace_revision": 1,
+        "is_current": True,
+    }
+    assert expected["changed_files"] == ["config_parser.py"]
+    assert expected["repository_assumptions"] == [
+        {
+            "path": "config_parser.py",
+            "state": "modified",
+            "workspace_revision": 1,
+            "source_event_ids": ["patch-1"],
+        }
+    ]
+    assert expected["next_action"] == {
+        "action": "run_targeted_tests",
+        "path": None,
+        "targets": ["test_config_parser.py"],
+    }
 
 
 def test_probe_scoring_separates_attempt_outcomes_and_uncertain_evidence():

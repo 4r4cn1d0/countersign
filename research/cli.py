@@ -18,6 +18,7 @@ from .runner import (
     generate_artifact_bundle,
     load_model_matrix,
     run_model_matrix,
+    validate_manual_measurements,
     verify_run,
 )
 
@@ -183,6 +184,23 @@ def main(argv: list[str] | None = None) -> int:
         default="table",
     )
     matrix_audit_parser.set_defaults(handler=_matrix_audit_command)
+
+    measurement_audit_parser = subparsers.add_parser(
+        "measurement-audit",
+        help="Validate automatic metrics against frozen manual labels",
+    )
+    measurement_audit_parser.add_argument(
+        "--labels",
+        default="research/benchmarks/manual_measurement_labels.json",
+    )
+    measurement_audit_parser.add_argument(
+        "--format",
+        choices=["table", "json", "markdown"],
+        default="table",
+    )
+    measurement_audit_parser.set_defaults(
+        handler=_measurement_audit_command
+    )
 
     args = parser.parse_args(argv)
     args.handler(args)
@@ -412,6 +430,13 @@ def _matrix_audit_command(args: argparse.Namespace) -> None:
         raise SystemExit(2)
 
 
+def _measurement_audit_command(args: argparse.Namespace) -> None:
+    report = validate_manual_measurements(Path(args.labels))
+    _emit(report, args.format, title="Measurement Validation Audit")
+    if report["disagreements"]:
+        raise SystemExit(2)
+
+
 def _write_runs(runs: list[dict], output: Path) -> list[Path]:
     if len(runs) == 1 and output.suffix == ".json":
         _write_json(output, runs[0])
@@ -460,7 +485,32 @@ def _format_markdown(payload: dict, title: str) -> str:
         return format_model_matrix_analysis_markdown(payload)
 
     lines = [f"# {title}", ""]
-    if "metrics" in payload:
+    if payload.get("schema_version") == (
+        "agent-measurement-validation/v0.1"
+    ):
+        lines.extend(
+            _markdown_mapping(
+                "Validation Summary",
+                {
+                    "probe_cases": payload["probe_case_count"],
+                    "decision_belief_cases": (
+                        payload["decision_belief_case_count"]
+                    ),
+                    "comparisons": payload["comparison_count"],
+                    "exact_matches": payload["exact_match_count"],
+                    "exact_match_rate": payload["exact_match_rate"],
+                    "mean_absolute_error": payload[
+                        "mean_absolute_error"
+                    ],
+                    "disagreements": len(payload["disagreements"]),
+                },
+            )
+        )
+        lines.append(
+            f"Label fixture: `{payload['label_fixture']}`"
+        )
+        lines.append("")
+    elif "metrics" in payload:
         lines.extend(_markdown_mapping("Metrics", payload["metrics"]))
     if "decision_counts" in payload:
         lines.extend(_markdown_mapping("Verification Decisions", payload["decision_counts"]))
@@ -513,7 +563,28 @@ def _markdown_mapping(title: str, values: dict) -> list[str]:
 
 def _format_table(payload: dict, title: str) -> str:
     lines = [title]
-    if payload.get("schema_version") == "agent-memory-model-matrix-run/v0.1":
+    if payload.get("schema_version") == (
+        "agent-measurement-validation/v0.1"
+    ):
+        lines.extend(
+            _table_mapping(
+                {
+                    "probe_cases": payload["probe_case_count"],
+                    "decision_belief_cases": (
+                        payload["decision_belief_case_count"]
+                    ),
+                    "comparisons": payload["comparison_count"],
+                    "exact_matches": payload["exact_match_count"],
+                    "exact_match_rate": payload["exact_match_rate"],
+                    "mean_absolute_error": payload[
+                        "mean_absolute_error"
+                    ],
+                    "disagreements": len(payload["disagreements"]),
+                    "label_fixture": payload["label_fixture"],
+                }
+            )
+        )
+    elif payload.get("schema_version") == "agent-memory-model-matrix-run/v0.1":
         lines.extend(
             [
                 f"successful_models  {payload['successful_model_count']}",

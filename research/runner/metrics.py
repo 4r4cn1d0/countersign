@@ -7,6 +7,10 @@ from statistics import mean
 from typing import Iterable
 
 from .claims import extract_memory_claims
+from .decision_beliefs import (
+    extract_decision_beliefs,
+    summarize_decision_beliefs,
+)
 
 
 WORD_PATTERN = re.compile(r"[a-z0-9_]+")
@@ -48,11 +52,18 @@ def build_memory_health_report(run: dict, task: dict | None = None) -> dict:
     ]
 
     return {
-        "schema_version": "agent-memory-health/v0.2",
+        "schema_version": "agent-memory-health/v0.3",
         "run_id": run.get("run_id"),
         "task_id": run.get("task_id") or (task or {}).get("task_id"),
         "metrics": metrics,
         "headline_metrics": structured_metrics,
+        "decision_belief_summary": run.get(
+            "decision_belief_summary"
+        )
+        or summarize_decision_beliefs(
+            extract_decision_beliefs(run),
+            trace_events=trace_events,
+        ),
         "exploratory_metrics": {
             "semantic_drift_score": semantic_drift_score,
             "goal_fidelity": _round_score(1.0 - semantic_drift_score),
@@ -90,6 +101,15 @@ def compute_structured_memory_metrics(
     )
     probe_summary = run.get("task_state_probe_summary", {})
     operational_items = list(run.get("operational_memory", []))
+    decision_beliefs = list(
+        run.get("decision_beliefs") or extract_decision_beliefs(run)
+    )
+    decision_summary = run.get(
+        "decision_belief_summary"
+    ) or summarize_decision_beliefs(
+        decision_beliefs,
+        trace_events=run.get("trace_events", []),
+    )
     items_by_event_id = {
         item.get("event_id"): item
         for item in operational_items
@@ -107,17 +127,55 @@ def compute_structured_memory_metrics(
         for event_id in event.get("source_event_ids", [])
         if event_id in items_by_event_id
     ]
-    unsupported_count = sum(
-        claim.get("support_status") == "unsupported"
-        for claim in claims
-    )
-    contradicted_used = sum(
-        item.get("support_status") == "contradicted"
-        for item in cited_items
-    )
-    stale_used = sum(bool(item.get("stale")) for item in cited_items)
-    belief_count = len(claims)
-    cited_count = len(cited_items)
+    if decision_beliefs:
+        beliefs_for_metrics = decision_beliefs
+        tool_beliefs = [
+            belief
+            for belief in decision_beliefs
+            if belief.get("tool_decision")
+        ]
+        unsupported_count = sum(
+            belief.get("support_status") == "unsupported"
+            for belief in beliefs_for_metrics
+        )
+        contradicted_used = sum(
+            belief.get("support_status") == "contradicted"
+            for belief in beliefs_for_metrics
+        )
+        stale_used = sum(
+            bool(belief.get("stale"))
+            for belief in beliefs_for_metrics
+        )
+        belief_count = len(beliefs_for_metrics)
+        cited_count = belief_count
+        tool_unsupported = sum(
+            belief.get("support_status") == "unsupported"
+            for belief in tool_beliefs
+        )
+        tool_contradicted = sum(
+            belief.get("support_status") == "contradicted"
+            for belief in tool_beliefs
+        )
+        tool_stale = sum(
+            bool(belief.get("stale")) for belief in tool_beliefs
+        )
+        tool_belief_count = len(tool_beliefs)
+    else:
+        unsupported_count = sum(
+            claim.get("support_status") == "unsupported"
+            for claim in claims
+        )
+        contradicted_used = sum(
+            item.get("support_status") == "contradicted"
+            for item in cited_items
+        )
+        stale_used = sum(bool(item.get("stale")) for item in cited_items)
+        belief_count = len(claims)
+        cited_count = len(cited_items)
+        tool_unsupported = 0
+        tool_contradicted = 0
+        tool_stale = 0
+        tool_belief_count = 0
 
     requirement_recall = probe_summary.get("mean_criterion_recall")
     subtask_accuracy = probe_summary.get(
@@ -184,6 +242,9 @@ def compute_structured_memory_metrics(
             uncertain_evidence_accuracy,
             uncertainty_calibration_accuracy,
             next_action_accuracy,
+            decision_summary.get("decision_belief_coverage")
+            if decision_summary.get("decision_count")
+            else None,
             1.0 - (unsupported_count / belief_count)
             if belief_count
             else 1.0,
@@ -197,6 +258,9 @@ def compute_structured_memory_metrics(
         if value is not None
     ]
     return {
+        "schema_version": "agent-structured-memory-metrics/v0.2",
+        "confirmatory": True,
+        "lexical_or_embedding_similarity_included": False,
         "structured_memory_score": _round_score(mean(components)),
         "requirement_recall": requirement_recall,
         "objective_fidelity": objective_fidelity,
@@ -215,6 +279,16 @@ def compute_structured_memory_metrics(
             uncertainty_calibration_accuracy
         ),
         "next_action_accuracy": next_action_accuracy,
+        "decision_belief_count": decision_summary["belief_count"],
+        "tool_decision_belief_count": decision_summary[
+            "tool_decision_belief_count"
+        ],
+        "decision_belief_coverage": decision_summary[
+            "decision_belief_coverage"
+        ],
+        "decisions_with_beliefs": decision_summary[
+            "decisions_with_beliefs"
+        ],
         "unsupported_repository_belief_count": unsupported_count,
         "unsupported_repository_belief_rate": _rate(
             unsupported_count,
@@ -227,6 +301,25 @@ def compute_structured_memory_metrics(
         ),
         "stale_observations_used_after_invalidation": stale_used,
         "stale_decision_use_rate": _rate(stale_used, cited_count),
+        "unsupported_beliefs_used_for_tool_decisions": (
+            tool_unsupported
+        ),
+        "unsupported_tool_decision_use_rate": _rate(
+            tool_unsupported,
+            tool_belief_count,
+        ),
+        "stale_beliefs_used_for_tool_decisions": tool_stale,
+        "stale_tool_decision_use_rate": _rate(
+            tool_stale,
+            tool_belief_count,
+        ),
+        "contradicted_beliefs_used_for_tool_decisions": (
+            tool_contradicted
+        ),
+        "contradicted_tool_decision_use_rate": _rate(
+            tool_contradicted,
+            tool_belief_count,
+        ),
         "explicitly_cited_memory_item_count": cited_count,
         "eligible_probe_count": int(
             probe_summary.get("eligible_probe_count", 0)

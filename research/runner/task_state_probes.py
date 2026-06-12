@@ -7,19 +7,14 @@ import re
 from statistics import mean
 from typing import Any
 
+from .coding_environment import CODING_TOOL_ACTIONS
+
 
 SUBTASK_STATUSES = ("pending", "completed", "failed", "blocked")
 TEST_STATUSES = ("not_run", "passed", "failed")
 ATTEMPT_OUTCOMES = ("failed", "blocked")
 REPOSITORY_STATES = ("observed", "modified")
-NEXT_ACTIONS = (
-    "list_files",
-    "read_file",
-    "write_file",
-    "run_tests",
-    "finish",
-    "none",
-)
+NEXT_ACTIONS = (*CODING_TOOL_ACTIONS, "none")
 
 
 def _attempt_schema(outcome: str) -> dict:
@@ -202,6 +197,10 @@ def task_state_probe_schema(task: dict) -> dict:
                         "enum": list(NEXT_ACTIONS),
                     },
                     "path": {"type": ["string", "null"]},
+                    "targets": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
                     "reason": {"type": "string"},
                 },
                 "required": ["action", "path", "reason"],
@@ -282,27 +281,26 @@ def expected_task_state(
     reads = [
         entry
         for entry in evidence_ledger
-        if entry.get("tool_name") == "read_file"
+        if entry.get("tool_name")
+        in {"read_file", "read_structured_file", "inspect_dependency"}
         and entry.get("status") == "success"
     ]
+    write_entries = _expanded_write_entries(evidence_ledger)
     source_writes = [
         entry
-        for entry in evidence_ledger
-        if entry.get("tool_name") == "write_file"
-        and entry.get("status") == "success"
-        and not _is_test_path(str(entry.get("path", "")))
+        for entry in write_entries
+        if not _is_test_path(str(entry.get("path", "")))
     ]
     test_writes = [
         entry
-        for entry in evidence_ledger
-        if entry.get("tool_name") == "write_file"
-        and entry.get("status") == "success"
-        and _is_test_path(str(entry.get("path", "")))
+        for entry in write_entries
+        if _is_test_path(str(entry.get("path", "")))
     ]
     test_entries = [
         entry
         for entry in evidence_ledger
-        if entry.get("tool_name") == "run_tests"
+        if entry.get("tool_name")
+        in {"run_tests", "run_full_tests", "run_targeted_tests"}
     ]
     latest_test = test_entries[-1] if test_entries else None
     latest_test_revision = (
@@ -677,6 +675,11 @@ def score_task_state_probe(payload: dict | None, expected: dict) -> dict:
     if expected_next_action["action"] in {"read_file", "write_file"}:
         next_action_components.append(
             predicted_next_action["path"] == expected_next_action["path"]
+        )
+    if expected_next_action["action"] == "run_targeted_tests":
+        next_action_components.append(
+            predicted_next_action["targets"]
+            == expected_next_action["targets"]
         )
     next_action_accuracy = _accuracy(
         next_action_components
@@ -1092,7 +1095,7 @@ def _repository_assumptions(entries: list[dict]) -> list[dict]:
         writes = [
             entry
             for entry in current_entries
-            if entry.get("tool_name") == "write_file"
+            if entry.get("tool_name") in {"write_file", "apply_patch"}
         ]
         state_source = writes[-1] if writes else latest
         source_event_ids = []
@@ -1115,15 +1118,40 @@ def _repository_assumptions(entries: list[dict]) -> list[dict]:
 
 def _normalize_next_action(action: Any) -> dict:
     if not isinstance(action, dict):
-        return {"action": "none", "path": None}
+        return {"action": "none", "path": None, "targets": []}
     action_name = str(action.get("action", "none"))
     if action_name not in NEXT_ACTIONS:
         action_name = "none"
     path = action.get("path")
+    targets = action.get("targets")
     return {
         "action": action_name,
         "path": str(path) if path is not None else None,
+        "targets": (
+            [str(target) for target in targets]
+            if isinstance(targets, list)
+            else []
+        ),
     }
+
+
+def _expanded_write_entries(evidence_ledger: list[dict]) -> list[dict]:
+    entries = []
+    for entry in evidence_ledger:
+        if (
+            entry.get("status") != "success"
+            or entry.get("tool_name") not in {"write_file", "apply_patch"}
+        ):
+            continue
+        paths = (
+            [entry.get("path")]
+            if entry.get("path")
+            else entry.get("paths", [])
+        )
+        for path in paths:
+            if path:
+                entries.append({**entry, "path": str(path)})
+    return entries
 
 
 def _record_set_f1(

@@ -3,6 +3,10 @@
 from .benchmark_runner import BenchmarkRunConfig, BenchmarkRunner
 from .claims import attach_memory_claims, extract_memory_claims, find_stale_claims
 from .comparison import compare_runs
+from .decision_beliefs import (
+    extract_decision_beliefs,
+    summarize_decision_beliefs,
+)
 from .artifacts import generate_artifact_bundle, generate_artifact_summary
 from .labeling import label_high_risk_claims
 from .metrics import (
@@ -18,6 +22,10 @@ from .matrix_analysis import (
     analyze_model_matrix_manifest,
     format_model_matrix_analysis_markdown,
     write_model_matrix_analysis,
+)
+from .measurement_validation import (
+    load_manual_measurement_labels,
+    validate_manual_measurements,
 )
 from .model_adapters import (
     DeterministicModelAdapter,
@@ -69,7 +77,11 @@ __all__ = [
     "format_model_matrix_analysis_markdown",
     "write_model_matrix_analysis",
     "load_model_matrix",
+    "load_manual_measurement_labels",
+    "validate_manual_measurements",
     "compare_runs",
+    "extract_decision_beliefs",
+    "summarize_decision_beliefs",
     "build_memory_health_report",
     "compute_attribution_accuracy",
     "compute_false_completion_rate",

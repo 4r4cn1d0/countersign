@@ -530,6 +530,54 @@ def _task_rows_for_model(
                         0.0,
                     )
                 ),
+                "baseline_decision_belief_coverage": float(
+                    baseline_headline.get(
+                        "decision_belief_coverage",
+                        0.0,
+                    )
+                ),
+                "verified_decision_belief_coverage": float(
+                    verified_headline.get(
+                        "decision_belief_coverage",
+                        0.0,
+                    )
+                ),
+                "baseline_unsupported_tool_decision_use_rate": float(
+                    baseline_headline.get(
+                        "unsupported_tool_decision_use_rate",
+                        0.0,
+                    )
+                ),
+                "verified_unsupported_tool_decision_use_rate": float(
+                    verified_headline.get(
+                        "unsupported_tool_decision_use_rate",
+                        0.0,
+                    )
+                ),
+                "baseline_stale_tool_decision_use_rate": float(
+                    baseline_headline.get(
+                        "stale_tool_decision_use_rate",
+                        0.0,
+                    )
+                ),
+                "verified_stale_tool_decision_use_rate": float(
+                    verified_headline.get(
+                        "stale_tool_decision_use_rate",
+                        0.0,
+                    )
+                ),
+                "baseline_contradicted_tool_decision_use_rate": float(
+                    baseline_headline.get(
+                        "contradicted_tool_decision_use_rate",
+                        0.0,
+                    )
+                ),
+                "verified_contradicted_tool_decision_use_rate": float(
+                    verified_headline.get(
+                        "contradicted_tool_decision_use_rate",
+                        0.0,
+                    )
+                ),
                 "verified_probe_evidence_attribution_accuracy": (
                     verified_probe.get(
                         "mean_evidence_attribution_accuracy"
@@ -765,6 +813,34 @@ def _model_summary(model: dict, rows: list[dict]) -> dict:
             for row in rows
             if row["verified_structured_memory_score"] is not None
         ),
+        "avg_baseline_decision_belief_coverage": _mean(
+            row["baseline_decision_belief_coverage"] for row in rows
+        ),
+        "avg_verified_decision_belief_coverage": _mean(
+            row["verified_decision_belief_coverage"] for row in rows
+        ),
+        "avg_baseline_unsupported_tool_decision_use_rate": _mean(
+            row["baseline_unsupported_tool_decision_use_rate"]
+            for row in rows
+        ),
+        "avg_verified_unsupported_tool_decision_use_rate": _mean(
+            row["verified_unsupported_tool_decision_use_rate"]
+            for row in rows
+        ),
+        "avg_baseline_stale_tool_decision_use_rate": _mean(
+            row["baseline_stale_tool_decision_use_rate"] for row in rows
+        ),
+        "avg_verified_stale_tool_decision_use_rate": _mean(
+            row["verified_stale_tool_decision_use_rate"] for row in rows
+        ),
+        "avg_baseline_contradicted_tool_decision_use_rate": _mean(
+            row["baseline_contradicted_tool_decision_use_rate"]
+            for row in rows
+        ),
+        "avg_verified_contradicted_tool_decision_use_rate": _mean(
+            row["verified_contradicted_tool_decision_use_rate"]
+            for row in rows
+        ),
         "avg_semantic_drift_score": _mean(
             row["semantic_drift_score"] for row in rows
         ),
@@ -873,6 +949,38 @@ def _aggregate_summary(
             row["verified_structured_memory_score"]
             for row in task_rows
             if row["verified_structured_memory_score"] is not None
+        ),
+        "avg_baseline_decision_belief_coverage": _mean(
+            row["baseline_decision_belief_coverage"]
+            for row in task_rows
+        ),
+        "avg_verified_decision_belief_coverage": _mean(
+            row["verified_decision_belief_coverage"]
+            for row in task_rows
+        ),
+        "avg_baseline_unsupported_tool_decision_use_rate": _mean(
+            row["baseline_unsupported_tool_decision_use_rate"]
+            for row in task_rows
+        ),
+        "avg_verified_unsupported_tool_decision_use_rate": _mean(
+            row["verified_unsupported_tool_decision_use_rate"]
+            for row in task_rows
+        ),
+        "avg_baseline_stale_tool_decision_use_rate": _mean(
+            row["baseline_stale_tool_decision_use_rate"]
+            for row in task_rows
+        ),
+        "avg_verified_stale_tool_decision_use_rate": _mean(
+            row["verified_stale_tool_decision_use_rate"]
+            for row in task_rows
+        ),
+        "avg_baseline_contradicted_tool_decision_use_rate": _mean(
+            row["baseline_contradicted_tool_decision_use_rate"]
+            for row in task_rows
+        ),
+        "avg_verified_contradicted_tool_decision_use_rate": _mean(
+            row["verified_contradicted_tool_decision_use_rate"]
+            for row in task_rows
         ),
         "avg_semantic_drift_score": _mean(
             row["semantic_drift_score"] for row in task_rows

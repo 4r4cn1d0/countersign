@@ -36,7 +36,7 @@ def test_memory_health_report_contains_core_metrics():
     run = BenchmarkRunner().run_all()[0]
     report = build_memory_health_report(run)
 
-    assert report["schema_version"] == "agent-memory-health/v0.2"
+    assert report["schema_version"] == "agent-memory-health/v0.3"
     assert report["run_id"] == run["run_id"]
     assert report["task_id"] == run["task_id"]
     assert report["claim_counts"]["total"] == len(run["memory_claims"])
@@ -50,6 +50,11 @@ def test_memory_health_report_contains_core_metrics():
     assert report["exploratory_metrics"]["method"] == "lexical_jaccard"
     assert report["exploratory_metrics"]["confirmatory"] is False
     assert "structured_memory_score" in report["headline_metrics"]
+    assert report["headline_metrics"]["confirmatory"] is True
+    assert report["headline_metrics"][
+        "lexical_or_embedding_similarity_included"
+    ] is False
+    assert "decision_belief_summary" in report
 
 
 def test_metric_scores_handle_unsupported_and_stale_completion_claims():
@@ -166,7 +171,7 @@ def test_memory_health_report_api_scores_submitted_run():
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["schema_version"] == "agent-memory-health/v0.2"
+    assert payload["schema_version"] == "agent-memory-health/v0.3"
     assert payload["run_id"] == run["run_id"]
     assert payload["metrics"]["memory_health_score"] <= 1.0
 

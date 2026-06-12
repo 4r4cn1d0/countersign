@@ -15,7 +15,7 @@ The project does not claim that AI agents literally have dementia. Dementia, con
 
 ## Current Implementation Status
 
-As of June 12, 2026:
+As of June 13, 2026:
 
 - The checked-in benchmark contains 10 tasks, including 8 fixture-backed coding tasks with
   visible tests, hidden evaluators, repository hashes, false leads, delayed verification,
@@ -31,14 +31,14 @@ As of June 12, 2026:
   available dependency evidence permits that precision.
 - Newer evidence explicitly supersedes and reconciles older contradictory observations while
   preserving historical contradiction records for analysis.
-- Tasks 37 and 41 are complete. The full backend suite passes: 373 passed, 1 skipped.
+- Tasks 35, 36, 37, and 41 are complete. The full backend suite passes:
+  389 passed, 1 skipped.
 - Latest implementation commit on GitHub `main`: `f85b806`.
 
 Immediate independent work:
 
-- Task 35.6: manually validate task-state probe scoring.
-- Task 36: finish decision-linked structured scientific metrics.
-- Task 38: generalize active repair using the stronger dependency and tool evidence.
+- Task 38.7: demonstrate active memory repair with real local models.
+- Task 39: run intervention ablations.
 - Task 40: extend verification from completion wording to consequential agent decisions.
 
 Empirical dependencies:
@@ -62,6 +62,25 @@ Minimum demo capabilities:
 - Show before/after results in the dashboard.
 
 ## Work Log
+
+- Date: 2026-06-13 (Session 24)
+- Author: Codex (measurement validation and decision-linked beliefs)
+- Summary: Completed Tasks 35 and 36. Added a frozen manually labeled measurement fixture,
+  an independent `measurement-audit` CLI path, and adversarial cases for fresh, unsupported,
+  stale, contradicted, and only-later-invalidated beliefs. Extended model actions with
+  structured repository-state beliefs and exact source event IDs, then linked each belief to
+  the tool decision that consumed it using decision-time evidence state rather than final-run
+  state. Added matrix fields for belief coverage and unsupported, stale, and contradicted
+  tool-decision use. Confirmatory metrics explicitly exclude lexical and embedding similarity.
+- Status: The measurement audit matches all 48 frozen manual comparisons with zero
+  disagreements and mean absolute error 0.0. Focused measurement-validation tests pass:
+  6 passed. All research tests pass: 158 passed, 1 skipped. Full backend suite passes:
+  389 passed, 1 skipped. The manual fixture is a controlled validation set, not a substitute
+  for independent annotators or the planned real-model empirical study.
+- Next actions:
+  - Complete Task 38.7 with real local-model recovery evidence.
+  - Implement Task 39 intervention ablations.
+  - Extend decision-time verification in Task 40.
 
 - Date: 2026-06-12 (Session 23)
 - Author: Codex (coding environment and operational memory)
@@ -1239,13 +1258,13 @@ Acceptance bar for unfinished research tasks:
   - _Completion evidence: frozen protocol, audited matrix manifest, paired condition effects,
     confidence intervals, and a natural-versus-induced corruption table._
 
-- [ ] 35. Complete shadow task-state measurement
+- [x] 35. Complete shadow task-state measurement
   - [x] 35.1 Add failed attempts and blocked attempts to the probe schema
   - [x] 35.2 Add current repository assumptions with source event IDs
   - [x] 35.3 Ask the model which evidence it considers stale or uncertain
   - [x] 35.4 Score objective fidelity and intended-next-action appropriateness
   - [x] 35.5 Generate per-run memory-accuracy curves without steering the main trajectory
-  - [ ] 35.6 Validate probe scoring on manually labeled checkpoints
+  - [x] 35.6 Validate probe scoring on manually labeled checkpoints
   - _Status: Tasks 35.1-35.5 are implemented in
     `research/runner/task_state_probes.py`. Probe schema v0.3 records failed and blocked
     attempts separately, revision-aware repository assumptions with exact source event IDs,
@@ -1258,16 +1277,37 @@ Acceptance bar for unfinished research tasks:
     and first degradation action. Probe generations remain buffered outside the live
     trajectory and are appended only after execution; regression tests confirm probes do not
     change model actions, workspace files, interaction metrics, or outcomes._
-  - _Verification: Focused probe, metrics, matrix, runner, and CLI tests pass:
-    114 passed. Full backend suite passes: 366 passed, 1 skipped. Task 35 remains open only
-    for 35.6 manual-label validation._
+  - _Manual validation: `research/benchmarks/manual_measurement_labels.json` freezes three
+    manually scored probe checkpoints covering correct current state, stale-test confusion,
+    and lost source attribution. `agent-memory measurement-audit` compares automatic component
+    scores against those labels and exits nonzero on disagreement._
+  - _Verification: The measurement audit matches all 48 frozen manual comparisons across
+    probe and decision-belief cases with exact-match rate 1.0, zero disagreements, and mean
+    absolute error 0.0. All research tests pass: 158 passed, 1 skipped. Full backend suite
+    passes: 389 passed, 1 skipped._
 
-- [ ] 36. Complete structured scientific metrics
-  - [ ] 36.1 Extract repository-state beliefs beyond finish claims
-  - [ ] 36.2 Link beliefs to the decisions that actually consumed them
-  - [ ] 36.3 Count unsupported, stale, and contradicted beliefs used for tool decisions
-  - [ ] 36.4 Add manually validated metric fixtures and adversarial edge cases
-  - [ ] 36.5 Keep lexical and embedding similarity outside confirmatory claims
+- [x] 36. Complete structured scientific metrics
+  - [x] 36.1 Extract repository-state beliefs beyond finish claims
+  - [x] 36.2 Link beliefs to the decisions that actually consumed them
+  - [x] 36.3 Count unsupported, stale, and contradicted beliefs used for tool decisions
+  - [x] 36.4 Add manually validated metric fixtures and adversarial edge cases
+  - [x] 36.5 Keep lexical and embedding similarity outside confirmatory claims
+  - _Implemented: Model-authored actions can declare bounded typed beliefs about file, test,
+    requirement, task, repository, and source-support state with exact source event IDs.
+    `research/runner/decision_beliefs.py` links those beliefs to the decision event and action
+    that consumed them, evaluates support at decision time, and records lost provenance,
+    invalidation, and contradiction without retroactively labeling a previously valid
+    decision from evidence that changed later._
+  - _Metrics: Structured memory reports now expose decision-belief coverage and counts/rates
+    for unsupported, stale, and contradicted beliefs used by tool decisions. Matrix rows,
+    per-model summaries, and aggregate summaries carry the same fields. Lexical semantic-drift
+    similarity remains explicitly exploratory and is excluded from confirmatory structured
+    metrics._
+  - _Validation: Five frozen adversarial decision-belief cases cover fresh support, stale test
+    evidence, missing provenance, contradicted evidence, and future invalidation. The combined
+    measurement audit matches 48/48 manual comparisons. Focused measurement-validation tests
+    pass: 6 passed; all research tests pass: 158 passed, 1 skipped; full backend suite passes:
+    389 passed, 1 skipped._
 
 - [x] 37. Strengthen operational memory
   - [x] 37.1 Model file, symbol, test, command, and requirement dependencies
@@ -1286,13 +1326,30 @@ Acceptance bar for unfinished research tasks:
     pass, and the full backend suite passes: 373 passed, 1 skipped._
 
 - [ ] 38. Generalize active memory repair
-  - [ ] 38.1 Repair stale test evidence with targeted or full tests
-  - [ ] 38.2 Repair lost provenance by rereading the smallest relevant source
-  - [ ] 38.3 Resolve contradictory evidence by obtaining a discriminating observation
-  - [ ] 38.4 Recover forgotten or changed requirements from user/task history
-  - [ ] 38.5 Convert evaluator failures into a bounded diagnosis-and-fix loop
-  - [ ] 38.6 Require model replanning from repaired memory
+  - [x] 38.1 Repair stale test evidence with targeted or full tests
+  - [x] 38.2 Repair lost provenance by rereading the smallest relevant source
+  - [x] 38.3 Resolve contradictory evidence by obtaining a discriminating observation
+  - [x] 38.4 Recover forgotten or changed requirements from user/task history
+  - [x] 38.5 Convert evaluator failures into a bounded diagnosis-and-fix loop
+  - [x] 38.6 Require model replanning from repaired memory
   - [ ] 38.7 Demonstrate recovery with real local models, not only deterministic control runs
+  - _Implemented: Repair plans now preserve recorded targeted-test scopes and otherwise run
+    the full visible suite. Lost provenance rereads one cited or most relevant changed source
+    instead of performing a broad workspace scan. Contradicted tests, files, and requirements
+    trigger source-type-specific observations whose new memory items explicitly supersede the
+    contradicted records._
+  - _Evaluator recovery: Failed independent evaluation now produces a structured diagnosis
+    containing failed evaluator components, current Git diff, latest failing-test evidence,
+    evaluator output, and an authoritative task/user requirement-history snapshot. Controller
+    assistance is capped at two diagnosis-and-fix cycles; later failures remain blocked and are
+    reported as repair-budget exhaustion._
+  - _Replanning evidence: Every successful repair creates a pending replanning obligation.
+    The next valid model-authored action is recorded as a `memory_replan` tied to the exact repair
+    result and repaired memory item; invalid replans leave the obligation active. Run metrics
+    separately count required, completed, and invalid replans._
+  - _Verification: Focused repair and runner suites pass: 90 passed. All research tests pass:
+    158 passed, 1 skipped. Full backend suite passes: 389 passed, 1 skipped. Task 38 remains open
+    only for 38.7 real local-model recovery evidence._
 
 - [ ] 39. Implement intervention ablations
   - [ ] 39.1 Ordinary conversational-memory baseline

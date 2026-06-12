@@ -56,6 +56,36 @@ def apply_event_to_memory(
                 contradictory=previous_status != current_status,
             )
             reconciled_memory_ids.append(str(item["memory_id"]))
+    elif tool_name in {"read_file", "inspect_dependency"} and event.get(
+        "path"
+    ):
+        for item in items:
+            if (
+                item.get("support_status") != "contradicted"
+                or item.get("path") != event.get("path")
+            ):
+                continue
+            _reconcile_item(
+                item,
+                event_id=event_id,
+                contradictory=True,
+            )
+            reconciled_memory_ids.append(str(item["memory_id"]))
+    elif tool_name == "refresh_requirements":
+        for item in items:
+            if (
+                item.get("support_status") != "contradicted"
+                or not (item.get("dependency_graph") or {}).get(
+                    "requirements"
+                )
+            ):
+                continue
+            _reconcile_item(
+                item,
+                event_id=event_id,
+                contradictory=True,
+            )
+            reconciled_memory_ids.append(str(item["memory_id"]))
 
     memory_item = build_memory_item(event, label=label)
     memory_item["reconciles_memory_ids"] = reconciled_memory_ids
@@ -222,9 +252,14 @@ def plan_memory_repair(
     memory_items: list[dict],
     *,
     recommended_actions: list[str] | None = None,
+    claim_source_event_ids: list[str] | None = None,
+    repair_attempt: int = 0,
+    repair_budget: int = 2,
 ) -> dict:
     """Choose the smallest executable repair for a blocked finish claim."""
 
+    if repair_budget < 1:
+        raise ValueError("repair_budget must be at least 1")
     normalized_reasons = {str(reason).lower() for reason in reasons}
     normalized_recommendations = {
         str(action).lower() for action in (recommended_actions or [])
@@ -283,52 +318,75 @@ def plan_memory_repair(
     action = None
     targets: list[str] = []
     rationale = ""
+    budget_exhausted = False
 
     if implementation_failure:
         repair_type = "implementation_evaluator_failure"
-        action = {"action": "refresh_requirements"}
-        rationale = (
-            "Refresh the authoritative goal, acceptance criteria, active requirement "
-            "updates, and evaluator failure before returning control to the model."
-        )
+        budget_exhausted = repair_attempt >= repair_budget
+        if not budget_exhausted:
+            action = {"action": "diagnose_evaluator_failure"}
+            rationale = (
+                "Record the failed evaluator components, current diff, latest test "
+                "failure, and authoritative requirement history before returning the "
+                "bounded fix attempt to the model."
+            )
+        else:
+            rationale = (
+                "The bounded evaluator diagnosis-and-fix budget is exhausted; preserve "
+                "the failure and require the model to stop claiming completion."
+            )
     elif missing_requirements:
         repair_type = "missing_requirements"
         action = {"action": "refresh_requirements"}
         rationale = (
-            "Restore the authoritative task requirements before the model replans."
+            "Restore the authoritative task and user requirement history before the "
+            "model replans."
         )
     elif contradicted_claim or contradicted:
         repair_type = "contradictory_evidence"
+        if not contradicted and contradicted_claim:
+            contradicted = [
+                item
+                for item in reversed(memory_items)
+                if item.get("historical_contradiction")
+            ]
+            if not contradicted:
+                contradicted = _relevant_provenance_items(
+                    memory_items,
+                    claim_source_event_ids or [],
+                )
         targets = [item["memory_id"] for item in contradicted]
-        action = _evidence_refresh_action(contradicted)
+        action = _discriminating_observation(contradicted)
         rationale = (
-            "Refresh the evidence source whose newer observation contradicted the "
-            "completion belief."
+            "Obtain a new observation of the exact test, source, or requirement scope "
+            "that can distinguish between the contradictory beliefs."
         )
     elif lost_provenance:
         repair_type = "lost_provenance"
-        provenance_targets = [
-            item
-            for item in reversed(memory_items)
-            if item.get("path") and not item.get("stale")
-        ]
+        provenance_targets = _relevant_provenance_items(
+            memory_items,
+            claim_source_event_ids or [],
+        )
         targets = [
             item["memory_id"] for item in provenance_targets[:1]
         ]
-        action = _evidence_refresh_action(provenance_targets)
+        action = _smallest_source_refresh(provenance_targets)
         rationale = (
-            "Re-observe the latest relevant repository source and attach fresh "
-            "provenance before another completion claim."
+            "Reread one smallest relevant repository source and attach its exact "
+            "event ID before another completion claim."
         )
     elif missing_or_stale_tests:
         repair_type = "stale_test_evidence"
-        action = {"action": "run_tests"}
+        action = _test_refresh_action(stale_tests)
         targets = [item["memory_id"] for item in stale_tests]
-        rationale = "Refresh test evidence at the current repository revision."
+        rationale = (
+            "Rerun the narrow recorded test scope when it exists; otherwise run the "
+            "full visible suite at the current repository revision."
+        )
 
     if action:
         return {
-            "schema_version": "agent-memory-repair-plan/v0.2",
+            "schema_version": "agent-memory-repair-plan/v0.3",
             "detected": True,
             "detections": sorted(set(detections)),
             "repair_type": repair_type,
@@ -337,24 +395,31 @@ def plan_memory_repair(
             "target_memory_ids": targets,
             "rationale": rationale,
             "success_criterion": _repair_success_criterion(repair_type),
+            "repair_attempt": repair_attempt + 1,
+            "repair_budget": repair_budget,
+            "budget_exhausted": False,
         }
     return {
-        "schema_version": "agent-memory-repair-plan/v0.2",
+        "schema_version": "agent-memory-repair-plan/v0.3",
         "detected": bool(reasons),
         "detections": sorted(set(detections or reasons)),
-        "repair_type": "unclassified",
+        "repair_type": repair_type or "unclassified",
         "repairable": False,
         "action": None,
-        "target_memory_ids": [],
+        "target_memory_ids": targets,
         "success_criterion": None,
-        "rationale": (
+        "rationale": rationale
+        or (
             "No bounded evidence-refresh action can repair the implementation; "
             "return the precise failure to the model for replanning."
         ),
+        "repair_attempt": repair_attempt,
+        "repair_budget": repair_budget,
+        "budget_exhausted": budget_exhausted,
     }
 
 
-def _evidence_refresh_action(memory_items: list[dict]) -> dict:
+def _test_refresh_action(memory_items: list[dict]) -> dict:
     for item in memory_items:
         if item.get("tool_name") == "run_targeted_tests" and item.get(
             "test_targets"
@@ -363,13 +428,65 @@ def _evidence_refresh_action(memory_items: list[dict]) -> dict:
                 "action": "run_targeted_tests",
                 "targets": list(item["test_targets"]),
             }
-        if item.get("tool_name") == "run_full_tests":
-            return {"action": "run_full_tests"}
-        if item.get("tool_name") == "run_tests":
-            return {"action": "run_tests"}
+    return {"action": "run_full_tests"}
+
+
+def _smallest_source_refresh(memory_items: list[dict]) -> dict | None:
+    for item in memory_items:
         if item.get("path"):
             return {"action": "read_file", "path": str(item["path"])}
-    return {"action": "list_files"}
+        paths = [str(path) for path in item.get("paths", []) if path]
+        if paths:
+            return {"action": "read_file", "path": min(paths, key=len)}
+    return None
+
+
+def _discriminating_observation(memory_items: list[dict]) -> dict | None:
+    test_items = [
+        item
+        for item in memory_items
+        if item.get("tool_name")
+        in {"run_tests", "run_full_tests", "run_targeted_tests"}
+    ]
+    if test_items:
+        return _test_refresh_action(test_items)
+    if any(
+        (item.get("dependency_graph") or {}).get("requirements")
+        or item.get("event_type") == "user_requirement_update"
+        for item in memory_items
+    ):
+        return {"action": "refresh_requirements"}
+    return _smallest_source_refresh(memory_items)
+
+
+def _relevant_provenance_items(
+    memory_items: list[dict],
+    claim_source_event_ids: list[str],
+) -> list[dict]:
+    source_ids = {str(event_id) for event_id in claim_source_event_ids}
+    observable = [
+        item
+        for item in memory_items
+        if item.get("path") or item.get("paths")
+    ]
+    cited = [
+        item
+        for item in reversed(observable)
+        if item.get("event_id") in source_ids
+    ]
+    if cited:
+        return cited
+    current = [
+        item
+        for item in observable
+        if not item.get("stale")
+    ]
+    changed = [
+        item
+        for item in reversed(current)
+        if item.get("tool_name") in {"write_file", "apply_patch"}
+    ]
+    return changed or list(reversed(current))
 
 
 def _repair_success_criterion(repair_type: str | None) -> str:
@@ -378,14 +495,19 @@ def _repair_success_criterion(repair_type: str | None) -> str:
     if repair_type == "lost_provenance":
         return "A current repository observation is stored with an exact event ID."
     if repair_type == "contradictory_evidence":
-        return "The contradicted evidence source is re-observed and superseded."
-    if repair_type in {
-        "missing_requirements",
-        "implementation_evaluator_failure",
-    }:
         return (
-            "The authoritative task snapshot is restored and the model performs a "
-            "new planning step before any completion claim."
+            "A discriminating observation of the contradicted scope is recorded and "
+            "the older belief is superseded."
+        )
+    if repair_type == "missing_requirements":
+        return (
+            "The authoritative task and user requirement history is restored before "
+            "a new planning step."
+        )
+    if repair_type == "implementation_evaluator_failure":
+        return (
+            "A bounded evaluator diagnosis is recorded and the model performs a new "
+            "fix-planning step before any completion claim."
         )
     return "A current evidence item is stored before replanning."
 
@@ -584,6 +706,11 @@ def _claim_for_event(event: dict, label: str) -> str:
         return (
             "Restored authoritative requirements and evaluator feedback at "
             f"repository revision {revision}."
+        )
+    if tool_name == "diagnose_evaluator_failure":
+        return (
+            "Recorded an evaluator diagnosis against current repository state and "
+            f"requirement history at repository revision {revision}."
         )
     return str(event.get("content") or label)
 

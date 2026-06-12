@@ -701,11 +701,28 @@ def test_model_matrix_analysis_reports_langgraph_tool_reality_columns(tmp_path: 
     assert row["verified_accepted_false_finishes"] == 0
     assert row["verified_recovery_after_block"] is True
     assert row["tool_action_parse_status_counts"] == {"json": 20}
+    assert 0.0 <= row["baseline_decision_belief_coverage"] <= 1.0
+    assert 0.0 <= row["verified_decision_belief_coverage"] <= 1.0
+    assert 0.0 <= row["baseline_unsupported_tool_decision_use_rate"] <= 1.0
+    assert 0.0 <= row["verified_stale_tool_decision_use_rate"] <= 1.0
+    assert 0.0 <= row["verified_contradicted_tool_decision_use_rate"] <= 1.0
     assert model["verified_recovery_count"] == 1
     assert model["baseline_evaluator_success_count"] == 1
     assert model["verified_evaluator_success_count"] == 1
+    assert (
+        model["avg_baseline_decision_belief_coverage"]
+        == row["baseline_decision_belief_coverage"]
+    )
+    assert (
+        model["avg_verified_stale_tool_decision_use_rate"]
+        == row["verified_stale_tool_decision_use_rate"]
+    )
     assert report["aggregate"]["total_false_completion_claims"] >= 1
     assert report["aggregate"]["verified_blocked_false_finishes"] == 1
+    assert (
+        report["aggregate"]["avg_verified_contradicted_tool_decision_use_rate"]
+        == row["verified_contradicted_tool_decision_use_rate"]
+    )
     assert "Coding-Agent Intervention Matrix" in markdown
 
 

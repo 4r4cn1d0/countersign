@@ -317,6 +317,9 @@ def test_langgraph_tool_agent_runs_real_coding_tool_loop(tmp_path: Path):
         "memory_repair_attempts_by_type": {},
         "memory_repair_successes_by_type": {},
         "memory_replanned_after_repair": False,
+        "memory_replans_required": 0,
+        "memory_replans_completed": 0,
+        "memory_replans_invalid": 0,
         "memory_repair_recovery": False,
         "recovery_after_block": False,
         "termination_reason": "accepted_finish",
@@ -414,7 +417,8 @@ def test_langgraph_tool_verified_variant_blocks_stale_test_claim(tmp_path: Path)
     current_test_items = [
         item
         for item in run["operational_memory"]
-        if item.get("tool_name") == "run_tests"
+        if item.get("tool_name")
+        in {"run_tests", "run_full_tests", "run_targeted_tests"}
         and not item.get("stale")
     ]
     assert stale_test_items
@@ -424,7 +428,7 @@ def test_langgraph_tool_verified_variant_blocks_stale_test_claim(tmp_path: Path)
     assert run["interaction_metrics"]["evaluator_success"] is True
     blocked_sequence = loop_blocks[0]["sequence_number"]
     assert any(
-        event.get("tool_name") == "run_tests"
+        event.get("tool_name") == "run_full_tests"
         and event["sequence_number"] > blocked_sequence
         for event in run["trace_events"]
     )
@@ -643,18 +647,30 @@ def test_verified_gate_blocks_finish_when_independent_task_evaluator_fails(
     requirement_refresh = next(
         event
         for event in run["trace_events"]
-        if event.get("event_type") == "requirement_refresh"
+        if event.get("event_type") == "evaluator_diagnosis"
     )
     assert repair_plan["repair_type"] == "implementation_evaluator_failure"
     assert repair_plan["repair_action"] == {
-        "action": "refresh_requirements"
+        "action": "diagnose_evaluator_failure"
     }
     assert requirement_refresh["status"] == "success"
-    assert requirement_refresh["source_type"] == "ground_truth"
+    assert requirement_refresh["source_type"] == "tool_output"
+    assert requirement_refresh["evaluator_source_type"] == (
+        "independent_evaluator"
+    )
     assert requirement_refresh["requirement_snapshot"][
         "acceptance_criteria"
     ]
+    assert requirement_refresh["requirement_snapshot"]["history"][0][
+        "event_type"
+    ] == "task_goal"
     assert requirement_refresh["evaluator_failure"]["status"] == "failure"
+    assert requirement_refresh["structured_output"]["failed_components"] == [
+        "hidden_validation"
+    ]
+    assert requirement_refresh["structured_output"]["changed_files"] == [
+        "config_parser.py"
+    ]
     feedback = next(
         event
         for event in run["trace_events"]
@@ -803,12 +819,175 @@ def test_verified_gate_recovers_after_evaluator_failure_and_model_replans(
     assert decisions[0]["independent_evaluator_status"] == "failure"
     assert decisions[1]["independent_evaluator_status"] == "success"
     assert run["interaction_metrics"]["memory_replanned_after_repair"] is True
+    assert run["interaction_metrics"]["memory_replans_required"] == 1
+    assert run["interaction_metrics"]["memory_replans_completed"] == 1
+    assert run["interaction_metrics"]["memory_replans_invalid"] == 0
     assert run["interaction_metrics"]["memory_repair_recovery"] is True
     assert run["interaction_metrics"]["evaluator_success"] is True
     assert run["interaction_metrics"]["accepted_false_finishes"] == 0
     assert run["memory_repair_summary"]["attempts_by_type"] == {
         "implementation_evaluator_failure": 1
     }
+    replan = next(
+        event
+        for event in run["trace_events"]
+        if event.get("event_type") == "memory_replan"
+        and event.get("status") == "completed"
+    )
+    repair_result = next(
+        event
+        for event in run["trace_events"]
+        if event.get("event_type") == "memory_repair_result"
+    )
+    assert replan["repair_result_event_id"] == repair_result["event_id"]
+    assert replan["repaired_memory_id"] == repair_result[
+        "repaired_memory_id"
+    ]
+    assert replan["model_response_event_id"]
+
+
+def test_evaluator_diagnosis_loop_stops_at_controller_repair_budget(
+    tmp_path: Path,
+):
+    pytest.importorskip("langgraph")
+
+    class RepeatedFalseFinishAdapter:
+        runtime = "deterministic"
+
+        def __init__(self):
+            self.calls = 0
+
+        def generate(self, request):
+            self.calls += 1
+            actions = [
+                {
+                    "action": "write_file",
+                    "path": "config_parser.py",
+                    "content": (
+                        "def parse_line(line):\n"
+                        "    key, value = line.split('=', 1)\n"
+                        "    return key.strip(), value.strip()\n"
+                    ),
+                },
+                {"action": "run_tests"},
+                {
+                    "action": "finish",
+                    "claim": "The incomplete implementation is complete.",
+                    "source_event_ids": [],
+                },
+            ]
+            action = actions[min(self.calls - 1, len(actions) - 1)]
+            return ModelResponse(
+                text=json.dumps(action),
+                runtime="deterministic",
+                model_name=request.model_name,
+                model_family=request.model_family,
+                raw_response={"fake": True},
+            )
+
+    with patch(
+        "research.runner.benchmark_runner.create_model_adapter",
+        return_value=RepeatedFalseFinishAdapter(),
+    ):
+        run = BenchmarkRunner().run_task_id(
+            "coding_stale_tests_001",
+            BenchmarkRunConfig(
+                framework="langgraph_tools",
+                trace_mode="model_driven",
+                agent_variant="verified",
+                action_budget=5,
+                workspace_root=str(tmp_path),
+            ),
+        )
+
+    repair_plans = [
+        event
+        for event in run["trace_events"]
+        if event.get("event_type") == "memory_repair_plan"
+        and event.get("repair_type")
+        == "implementation_evaluator_failure"
+    ]
+    diagnoses = [
+        event
+        for event in run["trace_events"]
+        if event.get("event_type") == "evaluator_diagnosis"
+    ]
+    exhausted = [
+        event
+        for event in run["trace_events"]
+        if event.get("event_type") == "memory_corruption_detection"
+        and event.get("repair_type")
+        == "implementation_evaluator_failure"
+        and event.get("repairable") is False
+    ]
+
+    assert [event["repair_attempt"] for event in repair_plans] == [1, 2]
+    assert all(event["repair_budget"] == 2 for event in repair_plans)
+    assert len(diagnoses) == 2
+    assert len(exhausted) == 1
+    assert exhausted[0]["repair_attempt"] == 2
+    assert exhausted[0]["repair_budget"] == 2
+    assert exhausted[0]["budget_exhausted"] is True
+    assert run["interaction_metrics"]["memory_replans_required"] == 2
+    assert run["interaction_metrics"]["memory_replans_completed"] == 2
+    assert run["interaction_metrics"]["termination_reason"] == (
+        "action_budget_exhausted"
+    )
+
+
+def test_requirement_snapshot_recovers_task_and_changed_user_history():
+    task = BenchmarkRunner().get_task("coding_stale_tests_001")
+    scenario = load_fixture_scenario("coding_stale_tests_001")
+    assert scenario is not None
+    trace_events = [
+        {
+            "event_id": "goal-event",
+            "event_type": "prompt",
+            "sequence_number": 1,
+            "prompt": task["goal"],
+            "source_type": "user_instruction",
+        },
+        {
+            "event_id": "update-event",
+            "event_type": "user_requirement_update",
+            "sequence_number": 9,
+            "requirement_id": "requirement_update_0",
+            "content": scenario["requirement_updates"][0]["content"],
+            "status": "active",
+            "source_type": "user_instruction",
+        },
+    ]
+
+    snapshot = BenchmarkRunner._requirement_history_snapshot(
+        task,
+        scenario,
+        [0],
+        trace_events,
+    )
+
+    assert snapshot["goal"] == task["goal"]
+    assert snapshot["acceptance_criteria"] == task["acceptance_criteria"]
+    assert snapshot["active_requirement_updates"] == [
+        scenario["requirement_updates"][0]
+    ]
+    assert [item["event_id"] for item in snapshot["history"]] == [
+        "goal-event",
+        "update-event",
+    ]
+    assert snapshot["history"][-1]["content"] == (
+        scenario["requirement_updates"][0]["content"]
+    )
+
+
+def test_failing_fresh_test_is_a_successful_memory_observation():
+    assert BenchmarkRunner._memory_repair_observation_succeeded(
+        {"action": "run_targeted_tests", "targets": ["test_service.py"]},
+        {"status": "failure", "returncode": 1},
+    )
+    assert not BenchmarkRunner._memory_repair_observation_succeeded(
+        {"action": "run_targeted_tests", "targets": ["test_service.py"]},
+        {"status": "tool_error"},
+    )
 
 
 @pytest.mark.parametrize(
@@ -995,7 +1174,14 @@ def test_langgraph_tool_loop_requests_structured_action_output(tmp_path: Path):
         )
 
     assert adapter.schemas
-    assert all(schema["required"] == ["action"] for schema in adapter.schemas)
+    assert all(
+        schema["required"] == ["action", "beliefs"]
+        for schema in adapter.schemas
+    )
+    assert all(
+        schema["properties"]["beliefs"]["maxItems"] == 8
+        for schema in adapter.schemas
+    )
     assert all(
         "finish" in schema["properties"]["action"]["enum"]
         for schema in adapter.schemas
@@ -1137,6 +1323,7 @@ def test_langgraph_tool_loop_executes_model_selected_action_without_substitution
     )
     assert first_action["parsed_action"] == {
         "action": "read_file",
+        "beliefs": [],
         "path": "test_config_parser.py",
         "source_event_ids": [],
     }

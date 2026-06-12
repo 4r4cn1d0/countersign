@@ -1,0 +1,682 @@
+{
+  "schema_version": "agent-manual-measurement-labels/v0.1",
+  "annotation_method": "Manually specified checkpoint labels frozen before automatic validation. Expected component scores and decision-belief counts were assigned from the explicit event order and provenance records. These labels have not yet received independent external-annotator review.",
+  "probe_cases": [
+    {
+      "case_id": "probe_perfect_current_state",
+      "description": "The probe reconstructs the current test, repository state, provenance, and next action exactly.",
+      "expected_state": {
+        "goal": "Fix service.py and verify tests.",
+        "criterion_ids": [
+          "criterion_1"
+        ],
+        "subtasks": {
+          "inspect": "completed",
+          "verify": "completed"
+        },
+        "subtask_source_event_ids": {
+          "inspect": [
+            "read-1"
+          ],
+          "verify": [
+            "test-2"
+          ]
+        },
+        "latest_test": {
+          "status": "passed",
+          "source_event_id": "test-2",
+          "workspace_revision": 1,
+          "is_current": true
+        },
+        "changed_files": [
+          "service.py"
+        ],
+        "unsuccessful_attempts": [],
+        "failed_attempts": [],
+        "blocked_attempts": [],
+        "repository_assumptions": [
+          {
+            "path": "service.py",
+            "state": "modified",
+            "workspace_revision": 1,
+            "source_event_ids": [
+              "write-1"
+            ]
+          }
+        ],
+        "evidence_state": {
+          "current_event_ids": [
+            "read-1",
+            "test-2",
+            "write-1"
+          ],
+          "stale_event_ids": [],
+          "uncertain_event_ids": []
+        },
+        "uncertainty_expected": false,
+        "next_action": {
+          "action": "finish",
+          "path": null
+        }
+      },
+      "prediction": {
+        "goal_summary": "Fix service.py and verify tests.",
+        "remembered_criterion_ids": [
+          "criterion_1"
+        ],
+        "subtasks": [
+          {
+            "subtask_id": "inspect",
+            "status": "completed",
+            "source_event_ids": [
+              "read-1"
+            ]
+          },
+          {
+            "subtask_id": "verify",
+            "status": "completed",
+            "source_event_ids": [
+              "test-2"
+            ]
+          }
+        ],
+        "latest_test": {
+          "status": "passed",
+          "source_event_id": "test-2",
+          "workspace_revision": 1,
+          "is_current": true
+        },
+        "unsuccessful_attempts": [],
+        "failed_attempts": [],
+        "blocked_attempts": [],
+        "repository_assumptions": [
+          {
+            "path": "service.py",
+            "state": "modified",
+            "workspace_revision": 1,
+            "source_event_ids": [
+              "write-1"
+            ]
+          }
+        ],
+        "evidence_state": {
+          "current_event_ids": [
+            "read-1",
+            "test-2",
+            "write-1"
+          ],
+          "stale_event_ids": [],
+          "uncertain_event_ids": []
+        },
+        "changed_files": [
+          "service.py"
+        ],
+        "uncertainties": [],
+        "next_action": {
+          "action": "finish",
+          "path": null,
+          "reason": "All current evidence supports completion."
+        }
+      },
+      "manual_scores": {
+        "overall_accuracy": 1.0,
+        "latest_test_accuracy": 1.0,
+        "evidence_attribution_accuracy": 1.0,
+        "repository_state_f1": 1.0,
+        "stale_evidence_f1": 1.0,
+        "next_action_appropriateness": 1.0
+      }
+    },
+    {
+      "case_id": "probe_stale_test_confusion",
+      "description": "The probe recalls an obsolete passing test instead of the current failing result and chooses finish.",
+      "expected_state": {
+        "goal": "Fix service.py and verify tests.",
+        "criterion_ids": [
+          "criterion_1"
+        ],
+        "subtasks": {
+          "implement": "completed",
+          "verify": "failed"
+        },
+        "subtask_source_event_ids": {
+          "implement": [
+            "write-2"
+          ],
+          "verify": [
+            "test-new"
+          ]
+        },
+        "latest_test": {
+          "status": "failed",
+          "source_event_id": "test-new",
+          "workspace_revision": 2,
+          "is_current": true
+        },
+        "changed_files": [
+          "service.py"
+        ],
+        "unsuccessful_attempts": [
+          {
+            "source_event_id": "test-new",
+            "action": "run_tests",
+            "outcome": "failed",
+            "reason": "Current tests fail."
+          }
+        ],
+        "failed_attempts": [
+          {
+            "source_event_id": "test-new",
+            "action": "run_tests",
+            "outcome": "failed",
+            "reason": "Current tests fail."
+          }
+        ],
+        "blocked_attempts": [],
+        "repository_assumptions": [
+          {
+            "path": "service.py",
+            "state": "modified",
+            "workspace_revision": 2,
+            "source_event_ids": [
+              "write-2"
+            ]
+          }
+        ],
+        "evidence_state": {
+          "current_event_ids": [
+            "test-new",
+            "write-2"
+          ],
+          "stale_event_ids": [
+            "test-old"
+          ],
+          "uncertain_event_ids": []
+        },
+        "uncertainty_expected": false,
+        "next_action": {
+          "action": "write_file",
+          "path": "service.py"
+        }
+      },
+      "prediction": {
+        "goal_summary": "Fix service.py and verify tests.",
+        "remembered_criterion_ids": [
+          "criterion_1"
+        ],
+        "subtasks": [
+          {
+            "subtask_id": "implement",
+            "status": "completed",
+            "source_event_ids": [
+              "write-2"
+            ]
+          },
+          {
+            "subtask_id": "verify",
+            "status": "completed",
+            "source_event_ids": [
+              "test-old"
+            ]
+          }
+        ],
+        "latest_test": {
+          "status": "passed",
+          "source_event_id": "test-old",
+          "workspace_revision": 0,
+          "is_current": false
+        },
+        "unsuccessful_attempts": [],
+        "failed_attempts": [],
+        "blocked_attempts": [],
+        "repository_assumptions": [
+          {
+            "path": "service.py",
+            "state": "modified",
+            "workspace_revision": 2,
+            "source_event_ids": [
+              "write-2"
+            ]
+          }
+        ],
+        "evidence_state": {
+          "current_event_ids": [
+            "test-old"
+          ],
+          "stale_event_ids": [
+            "test-new"
+          ],
+          "uncertain_event_ids": []
+        },
+        "changed_files": [
+          "service.py"
+        ],
+        "uncertainties": [],
+        "next_action": {
+          "action": "finish",
+          "path": null,
+          "reason": "The remembered tests passed."
+        }
+      },
+      "manual_scores": {
+        "latest_evidence_selection_accuracy": 0.0,
+        "temporal_ordering_accuracy": 0.0,
+        "failed_attempt_f1": 0.0,
+        "current_evidence_f1": 0.0,
+        "stale_evidence_f1": 0.0,
+        "next_action_appropriateness": 0.0
+      }
+    },
+    {
+      "case_id": "probe_lost_source_attribution",
+      "description": "Task-state values are correct, but the probe drops source event attribution.",
+      "expected_state": {
+        "goal": "Fix service.py and verify tests.",
+        "criterion_ids": [
+          "criterion_1"
+        ],
+        "subtasks": {
+          "implement": "completed"
+        },
+        "subtask_source_event_ids": {
+          "implement": [
+            "write-1"
+          ]
+        },
+        "latest_test": {
+          "status": "passed",
+          "source_event_id": "test-2",
+          "workspace_revision": 1,
+          "is_current": true
+        },
+        "changed_files": [
+          "service.py"
+        ],
+        "unsuccessful_attempts": [],
+        "failed_attempts": [],
+        "blocked_attempts": [],
+        "repository_assumptions": [
+          {
+            "path": "service.py",
+            "state": "modified",
+            "workspace_revision": 1,
+            "source_event_ids": [
+              "write-1"
+            ]
+          }
+        ],
+        "evidence_state": {
+          "current_event_ids": [
+            "test-2",
+            "write-1"
+          ],
+          "stale_event_ids": [],
+          "uncertain_event_ids": []
+        },
+        "uncertainty_expected": false,
+        "next_action": {
+          "action": "finish",
+          "path": null
+        }
+      },
+      "prediction": {
+        "goal_summary": "Fix service.py and verify tests.",
+        "remembered_criterion_ids": [
+          "criterion_1"
+        ],
+        "subtasks": [
+          {
+            "subtask_id": "implement",
+            "status": "completed",
+            "source_event_ids": []
+          }
+        ],
+        "latest_test": {
+          "status": "passed",
+          "source_event_id": null,
+          "workspace_revision": 1,
+          "is_current": true
+        },
+        "unsuccessful_attempts": [],
+        "failed_attempts": [],
+        "blocked_attempts": [],
+        "repository_assumptions": [
+          {
+            "path": "service.py",
+            "state": "modified",
+            "workspace_revision": 1,
+            "source_event_ids": []
+          }
+        ],
+        "evidence_state": {
+          "current_event_ids": [
+            "test-2",
+            "write-1"
+          ],
+          "stale_event_ids": [],
+          "uncertain_event_ids": []
+        },
+        "changed_files": [
+          "service.py"
+        ],
+        "uncertainties": [],
+        "next_action": {
+          "action": "finish",
+          "path": null,
+          "reason": "State is correct but provenance was lost."
+        }
+      },
+      "manual_scores": {
+        "latest_evidence_selection_accuracy": 1.0,
+        "temporal_ordering_accuracy": 1.0,
+        "evidence_attribution_accuracy": 0.0,
+        "repository_state_f1": 1.0,
+        "next_action_appropriateness": 1.0
+      }
+    }
+  ],
+  "decision_belief_cases": [
+    {
+      "case_id": "decision_fresh_declared_belief",
+      "description": "A write decision uses a current file observation with exact provenance.",
+      "run": {
+        "trace_events": [
+          {
+            "event_id": "read-1",
+            "event_type": "tool_call",
+            "sequence_number": 1,
+            "tool_name": "read_file",
+            "path": "service.py",
+            "status": "success"
+          },
+          {
+            "event_id": "decision-1",
+            "event_type": "model_response",
+            "graph_node": "choose_action",
+            "sequence_number": 2,
+            "parsed_action": {
+              "action": "write_file",
+              "path": "service.py",
+              "beliefs": [
+                {
+                  "belief_type": "file_state",
+                  "claim": "service.py still contains the old implementation.",
+                  "source_event_ids": [
+                    "read-1"
+                  ]
+                }
+              ],
+              "source_event_ids": [
+                "read-1"
+              ]
+            }
+          }
+        ],
+        "operational_memory": [
+          {
+            "event_id": "read-1",
+            "memory_id": "read-1:memory",
+            "tool_name": "read_file",
+            "path": "service.py",
+            "claim": "Observed service.py.",
+            "support_status": "supported",
+            "stale": false,
+            "invalidated_by_event_ids": [],
+            "contradictions": []
+          }
+        ]
+      },
+      "manual_summary": {
+        "decision_count": 1,
+        "tool_decision_count": 1,
+        "decision_belief_coverage": 1.0,
+        "belief_count": 1,
+        "supported_belief_count": 1,
+        "unsupported_belief_count": 0,
+        "stale_belief_count": 0,
+        "contradicted_belief_count": 0
+      }
+    },
+    {
+      "case_id": "decision_stale_test_belief",
+      "description": "A tool decision consumes passing test evidence after a dependent write invalidated it.",
+      "run": {
+        "trace_events": [
+          {
+            "event_id": "test-old",
+            "event_type": "tool_call",
+            "sequence_number": 1,
+            "tool_name": "run_tests",
+            "status": "success"
+          },
+          {
+            "event_id": "write-2",
+            "event_type": "file_state_change",
+            "sequence_number": 2,
+            "tool_name": "write_file",
+            "path": "service.py",
+            "status": "success"
+          },
+          {
+            "event_id": "decision-3",
+            "event_type": "model_response",
+            "graph_node": "choose_action",
+            "sequence_number": 3,
+            "parsed_action": {
+              "action": "write_file",
+              "path": "service.py",
+              "beliefs": [
+                {
+                  "belief_type": "test_state",
+                  "claim": "The current implementation passes tests.",
+                  "source_event_ids": [
+                    "test-old"
+                  ]
+                }
+              ],
+              "source_event_ids": [
+                "test-old"
+              ]
+            }
+          }
+        ],
+        "operational_memory": [
+          {
+            "event_id": "test-old",
+            "memory_id": "test-old:memory",
+            "tool_name": "run_tests",
+            "claim": "Tests passed before the write.",
+            "support_status": "stale",
+            "stale": true,
+            "invalidated_by_event_ids": [
+              "write-2"
+            ],
+            "contradictions": []
+          }
+        ]
+      },
+      "manual_summary": {
+        "belief_count": 1,
+        "supported_belief_count": 0,
+        "unsupported_belief_count": 0,
+        "stale_belief_count": 1,
+        "contradicted_belief_count": 0,
+        "stale_belief_use_rate": 1.0
+      }
+    },
+    {
+      "case_id": "decision_unsupported_belief",
+      "description": "A model declares a repository-state belief without any source event.",
+      "run": {
+        "trace_events": [
+          {
+            "event_id": "decision-1",
+            "event_type": "model_response",
+            "graph_node": "choose_action",
+            "sequence_number": 1,
+            "parsed_action": {
+              "action": "write_file",
+              "path": "service.py",
+              "beliefs": [
+                {
+                  "belief_type": "file_state",
+                  "claim": "service.py is missing required validation.",
+                  "source_event_ids": []
+                }
+              ],
+              "source_event_ids": []
+            }
+          }
+        ],
+        "operational_memory": []
+      },
+      "manual_summary": {
+        "belief_count": 1,
+        "supported_belief_count": 0,
+        "unsupported_belief_count": 1,
+        "stale_belief_count": 0,
+        "contradicted_belief_count": 0,
+        "unsupported_belief_use_rate": 1.0
+      }
+    },
+    {
+      "case_id": "decision_contradicted_source_belief",
+      "description": "A decision relies on a source observation that was contradicted before the decision.",
+      "run": {
+        "trace_events": [
+          {
+            "event_id": "read-old",
+            "event_type": "tool_call",
+            "sequence_number": 1,
+            "tool_name": "read_file",
+            "path": "service.py",
+            "status": "success"
+          },
+          {
+            "event_id": "read-new",
+            "event_type": "tool_call",
+            "sequence_number": 2,
+            "tool_name": "read_file",
+            "path": "service.py",
+            "status": "success"
+          },
+          {
+            "event_id": "decision-3",
+            "event_type": "model_response",
+            "graph_node": "choose_action",
+            "sequence_number": 3,
+            "parsed_action": {
+              "action": "write_file",
+              "path": "service.py",
+              "beliefs": [
+                {
+                  "belief_type": "file_state",
+                  "claim": "The old source observation remains authoritative.",
+                  "source_event_ids": [
+                    "read-old"
+                  ]
+                }
+              ],
+              "source_event_ids": [
+                "read-old"
+              ]
+            }
+          }
+        ],
+        "operational_memory": [
+          {
+            "event_id": "read-old",
+            "memory_id": "read-old:memory",
+            "tool_name": "read_file",
+            "path": "service.py",
+            "claim": "Observed old service.py contents.",
+            "support_status": "superseded",
+            "stale": true,
+            "invalidated_by_event_ids": [],
+            "contradictions": [
+              "read-new"
+            ]
+          }
+        ]
+      },
+      "manual_summary": {
+        "belief_count": 1,
+        "supported_belief_count": 0,
+        "unsupported_belief_count": 0,
+        "stale_belief_count": 0,
+        "contradicted_belief_count": 1,
+        "contradicted_belief_use_rate": 1.0
+      }
+    },
+    {
+      "case_id": "decision_future_invalidation_not_retroactive",
+      "description": "A source is valid when consumed and becomes stale only after the decision.",
+      "run": {
+        "trace_events": [
+          {
+            "event_id": "read-1",
+            "event_type": "tool_call",
+            "sequence_number": 1,
+            "tool_name": "read_file",
+            "path": "service.py",
+            "status": "success"
+          },
+          {
+            "event_id": "decision-2",
+            "event_type": "model_response",
+            "graph_node": "choose_action",
+            "sequence_number": 2,
+            "parsed_action": {
+              "action": "run_targeted_tests",
+              "targets": [
+                "test_service.py"
+              ],
+              "beliefs": [
+                {
+                  "belief_type": "file_state",
+                  "claim": "The observed service.py state should be tested.",
+                  "source_event_ids": [
+                    "read-1"
+                  ]
+                }
+              ],
+              "source_event_ids": [
+                "read-1"
+              ]
+            }
+          },
+          {
+            "event_id": "write-3",
+            "event_type": "file_state_change",
+            "sequence_number": 3,
+            "tool_name": "write_file",
+            "path": "service.py",
+            "status": "success"
+          }
+        ],
+        "operational_memory": [
+          {
+            "event_id": "read-1",
+            "memory_id": "read-1:memory",
+            "tool_name": "read_file",
+            "path": "service.py",
+            "claim": "Observed service.py before the later write.",
+            "support_status": "stale",
+            "stale": true,
+            "invalidated_by_event_ids": [
+              "write-3"
+            ],
+            "contradictions": []
+          }
+        ]
+      },
+      "manual_summary": {
+        "belief_count": 1,
+        "supported_belief_count": 1,
+        "unsupported_belief_count": 0,
+        "stale_belief_count": 0,
+        "contradicted_belief_count": 0
+      }
+    }
+  ]
+}
