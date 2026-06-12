@@ -341,6 +341,25 @@ def test_langgraph_tool_agent_runs_real_coding_tool_loop(tmp_path: Path):
     )
     assert finish_event["model_response_event_id"]
     assert finish_event["proposal_status"] == "accepted"
+    assert all(event.get("observed_at") for event in run["trace_events"])
+    artifacts = run["coding_environment_artifacts"]
+    assert artifacts["schema_version"] == (
+        "agent-coding-environment-artifacts/v0.1"
+    )
+    assert len(artifacts["base_commit"]) == 40
+    assert run["run_metadata"]["base_commit"] == artifacts["base_commit"]
+    assert artifacts["initial_repository_hash"]
+    assert artifacts["final_repository_hash"]
+    assert artifacts["final_git_status"]["clean"] is False
+    assert artifacts["final_diff"]["changed_files"]
+    assert artifacts["latest_test_result"]["status"] == "success"
+    assert artifacts["hidden_evaluator_result"]["status"] == "success"
+    checkpoint = run["operational_memory_checkpoint"]
+    assert checkpoint["schema_version"] == (
+        "agent-operational-memory-checkpoint/v0.1"
+    )
+    assert checkpoint["workspace_revision"] == 6
+    assert len(checkpoint["sha256"]) == 64
 
 
 def test_langgraph_tool_verified_variant_blocks_stale_test_claim(tmp_path: Path):

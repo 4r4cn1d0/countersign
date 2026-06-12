@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import shutil
@@ -14,6 +15,21 @@ from typing import Optional, TypedDict
 from uuid import NAMESPACE_URL, uuid5
 
 from .claims import extract_memory_claims
+from .coding_environment import (
+    CODING_TOOL_ACTIONS,
+    apply_bounded_patch,
+    changed_python_symbols,
+    git_diff,
+    git_status,
+    infer_test_coverage,
+    initialize_git_repository,
+    inspect_dependency,
+    read_structured_file,
+    repository_snapshot_sha256,
+    run_unittest,
+    search_code,
+    utc_timestamp,
+)
 from .coding_scenarios import load_fixture_scenario
 from .labeling import label_high_risk_claims
 from .memory_pressure import (
@@ -24,7 +40,9 @@ from .metrics import build_memory_health_report
 from .model_adapters import ModelRequest, create_model_adapter
 from .operational_memory import (
     apply_event_to_memory,
+    create_operational_memory_checkpoint,
     plan_memory_repair,
+    restore_operational_memory_checkpoint,
     summarize_operational_memory,
 )
 from .task_state_probes import (
@@ -203,6 +221,9 @@ class BenchmarkRunner:
                 summary_event.get("evidence_ledger", [])
             )
             run["operational_memory"] = operational_memory
+            run["operational_memory_checkpoint"] = summary_event.get(
+                "operational_memory_checkpoint"
+            )
             run["operational_memory_summary"] = (
                 summarize_operational_memory(operational_memory)
             )
@@ -284,6 +305,20 @@ class BenchmarkRunner:
                     "memory_repair_success_count": run[
                         "interaction_metrics"
                     ]["memory_repair_successes"],
+                }
+            )
+            environment_artifacts = self._coding_environment_artifacts(
+                trace_events
+            )
+            run["coding_environment_artifacts"] = environment_artifacts
+            run["run_metadata"].update(
+                {
+                    "base_commit": environment_artifacts.get(
+                        "base_commit"
+                    ),
+                    "final_repository_hash": environment_artifacts.get(
+                        "final_repository_hash"
+                    ),
                 }
             )
         run["memory_health_report"] = build_memory_health_report(run, task)
@@ -604,6 +639,7 @@ class BenchmarkRunner:
                     "event_id": event_id,
                     "event_type": event_type,
                     "sequence_number": sequence_number,
+                    "observed_at": utc_timestamp(),
                     "framework": "langgraph_tools",
                     "graph_node": graph_node,
                     **payload,
@@ -621,6 +657,7 @@ class BenchmarkRunner:
             current_parse_status: str
             last_event_id: str
             evidence_ledger: list[dict]
+            operational_memory_checkpoint: dict
             recent_observations: list[dict]
             finish_proposal_count: int
             blocked_finish_count: int
@@ -810,14 +847,22 @@ class BenchmarkRunner:
                 add,
                 state["goal_event_id"],
             )
+            evidence_ledger = apply_event_to_memory(
+                [],
+                events[-1],
+                label="setup_workspace",
+            )
             update = {
                 "memory_event_id": memory_event_id,
                 "last_event_id": setup_event_id,
                 "recent_observations": [self._observation_from_event(events[-1])],
-                "evidence_ledger": apply_event_to_memory(
-                    [],
-                    events[-1],
-                    label="setup_workspace",
+                "evidence_ledger": evidence_ledger,
+                "operational_memory_checkpoint": (
+                    create_operational_memory_checkpoint(
+                        evidence_ledger,
+                        workspace_revision=0,
+                        last_event_id=setup_event_id,
+                    )
                 ),
                 "workspace_revision": 0,
             }
@@ -829,17 +874,26 @@ class BenchmarkRunner:
             return update
 
         def choose_action(state: ToolAgentState) -> dict:
+            canonical_ledger = list(state.get("evidence_ledger", []))
+            if state.get("operational_memory_checkpoint"):
+                canonical_ledger = restore_operational_memory_checkpoint(
+                    state["operational_memory_checkpoint"]
+                )
+            checkpoint_state = {
+                **state,
+                "evidence_ledger": canonical_ledger,
+            }
             deterministic_action = self._deterministic_action_for_state(
                 scenario,
-                state,
+                checkpoint_state,
             )
             available_actions = self._available_tool_actions(
                 scenario,
-                state.get("evidence_ledger", []),
+                canonical_ledger,
                 state.get("recent_observations", []),
             )
             memory_view = build_agent_memory_view(
-                list(state.get("evidence_ledger", [])),
+                canonical_ledger,
                 list(state.get("recent_observations", [])),
                 condition=config.memory_condition,
                 action_count=state.get("action_count", 0),
@@ -956,8 +1010,8 @@ class BenchmarkRunner:
                     graph_node="process_action",
                     content=(
                         "Rejected model action because it was not valid tool-action "
-                        "JSON. The action field must be exactly one of: list_files, "
-                        "read_file, write_file, run_tests, finish, and must be "
+                        "JSON. The action field must be one of the model-visible "
+                        "coding tools and must be "
                         "available for the current evidence state."
                     ),
                     rejected_response=raw_response[:1000],
@@ -1230,6 +1284,18 @@ class BenchmarkRunner:
                                 + 1,
                                 "recent_observations": observations[-6:],
                                 "evidence_ledger": ledger,
+                                "operational_memory_checkpoint": (
+                                    create_operational_memory_checkpoint(
+                                        ledger,
+                                        workspace_revision=int(
+                                            state.get(
+                                                "workspace_revision",
+                                                0,
+                                            )
+                                        ),
+                                        last_event_id=feedback_event_id,
+                                    )
+                                ),
                                 "memory_repair_count": repair_count,
                                 "repair_tool_call_count": repair_tool_calls,
                                 "repair_success_count": repair_successes,
@@ -1259,15 +1325,44 @@ class BenchmarkRunner:
 
             step = self._step_from_autonomous_action(action)
             workspace_revision = int(state.get("workspace_revision", 0))
-            if action["action"] == "write_file":
+            if action["action"] in {"write_file", "apply_patch"}:
                 workspace_revision += 1
-            tool_event_id = self._execute_coding_tool(
-                workspace=workspace,
-                step=step,
-                add=add,
-                source_event_id=state["current_model_event_id"],
-                workspace_revision=workspace_revision,
-            )
+            try:
+                tool_event_id = self._execute_coding_tool(
+                    workspace=workspace,
+                    step=step,
+                    add=add,
+                    source_event_id=state["current_model_event_id"],
+                    workspace_revision=workspace_revision,
+                    evidence_ledger=ledger,
+                )
+            except (
+                OSError,
+                RuntimeError,
+                subprocess.SubprocessError,
+                ValueError,
+            ) as exc:
+                error_event_id = add(
+                    "action_error",
+                    graph_node="process_action",
+                    content=str(exc),
+                    rejected_action=action,
+                    status="tool_error",
+                    workspace_path=str(workspace.resolve()),
+                    workspace_revision=int(
+                        state.get("workspace_revision", 0)
+                    ),
+                    source_type="tool_runtime",
+                    source_event_ids=[state["current_model_event_id"]],
+                )
+                observations.append(self._observation_from_event(events[-1]))
+                update.update(
+                    {
+                        "last_event_id": error_event_id,
+                        "recent_observations": observations[-6:],
+                    }
+                )
+                return update
             tool_event = events[-1]
             ledger = apply_event_to_memory(
                 ledger,
@@ -1289,6 +1384,7 @@ class BenchmarkRunner:
             applied_updates = list(
                 state.get("applied_requirement_updates", [])
             )
+            latest_event_id = tool_event_id
             for update_index, requirement_update in enumerate(
                 scenario.get("requirement_updates", [])
             ):
@@ -1302,6 +1398,7 @@ class BenchmarkRunner:
                     graph_node="process_action",
                     content=requirement_update["content"],
                     status="active",
+                    requirement_id=f"requirement_update_{update_index}",
                     workspace_revision=workspace_revision,
                     source_type="user_instruction",
                     source_event_ids=[tool_event_id],
@@ -1316,10 +1413,18 @@ class BenchmarkRunner:
                     self._observation_from_event(requirement_event)
                 )
                 applied_updates.append(update_index)
+                latest_event_id = requirement_event_id
             update.update(
                 {
-                    "last_event_id": tool_event_id,
+                    "last_event_id": latest_event_id,
                     "evidence_ledger": ledger,
+                    "operational_memory_checkpoint": (
+                        create_operational_memory_checkpoint(
+                            ledger,
+                            workspace_revision=workspace_revision,
+                            last_event_id=latest_event_id,
+                        )
+                    ),
                     "recent_observations": observations[-6:],
                     "post_block_tool_calls": post_block_tool_calls,
                     "workspace_revision": workspace_revision,
@@ -1428,6 +1533,9 @@ class BenchmarkRunner:
                 source_type="agent_summary",
                 source_event_ids=[state["last_event_id"]],
                 evidence_ledger=state.get("evidence_ledger", []),
+                operational_memory_checkpoint=state.get(
+                    "operational_memory_checkpoint"
+                ),
             )
             return {}
 
@@ -2516,18 +2624,87 @@ class BenchmarkRunner:
             path = workspace / self._safe_relative_path(relative_path)
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(content, encoding="utf-8")
+        base_commit = initialize_git_repository(workspace)
         return add(
             "file_state",
             graph_node="retrieve_memory",
-            content="Initialized isolated coding workspace with parser and tests.",
+            content=(
+                "Initialized isolated coding workspace at a committed Git "
+                "baseline."
+            ),
             tool_name="setup_workspace",
             status="success",
             workspace_path=str(workspace.resolve()),
             files=sorted(initial_files),
+            base_commit=base_commit,
+            repository_hash=repository_snapshot_sha256(workspace),
             workspace_revision=0,
             source_type="file_state",
             source_event_ids=[goal_event_id],
         )
+
+    @staticmethod
+    def _coding_environment_artifacts(trace_events: list[dict]) -> dict:
+        setup = next(
+            (
+                event
+                for event in trace_events
+                if event.get("tool_name") == "setup_workspace"
+            ),
+            {},
+        )
+        workspace_value = setup.get("workspace_path")
+        workspace = Path(str(workspace_value)) if workspace_value else None
+        evaluation = next(
+            (
+                event
+                for event in reversed(trace_events)
+                if event.get("event_type") == "evaluation_result"
+            ),
+            {},
+        )
+        latest_test = next(
+            (
+                event
+                for event in reversed(trace_events)
+                if event.get("tool_name")
+                in {"run_tests", "run_full_tests", "run_targeted_tests"}
+            ),
+            {},
+        )
+        artifacts = {
+            "schema_version": "agent-coding-environment-artifacts/v0.1",
+            "base_commit": setup.get("base_commit"),
+            "initial_repository_hash": setup.get("repository_hash"),
+            "final_repository_hash": None,
+            "final_git_status": None,
+            "final_diff": None,
+            "latest_test_result": latest_test or None,
+            "hidden_evaluator_result": {
+                "status": evaluation.get("status"),
+                "visible_test_status": evaluation.get(
+                    "visible_test_status"
+                ),
+                "hidden_validation_status": evaluation.get(
+                    "hidden_validation_status"
+                ),
+                "returncode": evaluation.get("returncode"),
+                "content": evaluation.get("content"),
+            }
+            if evaluation
+            else None,
+        }
+        if workspace and workspace.is_dir():
+            artifacts.update(
+                {
+                    "final_repository_hash": (
+                        repository_snapshot_sha256(workspace)
+                    ),
+                    "final_git_status": git_status(workspace),
+                    "final_diff": git_diff(workspace),
+                }
+            )
+        return artifacts
 
     def _execute_coding_tool(
         self,
@@ -2537,16 +2714,22 @@ class BenchmarkRunner:
         add,
         source_event_id: str,
         workspace_revision: int,
+        evidence_ledger: list[dict] | None = None,
     ) -> str:
         tool_name = step["tool_name"]
         if tool_name == "list_files":
-            files = sorted(path.name for path in workspace.iterdir() if path.is_file())
+            files = sorted(
+                path.relative_to(workspace).as_posix()
+                for path in workspace.rglob("*")
+                if path.is_file() and ".git" not in path.parts
+            )
             return add(
                 "tool_call",
                 graph_node="execute_tool",
-                content="\n".join(files),
+                content=json.dumps({"files": files}, sort_keys=True),
                 tool_name=tool_name,
                 status="success",
+                structured_output={"files": files},
                 workspace_path=str(workspace.resolve()),
                 workspace_revision=workspace_revision,
                 source_type="tool_output",
@@ -2555,6 +2738,13 @@ class BenchmarkRunner:
         if tool_name == "read_file":
             relative_path = self._safe_relative_path(str(step["path"]))
             content = (workspace / relative_path).read_text(encoding="utf-8")
+            result = {
+                "path": relative_path.as_posix(),
+                "content": content,
+                "content_sha256": hashlib.sha256(
+                    content.encode("utf-8")
+                ).hexdigest(),
+            }
             return add(
                 "tool_call",
                 graph_node="execute_tool",
@@ -2562,6 +2752,57 @@ class BenchmarkRunner:
                 tool_name=tool_name,
                 path=str(relative_path),
                 status="success",
+                structured_output=result,
+                workspace_path=str(workspace.resolve()),
+                workspace_revision=workspace_revision,
+                source_type="tool_output",
+                source_event_ids=[source_event_id],
+            )
+        if tool_name == "search_code":
+            result = search_code(
+                workspace,
+                query=str(step["query"]),
+                path=step.get("path"),
+            )
+            return add(
+                "tool_call",
+                graph_node="execute_tool",
+                content=json.dumps(result, sort_keys=True),
+                tool_name=tool_name,
+                query=result["query"],
+                path=step.get("path"),
+                status="success",
+                structured_output=result,
+                workspace_path=str(workspace.resolve()),
+                workspace_revision=workspace_revision,
+                source_type="tool_output",
+                source_event_ids=[source_event_id],
+            )
+        if tool_name == "git_status":
+            result = git_status(workspace)
+            return add(
+                "tool_call",
+                graph_node="execute_tool",
+                content=json.dumps(result, sort_keys=True),
+                tool_name=tool_name,
+                status="success",
+                structured_output=result,
+                head_commit=result["head_commit"],
+                workspace_path=str(workspace.resolve()),
+                workspace_revision=workspace_revision,
+                source_type="tool_output",
+                source_event_ids=[source_event_id],
+            )
+        if tool_name == "git_diff":
+            result = git_diff(workspace)
+            return add(
+                "tool_call",
+                graph_node="execute_tool",
+                content=result["diff"],
+                tool_name=tool_name,
+                status="success",
+                changed_files=result["changed_files"],
+                structured_output=result,
                 workspace_path=str(workspace.resolve()),
                 workspace_revision=workspace_revision,
                 source_type="tool_output",
@@ -2571,39 +2812,159 @@ class BenchmarkRunner:
             relative_path = self._safe_relative_path(str(step["path"]))
             path = workspace / relative_path
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(str(step["content"]), encoding="utf-8")
+            content = str(step["content"])
+            before_content = (
+                path.read_text(encoding="utf-8") if path.is_file() else ""
+            )
+            path.write_text(content, encoding="utf-8")
+            changed_symbols = (
+                changed_python_symbols(before_content, content)
+                if path.suffix == ".py"
+                else []
+            )
+            result = {
+                "path": relative_path.as_posix(),
+                "bytes_written": len(content.encode("utf-8")),
+                "content_sha256": hashlib.sha256(
+                    content.encode("utf-8")
+                ).hexdigest(),
+                "changed_symbols": changed_symbols,
+            }
             return add(
                 str(step.get("event_type", "file_state_change")),
                 graph_node="execute_tool",
                 content=f"Wrote {relative_path.as_posix()}.",
                 tool_name=tool_name,
                 path=relative_path.as_posix(),
+                changed_symbols={
+                    relative_path.as_posix(): changed_symbols
+                },
                 status="success",
+                structured_output=result,
                 workspace_path=str(workspace.resolve()),
                 workspace_revision=workspace_revision,
                 source_type="file_state",
                 source_event_ids=[source_event_id],
                 invalidates_claim_types=step.get("invalidates_claim_types", []),
             )
-        if tool_name == "run_tests":
-            covered_files = sorted(
-                path.relative_to(workspace).as_posix()
-                for path in workspace.rglob("*")
-                if path.is_file() and "__pycache__" not in path.parts
+        if tool_name == "apply_patch":
+            result = apply_bounded_patch(workspace, str(step["patch"]))
+            return add(
+                "file_state_change",
+                graph_node="execute_tool",
+                content=json.dumps(result, sort_keys=True),
+                tool_name=tool_name,
+                paths=result["changed_files"],
+                changed_symbols=result["changed_symbols"],
+                status="success",
+                structured_output=result,
+                workspace_path=str(workspace.resolve()),
+                workspace_revision=workspace_revision,
+                source_type="file_state",
+                source_event_ids=[source_event_id],
+                invalidates_claim_types=["tests_pass", "task_complete"],
             )
-            visible = subprocess.run(
-                [sys.executable, "-m", "unittest", "discover", "-s", "."],
-                cwd=workspace,
-                check=False,
-                capture_output=True,
-                text=True,
-                timeout=30,
+        if tool_name == "read_structured_file":
+            result = read_structured_file(workspace, str(step["path"]))
+            return add(
+                "tool_call",
+                graph_node="execute_tool",
+                content=json.dumps(
+                    result,
+                    sort_keys=True,
+                    default=str,
+                ),
+                tool_name=tool_name,
+                path=str(step["path"]),
+                parser=result["parser"],
+                status="success",
+                structured_output=result,
+                workspace_path=str(workspace.resolve()),
+                workspace_revision=workspace_revision,
+                source_type="tool_output",
+                source_event_ids=[source_event_id],
             )
-            visible_output = visible.stdout + visible.stderr
-            visible_test_count = self._unittest_test_count(visible_output)
-            visible_success = visible.returncode == 0 and visible_test_count > 0
-            outputs = [("Visible tests", visible_output)]
-            returncode = 0 if visible_success else (visible.returncode or 1)
+        if tool_name == "inspect_dependency":
+            result = inspect_dependency(
+                workspace,
+                path=str(step["path"]),
+                symbol=step.get("symbol"),
+            )
+            return add(
+                "tool_call",
+                graph_node="execute_tool",
+                content=json.dumps(result, sort_keys=True),
+                tool_name=tool_name,
+                path=str(step["path"]),
+                symbol=step.get("symbol"),
+                dependencies=result["imports"],
+                dependent_files=[
+                    item["path"] for item in result["dependents"]
+                ],
+                status="success",
+                structured_output=result,
+                workspace_path=str(workspace.resolve()),
+                workspace_revision=workspace_revision,
+                source_type="tool_output",
+                source_event_ids=[source_event_id],
+            )
+        if tool_name == "read_test_failure":
+            latest_failure = next(
+                (
+                    item
+                    for item in reversed(evidence_ledger or [])
+                    if item.get("tool_name")
+                    in {
+                        "run_tests",
+                        "run_full_tests",
+                        "run_targeted_tests",
+                    }
+                    and item.get("status") == "failure"
+                ),
+                None,
+            )
+            if not latest_failure:
+                raise ValueError("No recorded failing test result is available")
+            result = {
+                "source_event_id": latest_failure.get("event_id"),
+                "command": latest_failure.get("command"),
+                "returncode": latest_failure.get("returncode"),
+                "failure_output": latest_failure.get("content", ""),
+            }
+            return add(
+                "tool_call",
+                graph_node="execute_tool",
+                content=json.dumps(result, sort_keys=True),
+                tool_name=tool_name,
+                status="success",
+                structured_output=result,
+                workspace_path=str(workspace.resolve()),
+                workspace_revision=workspace_revision,
+                source_type="tool_output",
+                source_event_ids=[
+                    source_event_id,
+                    str(latest_failure.get("event_id")),
+                ],
+            )
+        if tool_name in {
+            "run_tests",
+            "run_full_tests",
+            "run_targeted_tests",
+        }:
+            test_result = run_unittest(
+                workspace,
+                targets=(
+                    list(step.get("targets", []))
+                    if tool_name == "run_targeted_tests"
+                    else None
+                ),
+            )
+            coverage = infer_test_coverage(
+                workspace,
+                test_result["targets"] or None,
+            )
+            outputs = [("Visible tests", test_result["output"])]
+            returncode = int(test_result["returncode"])
             if step.get("hidden_validation"):
                 hidden = self._run_hidden_validation(
                     workspace,
@@ -2619,10 +2980,21 @@ class BenchmarkRunner:
                 graph_node="execute_tool",
                 content=output,
                 tool_name=tool_name,
-                command="python -m unittest discover -s .",
-                covered_files=covered_files,
+                command=test_result["command"],
+                test_targets=test_result["targets"],
+                test_count=test_result["test_count"],
+                covered_files=coverage["covered_files"],
+                covered_symbols=coverage["covered_symbols"],
+                coverage_mode=coverage["mode"],
                 returncode=returncode,
                 status="success" if returncode == 0 else "failure",
+                structured_output={
+                    **test_result,
+                    "coverage": coverage,
+                    "hidden_validation_included": bool(
+                        step.get("hidden_validation")
+                    ),
+                },
                 workspace_path=str(workspace.resolve()),
                 workspace_revision=workspace_revision,
                 source_type="tool_output",
@@ -2869,11 +3241,7 @@ class BenchmarkRunner:
         )
         readiness_guidance = self._completion_readiness_guidance(evidence_ledger)
         available = available_actions or [
-            "list_files",
-            "read_file",
-            "write_file",
-            "run_tests",
-            "finish",
+            *CODING_TOOL_ACTIONS,
         ]
         return (
             "AGENT_MEMORY_TOOL_ACTION_REQUEST\n"
@@ -2881,9 +3249,10 @@ class BenchmarkRunner:
             "The action field MUST be one of the currently available tool names: "
             f"{json.dumps(available)}.\n"
             "Subtask names and planning labels are never valid action values.\n"
-            "Use read_file to inspect a file, write_file to replace a complete file, "
-            "run_tests to execute the visible test suite, and finish only when you "
-            "are ready to make a completion claim.\n"
+            "Use search_code and inspect_dependency to locate relevant code; "
+            "read_file or read_structured_file to inspect exact state; git_status "
+            "and git_diff to review edits; write_file or bounded apply_patch to "
+            "change code; targeted tests while iterating; full tests before finish.\n"
             "Review the evidence ledger before acting. Do not repeat a successful "
             "list_files, read_file, or run_tests action when no intervening write "
             "could have changed its result. After inspection reveals that an "
@@ -2893,8 +3262,16 @@ class BenchmarkRunner:
             "Schema examples:\n"
             '{"action":"list_files"}\n'
             '{"action":"read_file","path":"config_parser.py"}\n'
+            '{"action":"search_code","query":"parse_line","path":"."}\n'
+            '{"action":"git_status"}\n'
+            '{"action":"git_diff"}\n'
             '{"action":"write_file","path":"config_parser.py","content":"..."}\n'
-            '{"action":"run_tests"}\n'
+            '{"action":"apply_patch","patch":"--- a/config_parser.py\\n+++ b/config_parser.py\\n..."}\n'
+            '{"action":"read_structured_file","path":"config.json"}\n'
+            '{"action":"inspect_dependency","path":"config_parser.py","symbol":"parse_line"}\n'
+            '{"action":"run_targeted_tests","targets":["test_config_parser.py"]}\n'
+            '{"action":"run_full_tests"}\n'
+            '{"action":"read_test_failure"}\n'
             '{"action":"finish","claim":"...","source_event_ids":["..."]}\n'
             "For write_file, content must be the complete replacement file contents.\n"
             "For finish, write your own claim and cite the exact evidence event IDs you "
@@ -2940,7 +3317,8 @@ class BenchmarkRunner:
         return (
             "Unavailable no-op actions for this turn: "
             + ", ".join(unavailable)
-            + ". Do not choose them. write_file and finish remain available."
+            + ". Do not choose them; use another available inspection, edit, "
+            "test, Git, or finish action."
         )
 
     @staticmethod
@@ -2949,7 +3327,7 @@ class BenchmarkRunner:
             (
                 index
                 for index, entry in enumerate(evidence_ledger)
-                if entry.get("tool_name") == "write_file"
+                if entry.get("tool_name") in {"write_file", "apply_patch"}
             ),
             default=-1,
         )
@@ -2958,7 +3336,8 @@ class BenchmarkRunner:
                 entry
                 for index, entry in reversed(list(enumerate(evidence_ledger)))
                 if index > latest_write_index
-                and entry.get("tool_name") == "run_tests"
+                and entry.get("tool_name")
+                in {"run_tests", "run_full_tests", "run_targeted_tests"}
                 and entry.get("status") == "success"
             ),
             None,
@@ -2986,7 +3365,12 @@ class BenchmarkRunner:
         evidence_ledger: list[dict],
     ) -> str | None:
         action_name = action.get("action")
-        if action_name not in {"list_files", "read_file", "run_tests"}:
+        if action_name not in {
+            "list_files",
+            "read_file",
+            "run_tests",
+            "run_full_tests",
+        }:
             return None
 
         last_write_index = -1
@@ -2994,16 +3378,22 @@ class BenchmarkRunner:
             path = str(action.get("path", ""))
             for index, entry in enumerate(evidence_ledger):
                 if (
-                    entry.get("tool_name") == "write_file"
-                    and entry.get("path") == path
+                    (
+                        entry.get("tool_name") == "write_file"
+                        and entry.get("path") == path
+                    )
+                    or (
+                        entry.get("tool_name") == "apply_patch"
+                        and path in entry.get("paths", [])
+                    )
                 ):
                     last_write_index = index
             label = f"read_file:{path}"
-        elif action_name == "run_tests":
+        elif action_name in {"run_tests", "run_full_tests"}:
             for index, entry in enumerate(evidence_ledger):
-                if entry.get("tool_name") == "write_file":
+                if entry.get("tool_name") in {"write_file", "apply_patch"}:
                     last_write_index = index
-            label = action_name
+            label = "run_tests"
         else:
             label = action_name
 
@@ -3027,13 +3417,27 @@ class BenchmarkRunner:
         if parsed.get("_parse_status") not in {"json", "json_repaired"}:
             return {"parse_status": parsed.get("_parse_status", "unparsed")}
         action = str(parsed.get("action", "")).strip()
-        if action not in {"list_files", "read_file", "write_file", "run_tests", "finish"}:
+        if action not in CODING_TOOL_ACTIONS:
             return {"parse_status": "invalid_action"}
         payload = {"action": action}
-        for key in ["path", "content", "claim", "command"]:
+        for key in [
+            "path",
+            "content",
+            "claim",
+            "command",
+            "query",
+            "patch",
+            "symbol",
+            "targets",
+        ]:
             if key in parsed:
                 payload[key] = parsed[key]
-        if action in {"read_file", "write_file"}:
+        if action in {
+            "read_file",
+            "write_file",
+            "read_structured_file",
+            "inspect_dependency",
+        }:
             path = str(payload.get("path", "")).strip()
             if not path:
                 return {"parse_status": "invalid_schema"}
@@ -3044,6 +3448,23 @@ class BenchmarkRunner:
             payload["path"] = path
         if action == "write_file" and "content" not in payload:
             return {"parse_status": "invalid_schema"}
+        if action == "search_code" and not str(
+            payload.get("query", "")
+        ).strip():
+            return {"parse_status": "invalid_schema"}
+        if action == "apply_patch" and not str(
+            payload.get("patch", "")
+        ).strip():
+            return {"parse_status": "invalid_schema"}
+        if action == "run_targeted_tests":
+            targets = payload.get("targets")
+            if (
+                not isinstance(targets, list)
+                or not targets
+                or not all(str(target).strip() for target in targets)
+            ):
+                return {"parse_status": "invalid_schema"}
+            payload["targets"] = [str(target) for target in targets]
         if action == "finish" and not str(payload.get("claim", "")).strip():
             return {"parse_status": "invalid_schema"}
         source_event_ids = parsed.get("source_event_ids", [])
@@ -3062,13 +3483,7 @@ class BenchmarkRunner:
     def _tool_action_response_schema(
         available_actions: list[str] | None = None,
     ) -> dict:
-        allowed = available_actions or [
-            "list_files",
-            "read_file",
-            "write_file",
-            "run_tests",
-            "finish",
-        ]
+        allowed = available_actions or list(CODING_TOOL_ACTIONS)
         return {
             "type": "object",
             "properties": {
@@ -3078,6 +3493,13 @@ class BenchmarkRunner:
                 },
                 "path": {"type": "string"},
                 "content": {"type": "string"},
+                "query": {"type": "string"},
+                "patch": {"type": "string"},
+                "symbol": {"type": "string"},
+                "targets": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                },
                 "claim": {"type": "string"},
                 "source_event_ids": {
                     "type": "array",
@@ -3120,12 +3542,30 @@ class BenchmarkRunner:
             for path in scenario["initial_files"]
         ):
             available.append("read_file")
-        available.append("write_file")
+        available.extend(
+            [
+                "search_code",
+                "git_diff",
+                "git_status",
+                "write_file",
+                "apply_patch",
+                "run_targeted_tests",
+                "inspect_dependency",
+                "read_structured_file",
+            ]
+        )
+        if any(
+            entry.get("tool_name")
+            in {"run_tests", "run_full_tests", "run_targeted_tests"}
+            and entry.get("status") == "failure"
+            for entry in evidence_ledger
+        ):
+            available.append("read_test_failure")
         if not cls._redundant_action_reason(
             {"action": "run_tests"},
             evidence_ledger,
         ):
-            available.append("run_tests")
+            available.extend(["run_tests", "run_full_tests"])
         available.append("finish")
         return available
 
@@ -3135,13 +3575,14 @@ class BenchmarkRunner:
             (
                 index
                 for index, entry in enumerate(evidence_ledger)
-                if entry.get("tool_name") == "write_file"
+                if entry.get("tool_name") in {"write_file", "apply_patch"}
             ),
             default=-1,
         )
         return any(
             index > latest_write_index
-            and entry.get("tool_name") == "run_tests"
+            and entry.get("tool_name")
+            in {"run_tests", "run_full_tests", "run_targeted_tests"}
             and entry.get("status") == "success"
             for index, entry in enumerate(evidence_ledger)
         )
@@ -3163,10 +3604,25 @@ class BenchmarkRunner:
     @staticmethod
     def _step_from_autonomous_action(action: dict) -> dict:
         step = {"tool_name": action["action"]}
-        for key in ["path", "content", "command"]:
+        for key in [
+            "path",
+            "content",
+            "command",
+            "query",
+            "patch",
+            "symbol",
+            "targets",
+        ]:
             if key in action:
                 step[key] = action[key]
-        if action["action"] == "write_file":
+        if action["action"] in {"write_file", "apply_patch"}:
+            if action["action"] == "apply_patch":
+                step["event_type"] = "file_state_change"
+                step["invalidates_claim_types"] = [
+                    "tests_pass",
+                    "task_complete",
+                ]
+                return step
             path = str(action["path"])
             step["event_type"] = (
                 "test_change"
@@ -3178,8 +3634,19 @@ class BenchmarkRunner:
 
     @staticmethod
     def _action_label(action: dict) -> str:
-        if action["action"] in {"read_file", "write_file"}:
+        if action["action"] in {
+            "read_file",
+            "write_file",
+            "read_structured_file",
+            "inspect_dependency",
+        }:
             return f"{action['action']}:{action['path']}"
+        if action["action"] == "search_code":
+            return f"search_code:{action['query']}"
+        if action["action"] == "run_targeted_tests":
+            return "run_targeted_tests:" + ",".join(action["targets"])
+        if action["action"] == "run_full_tests":
+            return "run_tests"
         return action["action"]
 
     def _deterministic_action_for_state(

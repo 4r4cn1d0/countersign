@@ -1077,7 +1077,7 @@ Acceptance bar for unfinished research tasks:
     - _Research Requirements: implementation-backed completion_
     - _Status: Verified. Focused research suite passes: 54 passed, 1 skipped, 4 warnings (`python3 -m pytest backend/tests/test_research_benchmark_seed.py backend/tests/test_research_benchmark_runner.py backend/tests/test_research_memory_claims.py backend/tests/test_research_memory_metrics.py backend/tests/test_research_verification_and_cli.py backend/tests/test_research_runtime_and_bundle.py backend/tests/test_research_model_matrix.py -q`). Full backend suite passes: 285 passed, 1 skipped, 4 warnings (`python3 -m pytest -q` from `backend/`)._
 
-- [ ] 32. Complete research roadmap foundations 1-6
+- [x] 32. Complete research roadmap foundations 1-6
   - [x] 32.1 Build a genuinely long-horizon fixture-backed coding suite
     - Keep at least 8 coding tasks and 10 total tasks
     - Require 20-50 meaningful model actions per coding task
@@ -1215,13 +1215,21 @@ Acceptance bar for unfinished research tasks:
   - [ ] 36.4 Add manually validated metric fixtures and adversarial edge cases
   - [ ] 36.5 Keep lexical and embedding similarity outside confirmatory claims
 
-- [ ] 37. Strengthen operational memory
-  - [ ] 37.1 Model file, symbol, test, command, and requirement dependencies
-  - [ ] 37.2 Track which tests cover which changed files or symbols
-  - [ ] 37.3 Invalidate only dependent beliefs where possible
-  - [ ] 37.4 Persist and restore memory across resume checkpoints
-  - [ ] 37.5 Reconcile contradictory memories instead of only retaining contradiction flags
-  - [ ] 37.6 Test dependency invalidation, supersession, contradiction, and resume behavior
+- [x] 37. Strengthen operational memory
+  - [x] 37.1 Model file, symbol, test, command, and requirement dependencies
+  - [x] 37.2 Track which tests cover which changed files or symbols
+  - [x] 37.3 Invalidate only dependent beliefs where possible
+  - [x] 37.4 Persist and restore memory across resume checkpoints
+  - [x] 37.5 Reconcile contradictory memories instead of only retaining contradiction flags
+  - [x] 37.6 Test dependency invalidation, supersession, contradiction, and resume behavior
+  - _Implemented: Operational-memory items now retain typed dependency graphs for files,
+    symbols, test targets, commands, and requirements. Targeted unittest coverage is inferred
+    from local imports and symbol references, allowing unrelated symbol edits to preserve
+    valid test evidence while dependent edits invalidate it. Every agent step restores the
+    canonical ledger from a SHA-256-protected checkpoint; final runs retain that checkpoint.
+    Newer observations explicitly supersede and reconcile older contradictory results while
+    preserving an auditable historical-contradiction record. Focused memory/environment tests
+    pass, and the full backend suite passes: 373 passed, 1 skipped._
 
 - [ ] 38. Generalize active memory repair
   - [ ] 38.1 Repair stale test evidence with targeted or full tests
@@ -1253,14 +1261,19 @@ Acceptance bar for unfinished research tasks:
   - [ ] 40.6 Gate claims of user approval and final completion
   - [ ] 40.7 Measure prevented unsafe actions separately from prevented unsafe wording
 
-- [ ] 41. Strengthen the coding-agent environment
-  - [ ] 41.1 Add `search_code`, `git_diff`, and `git_status`
-  - [ ] 41.2 Add `read_test_failure`, `run_targeted_tests`, and `run_full_tests`
-  - [ ] 41.3 Add `inspect_dependency` and `read_structured_file`
-  - [ ] 41.4 Add a bounded `apply_patch` tool
-  - [ ] 41.5 Return structured, timestamped, revision-aware tool outputs
-  - [ ] 41.6 Start every run from a known Git commit
-  - [ ] 41.7 Retain final diff, test output, hidden-evaluator result, and repository hash
+- [x] 41. Strengthen the coding-agent environment
+  - [x] 41.1 Add `search_code`, `git_diff`, and `git_status`
+  - [x] 41.2 Add `read_test_failure`, `run_targeted_tests`, and `run_full_tests`
+  - [x] 41.3 Add `inspect_dependency` and `read_structured_file`
+  - [x] 41.4 Add a bounded `apply_patch` tool
+  - [x] 41.5 Return structured, timestamped, revision-aware tool outputs
+  - [x] 41.6 Start every run from a known Git commit
+  - [x] 41.7 Retain final diff, test output, hidden-evaluator result, and repository hash
+  - _Implemented: Model-visible bounded coding tools now execute against an isolated Git
+    baseline and emit structured events with timestamps and workspace revisions. Runs retain
+    the base commit, final repository hash, status, diff, latest test output, and independent
+    hidden-evaluator result. Focused verification passes: 3 coding-environment tests and all
+    31 benchmark-runner tests; the full backend suite passes: 373 passed, 1 skipped._
 
 - [ ] 42. Run a defensible multi-model experiment
   - [ ] 42.1 Repair or replace the local Ollama runtime so real generation is reproducible

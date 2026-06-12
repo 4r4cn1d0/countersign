@@ -22,7 +22,11 @@ from research.runner.memory_pressure import (
 )
 from research.runner.operational_memory import (
     apply_event_to_memory,
+    build_memory_item,
+    create_operational_memory_checkpoint,
     plan_memory_repair,
+    restore_operational_memory_checkpoint,
+    summarize_operational_memory,
 )
 from research.runner.task_state_probes import (
     expected_task_state,
@@ -177,6 +181,155 @@ def test_operational_memory_invalidates_revision_bound_test_evidence():
     assert plan["repairable"] is True
     assert plan["action"] == {"action": "run_tests"}
     assert stale_test["memory_id"] in plan["target_memory_ids"]
+
+
+def test_operational_memory_tracks_typed_test_dependencies():
+    event = {
+        "event_id": "event-targeted-test",
+        "event_type": "tool_call",
+        "sequence_number": 4,
+        "tool_name": "run_targeted_tests",
+        "command": "python -m unittest test_service.py",
+        "test_targets": ["test_service.py"],
+        "covered_files": ["service.py", "test_service.py"],
+        "covered_symbols": ["service.py:answer"],
+        "status": "success",
+        "workspace_revision": 0,
+        "source_type": "tool_output",
+    }
+
+    item = build_memory_item(event, label="targeted_test")
+
+    assert item["dependency_graph"] == {
+        "files": ["service.py", "test_service.py"],
+        "symbols": ["service.py:answer"],
+        "tests": ["test_service.py"],
+        "commands": ["python -m unittest test_service.py"],
+        "requirements": [],
+    }
+
+
+def test_symbol_dependencies_prevent_unrelated_test_invalidation():
+    test_event = {
+        "event_id": "event-test",
+        "event_type": "tool_call",
+        "sequence_number": 1,
+        "tool_name": "run_targeted_tests",
+        "command": "python -m unittest test_service.py",
+        "test_targets": ["test_service.py"],
+        "covered_files": ["service.py", "test_service.py"],
+        "covered_symbols": ["service.py:answer"],
+        "status": "success",
+        "workspace_revision": 0,
+        "source_type": "tool_output",
+    }
+    unrelated_write = {
+        "event_id": "event-helper-write",
+        "event_type": "file_state_change",
+        "sequence_number": 2,
+        "tool_name": "write_file",
+        "path": "service.py",
+        "changed_symbols": {"service.py": ["helper"]},
+        "status": "success",
+        "workspace_revision": 1,
+        "source_type": "file_state",
+    }
+    dependent_write = {
+        "event_id": "event-answer-write",
+        "event_type": "file_state_change",
+        "sequence_number": 3,
+        "tool_name": "write_file",
+        "path": "service.py",
+        "changed_symbols": {"service.py": ["answer"]},
+        "status": "success",
+        "workspace_revision": 2,
+        "source_type": "file_state",
+    }
+
+    memory = apply_event_to_memory([], test_event, label="targeted_test")
+    memory = apply_event_to_memory(
+        memory,
+        unrelated_write,
+        label="write_file:service.py",
+    )
+    assert memory[0]["stale"] is False
+
+    memory = apply_event_to_memory(
+        memory,
+        dependent_write,
+        label="write_file:service.py",
+    )
+    assert memory[0]["stale"] is True
+    assert memory[0]["invalidated_by_event_ids"] == ["event-answer-write"]
+
+
+def test_newer_test_result_reconciles_older_contradiction():
+    passing = {
+        "event_id": "event-pass",
+        "event_type": "tool_call",
+        "sequence_number": 1,
+        "tool_name": "run_targeted_tests",
+        "test_targets": ["test_service.py"],
+        "covered_files": ["service.py", "test_service.py"],
+        "status": "success",
+        "workspace_revision": 1,
+        "source_type": "tool_output",
+    }
+    failing = {
+        **passing,
+        "event_id": "event-fail",
+        "sequence_number": 2,
+        "status": "failure",
+        "returncode": 1,
+    }
+
+    memory = apply_event_to_memory([], passing, label="targeted_test")
+    memory = apply_event_to_memory(memory, failing, label="targeted_test")
+    prior, current = memory
+    summary = summarize_operational_memory(memory)
+
+    assert prior["support_status"] == "superseded"
+    assert prior["historical_contradiction"] is True
+    assert prior["reconciliation_status"] == "resolved"
+    assert prior["reconciled_by_event_ids"] == ["event-fail"]
+    assert current["reconciles_memory_ids"] == [prior["memory_id"]]
+    assert summary["contradicted_item_count"] == 0
+    assert summary["historical_contradiction_count"] == 1
+    assert summary["reconciled_item_count"] == 1
+
+
+def test_operational_memory_checkpoint_round_trip_and_integrity():
+    memory = [
+        {
+            "memory_id": "memory-1",
+            "event_id": "event-1",
+            "dependency_graph": {
+                "files": ["service.py"],
+                "symbols": ["service.py:answer"],
+                "tests": [],
+                "commands": [],
+                "requirements": ["criterion_1"],
+            },
+        }
+    ]
+    checkpoint = create_operational_memory_checkpoint(
+        memory,
+        workspace_revision=7,
+        last_event_id="event-1",
+    )
+    restored = restore_operational_memory_checkpoint(checkpoint)
+
+    assert checkpoint["workspace_revision"] == 7
+    assert checkpoint["last_event_id"] == "event-1"
+    assert len(checkpoint["sha256"]) == 64
+    assert restored == memory
+    restored[0]["memory_id"] = "mutated"
+    assert checkpoint["memory_items"][0]["memory_id"] == "memory-1"
+
+    corrupted = json.loads(json.dumps(checkpoint))
+    corrupted["memory_items"][0]["memory_id"] = "tampered"
+    with pytest.raises(ValueError, match="integrity"):
+        restore_operational_memory_checkpoint(corrupted)
 
 
 @pytest.mark.parametrize(
@@ -945,10 +1098,12 @@ def test_shadow_probes_do_not_change_agent_actions_or_workspace(tmp_path: Path):
     def workspace_files(run):
         workspace = Path(run["run_metadata"]["workspace_path"])
         return {
-            path.relative_to(workspace).as_posix(): path.read_text()
-            for path in sorted(workspace.rglob("*"))
-            if path.is_file() and "__pycache__" not in path.parts
-        }
+                path.relative_to(workspace).as_posix(): path.read_text()
+                for path in sorted(workspace.rglob("*"))
+                if path.is_file()
+                and "__pycache__" not in path.parts
+                and ".git" not in path.parts
+            }
 
     assert actions(probed) == actions(plain)
     assert workspace_files(probed) == workspace_files(plain)
