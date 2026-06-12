@@ -207,7 +207,7 @@ class BenchmarkRunner:
                 summarize_operational_memory(operational_memory)
             )
             run["memory_repair_summary"] = {
-                "schema_version": "agent-memory-repair-summary/v0.1",
+                "schema_version": "agent-memory-repair-summary/v0.2",
                 "enabled": run_config.memory_repair,
                 "detection_count": run["interaction_metrics"][
                     "memory_corruption_detections"
@@ -223,6 +223,12 @@ class BenchmarkRunner:
                 ],
                 "successful_recovery": run["interaction_metrics"][
                     "memory_repair_recovery"
+                ],
+                "attempts_by_type": run["interaction_metrics"][
+                    "memory_repair_attempts_by_type"
+                ],
+                "successes_by_type": run["interaction_metrics"][
+                    "memory_repair_successes_by_type"
                 ],
             }
             run["memory_pressure_summary"] = {
@@ -1053,6 +1059,9 @@ class BenchmarkRunner:
                         repair_plan = plan_memory_repair(
                             proposal["reasons"],
                             ledger,
+                            recommended_actions=proposal[
+                                "recommended_actions"
+                            ],
                         )
                         detection_event_id = add(
                             "memory_corruption_detection",
@@ -1065,6 +1074,7 @@ class BenchmarkRunner:
                             target_memory_ids=repair_plan[
                                 "target_memory_ids"
                             ],
+                            repair_type=repair_plan["repair_type"],
                             repairable=repair_plan["repairable"],
                             source_type="verification_policy",
                             source_event_ids=[decision_event_id],
@@ -1090,6 +1100,10 @@ class BenchmarkRunner:
                                 graph_node="process_action",
                                 content=repair_plan["rationale"],
                                 repair_action=repair_plan["action"],
+                                repair_type=repair_plan["repair_type"],
+                                success_criterion=repair_plan[
+                                    "success_criterion"
+                                ],
                                 target_memory_ids=repair_plan[
                                     "target_memory_ids"
                                 ],
@@ -1097,17 +1111,27 @@ class BenchmarkRunner:
                                 source_type="memory_controller",
                                 source_event_ids=[detection_event_id],
                             )
-                            repair_step = self._step_from_autonomous_action(
-                                repair_plan["action"]
-                            )
-                            repair_tool_event_id = self._execute_coding_tool(
-                                workspace=workspace,
-                                step=repair_step,
-                                add=add,
-                                source_event_id=plan_event_id,
-                                workspace_revision=int(
-                                    state.get("workspace_revision", 0)
-                                ),
+                            repair_tool_event_id = (
+                                self._execute_memory_repair_action(
+                                    task=task,
+                                    scenario=scenario,
+                                    action=repair_plan["action"],
+                                    workspace=workspace,
+                                    add=add,
+                                    source_event_id=plan_event_id,
+                                    workspace_revision=int(
+                                        state.get("workspace_revision", 0)
+                                    ),
+                                    applied_requirement_updates=list(
+                                        state.get(
+                                            "applied_requirement_updates",
+                                            [],
+                                        )
+                                    ),
+                                    evaluator_failure=proposal[
+                                        "independent_evaluation"
+                                    ],
+                                )
                             )
                             repair_tool_event = events[-1]
                             ledger = apply_event_to_memory(
@@ -1143,6 +1167,10 @@ class BenchmarkRunner:
                                     else "repair_failed"
                                 ),
                                 repair_action=repair_plan["action"],
+                                repair_type=repair_plan["repair_type"],
+                                success_criterion=repair_plan[
+                                    "success_criterion"
+                                ],
                                 repaired_memory_id=ledger[-1]["memory_id"],
                                 repository_revision=state.get(
                                     "workspace_revision",
@@ -1902,6 +1930,18 @@ class BenchmarkRunner:
             if event.get("event_type") == "memory_repair_result"
             and event.get("status") == "repaired"
         ]
+        repair_attempts_by_type: dict[str, int] = {}
+        for event in repair_plans:
+            repair_type = str(event.get("repair_type", "unclassified"))
+            repair_attempts_by_type[repair_type] = (
+                repair_attempts_by_type.get(repair_type, 0) + 1
+            )
+        repair_successes_by_type: dict[str, int] = {}
+        for event in successful_repairs:
+            repair_type = str(event.get("repair_type", "unclassified"))
+            repair_successes_by_type[repair_type] = (
+                repair_successes_by_type.get(repair_type, 0) + 1
+            )
         first_repair_sequence = (
             min(event["sequence_number"] for event in successful_repairs)
             if successful_repairs
@@ -1971,6 +2011,8 @@ class BenchmarkRunner:
             "memory_corruption_containments": len(blocked_false),
             "memory_repair_attempts": len(repair_plans),
             "memory_repair_successes": len(successful_repairs),
+            "memory_repair_attempts_by_type": repair_attempts_by_type,
+            "memory_repair_successes_by_type": repair_successes_by_type,
             "memory_replanned_after_repair": replanned_after_repair,
             "memory_repair_recovery": bool(
                 successful_repairs
@@ -2586,6 +2628,67 @@ class BenchmarkRunner:
                 verification_gate="final_answer",
             )
         raise ValueError(f"Unsupported coding tool: {tool_name}")
+
+    def _execute_memory_repair_action(
+        self,
+        *,
+        task: dict,
+        scenario: dict,
+        action: dict,
+        workspace: Path,
+        add,
+        source_event_id: str,
+        workspace_revision: int,
+        applied_requirement_updates: list[int],
+        evaluator_failure: dict,
+    ) -> str:
+        if action["action"] != "refresh_requirements":
+            return self._execute_coding_tool(
+                workspace=workspace,
+                step=self._step_from_autonomous_action(action),
+                add=add,
+                source_event_id=source_event_id,
+                workspace_revision=workspace_revision,
+            )
+
+        active_updates = [
+            update
+            for index, update in enumerate(
+                scenario.get("requirement_updates", [])
+            )
+            if index in applied_requirement_updates
+        ]
+        requirement_snapshot = {
+            "goal": task["goal"],
+            "acceptance_criteria": list(
+                task.get("acceptance_criteria", [])
+            ),
+            "required_subtasks": [
+                {
+                    "subtask_id": subtask["subtask_id"],
+                    "description": subtask["description"],
+                }
+                for subtask in task.get("required_subtasks", [])
+            ],
+            "active_requirement_updates": active_updates,
+        }
+        return add(
+            "requirement_refresh",
+            graph_node="execute_memory_repair",
+            content=(
+                "Restored the authoritative task goal, acceptance criteria, "
+                "required subtasks, active requirement updates, and the latest "
+                "independent evaluator result for replanning."
+            ),
+            tool_name="refresh_requirements",
+            status="success",
+            requirement_snapshot=requirement_snapshot,
+            evaluator_failure=evaluator_failure,
+            workspace_path=str(workspace.resolve()),
+            workspace_revision=workspace_revision,
+            source_type="user_instruction",
+            source_event_ids=[source_event_id],
+        )
 
     def _run_hidden_validation(self, workspace: Path, task_id: str) -> subprocess.CompletedProcess:
         fixture_scenario = load_fixture_scenario(task_id)

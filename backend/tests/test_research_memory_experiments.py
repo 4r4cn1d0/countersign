@@ -178,6 +178,65 @@ def test_operational_memory_invalidates_revision_bound_test_evidence():
     assert stale_test["memory_id"] in plan["target_memory_ids"]
 
 
+@pytest.mark.parametrize(
+    ("reasons", "memory", "repair_type", "action"),
+    [
+        (
+            ["lost provenance"],
+            [
+                {
+                    "memory_id": "source-memory",
+                    "path": "service.py",
+                    "tool_name": "read_file",
+                    "stale": False,
+                    "support_status": "supported",
+                }
+            ],
+            "lost_provenance",
+            {"action": "read_file", "path": "service.py"},
+        ),
+        (
+            ["contradicted claim"],
+            [
+                {
+                    "memory_id": "test-memory",
+                    "tool_name": "run_tests",
+                    "stale": True,
+                    "support_status": "contradicted",
+                }
+            ],
+            "contradictory_evidence",
+            {"action": "run_tests"},
+        ),
+        (
+            ["missing requirement context"],
+            [],
+            "missing_requirements",
+            {"action": "refresh_requirements"},
+        ),
+        (
+            ["independent task evaluator failed"],
+            [],
+            "implementation_evaluator_failure",
+            {"action": "refresh_requirements"},
+        ),
+    ],
+)
+def test_memory_repair_plans_cover_non_stale_failure_modes(
+    reasons,
+    memory,
+    repair_type,
+    action,
+):
+    plan = plan_memory_repair(reasons, memory)
+
+    assert plan["schema_version"] == "agent-memory-repair-plan/v0.2"
+    assert plan["repairable"] is True
+    assert plan["repair_type"] == repair_type
+    assert plan["action"] == action
+    assert plan["success_criterion"]
+
+
 def test_probe_scoring_penalizes_wrong_state_and_lost_attribution():
     expected = {
         "goal": "Fix the service and rerun tests.",

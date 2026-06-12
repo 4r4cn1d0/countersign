@@ -96,6 +96,8 @@ def build_memory_item(event: dict, *, label: str) -> dict:
         "command",
         "covered_files",
         "files",
+        "requirement_snapshot",
+        "evaluator_failure",
     ]:
         if event.get(key) is not None:
             item[key] = copy.deepcopy(event[key])
@@ -135,10 +137,15 @@ def summarize_operational_memory(memory_items: list[dict]) -> dict:
 def plan_memory_repair(
     reasons: list[str],
     memory_items: list[dict],
+    *,
+    recommended_actions: list[str] | None = None,
 ) -> dict:
     """Choose the smallest executable repair for a blocked finish claim."""
 
     normalized_reasons = {str(reason).lower() for reason in reasons}
+    normalized_recommendations = {
+        str(action).lower() for action in (recommended_actions or [])
+    }
     stale_tests = [
         item
         for item in memory_items
@@ -149,6 +156,22 @@ def plan_memory_repair(
         for item in memory_items
         if item.get("support_status") == "contradicted"
     ]
+    lost_provenance = any(
+        "lost provenance" in reason for reason in normalized_reasons
+    )
+    missing_requirements = any(
+        "missing requirement" in reason
+        or "acceptance criteria" in reason
+        for reason in normalized_reasons | normalized_recommendations
+    )
+    implementation_failure = any(
+        "independent task evaluator failed" in reason
+        or "missing implementation-change evidence" in reason
+        for reason in normalized_reasons
+    )
+    contradicted_claim = any(
+        "contradicted" in reason for reason in normalized_reasons
+    )
     missing_or_stale_tests = bool(stale_tests) or any(
         "stale evidence" in reason
         or "missing successful test evidence" in reason
@@ -159,40 +182,118 @@ def plan_memory_repair(
         detections.append("stale test evidence")
     if contradicted:
         detections.append("contradicted operational memory")
-    if any("lost provenance" in reason for reason in normalized_reasons):
+    if lost_provenance:
         detections.append("lost provenance")
+    if missing_requirements:
+        detections.append("missing or forgotten requirements")
+    if implementation_failure:
+        detections.append("implementation or evaluator failure")
     if any(
         "missing successful test evidence" in reason
         for reason in normalized_reasons
     ):
         detections.append("missing current test evidence")
 
-    if missing_or_stale_tests:
+    repair_type = None
+    action = None
+    targets: list[str] = []
+    rationale = ""
+
+    if implementation_failure:
+        repair_type = "implementation_evaluator_failure"
+        action = {"action": "refresh_requirements"}
+        rationale = (
+            "Refresh the authoritative goal, acceptance criteria, active requirement "
+            "updates, and evaluator failure before returning control to the model."
+        )
+    elif missing_requirements:
+        repair_type = "missing_requirements"
+        action = {"action": "refresh_requirements"}
+        rationale = (
+            "Restore the authoritative task requirements before the model replans."
+        )
+    elif contradicted_claim or contradicted:
+        repair_type = "contradictory_evidence"
+        targets = [item["memory_id"] for item in contradicted]
+        action = _evidence_refresh_action(contradicted)
+        rationale = (
+            "Refresh the evidence source whose newer observation contradicted the "
+            "completion belief."
+        )
+    elif lost_provenance:
+        repair_type = "lost_provenance"
+        provenance_targets = [
+            item
+            for item in reversed(memory_items)
+            if item.get("path") and not item.get("stale")
+        ]
+        targets = [
+            item["memory_id"] for item in provenance_targets[:1]
+        ]
+        action = _evidence_refresh_action(provenance_targets)
+        rationale = (
+            "Re-observe the latest relevant repository source and attach fresh "
+            "provenance before another completion claim."
+        )
+    elif missing_or_stale_tests:
+        repair_type = "stale_test_evidence"
+        action = {"action": "run_tests"}
+        targets = [item["memory_id"] for item in stale_tests]
+        rationale = "Refresh test evidence at the current repository revision."
+
+    if action:
         return {
-            "schema_version": "agent-memory-repair-plan/v0.1",
+            "schema_version": "agent-memory-repair-plan/v0.2",
             "detected": True,
             "detections": sorted(set(detections)),
+            "repair_type": repair_type,
             "repairable": True,
-            "action": {"action": "run_tests"},
-            "target_memory_ids": [
-                item["memory_id"] for item in stale_tests
-            ],
-            "rationale": (
-                "Refresh test evidence at the current repository revision."
-            ),
+            "action": action,
+            "target_memory_ids": targets,
+            "rationale": rationale,
+            "success_criterion": _repair_success_criterion(repair_type),
         }
     return {
-        "schema_version": "agent-memory-repair-plan/v0.1",
+        "schema_version": "agent-memory-repair-plan/v0.2",
         "detected": bool(reasons),
         "detections": sorted(set(detections or reasons)),
+        "repair_type": "unclassified",
         "repairable": False,
         "action": None,
         "target_memory_ids": [],
+        "success_criterion": None,
         "rationale": (
             "No bounded evidence-refresh action can repair the implementation; "
             "return the precise failure to the model for replanning."
         ),
     }
+
+
+def _evidence_refresh_action(memory_items: list[dict]) -> dict:
+    for item in memory_items:
+        if item.get("tool_name") == "run_tests":
+            return {"action": "run_tests"}
+        if item.get("path"):
+            return {"action": "read_file", "path": str(item["path"])}
+    return {"action": "list_files"}
+
+
+def _repair_success_criterion(repair_type: str | None) -> str:
+    if repair_type == "stale_test_evidence":
+        return "A new test result is recorded at the current repository revision."
+    if repair_type == "lost_provenance":
+        return "A current repository observation is stored with an exact event ID."
+    if repair_type == "contradictory_evidence":
+        return "The contradicted evidence source is re-observed and superseded."
+    if repair_type in {
+        "missing_requirements",
+        "implementation_evaluator_failure",
+    }:
+        return (
+            "The authoritative task snapshot is restored and the model performs a "
+            "new planning step before any completion claim."
+        )
+    return "A current evidence item is stored before replanning."
 
 
 def _invalidate_item(item: dict, *, event_id: str, reason: str) -> None:
@@ -238,6 +339,11 @@ def _claim_for_event(event: dict, label: str) -> str:
         return f"Observed the workspace file list at repository revision {revision}."
     if tool_name == "setup_workspace":
         return f"Initialized the workspace at repository revision {revision}."
+    if tool_name == "refresh_requirements":
+        return (
+            "Restored authoritative requirements and evaluator feedback at "
+            f"repository revision {revision}."
+        )
     return str(event.get("content") or label)
 
 

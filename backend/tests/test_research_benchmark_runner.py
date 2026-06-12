@@ -17,6 +17,7 @@ from research.runner import (
     ModelResponse,
     label_high_risk_claims,
 )
+from research.runner.coding_scenarios import load_fixture_scenario
 
 
 AGENT_STACK_PATH = ROOT / "research" / "agents" / "initial_stack.json"
@@ -313,6 +314,8 @@ def test_langgraph_tool_agent_runs_real_coding_tool_loop(tmp_path: Path):
         "memory_corruption_containments": 0,
         "memory_repair_attempts": 0,
         "memory_repair_successes": 0,
+        "memory_repair_attempts_by_type": {},
+        "memory_repair_successes_by_type": {},
         "memory_replanned_after_repair": False,
         "memory_repair_recovery": False,
         "recovery_after_block": False,
@@ -613,6 +616,172 @@ def test_verified_gate_blocks_finish_when_independent_task_evaluator_fails(
     assert run["interaction_metrics"]["false_finish_proposals"] == 1
     assert run["interaction_metrics"]["blocked_false_finishes"] == 1
     assert run["interaction_metrics"]["accepted_false_finishes"] == 0
+    repair_plan = next(
+        event
+        for event in run["trace_events"]
+        if event.get("event_type") == "memory_repair_plan"
+    )
+    requirement_refresh = next(
+        event
+        for event in run["trace_events"]
+        if event.get("event_type") == "requirement_refresh"
+    )
+    assert repair_plan["repair_type"] == "implementation_evaluator_failure"
+    assert repair_plan["repair_action"] == {
+        "action": "refresh_requirements"
+    }
+    assert requirement_refresh["status"] == "success"
+    assert requirement_refresh["requirement_snapshot"][
+        "acceptance_criteria"
+    ]
+    assert requirement_refresh["evaluator_failure"]["status"] == "failure"
+    assert run["interaction_metrics"]["memory_repair_attempts_by_type"] == {
+        "implementation_evaluator_failure": 1
+    }
+    assert run["interaction_metrics"]["memory_repair_successes_by_type"] == {
+        "implementation_evaluator_failure": 1
+    }
+
+
+def test_verified_gate_recovers_after_evaluator_failure_and_model_replans(
+    tmp_path: Path,
+):
+    pytest.importorskip("langgraph")
+    scenario = load_fixture_scenario("coding_stale_tests_001")
+    assert scenario is not None
+    solution_by_path = {
+        step["path"]: step["content"]
+        for step in scenario["steps"]
+        if step.get("step_id")
+        in {
+            "replace_false_lead_with_contract_parser",
+            "normalize_defaults",
+            "integrate_loader",
+        }
+    }
+
+    class RepairingTaskAdapter:
+        runtime = "deterministic"
+
+        def __init__(self):
+            self.calls = 0
+
+        @staticmethod
+        def _current_sources(prompt: str) -> list[str]:
+            ledger_text = prompt.split("Evidence ledger: ", 1)[1].split(
+                "\nRecent observations:",
+                1,
+            )[0]
+            ledger = json.loads(ledger_text)
+            writes_by_path = {}
+            tests = []
+            for item in ledger:
+                if (
+                    item.get("tool_name") == "write_file"
+                    and item.get("status") == "success"
+                    and not item.get("stale")
+                ):
+                    writes_by_path[item["path"]] = item["event_id"]
+                if (
+                    item.get("tool_name") == "run_tests"
+                    and item.get("status") == "success"
+                    and not item.get("stale")
+                ):
+                    tests.append(item["event_id"])
+            return [*writes_by_path.values(), *tests[-1:]]
+
+        def generate(self, request):
+            self.calls += 1
+            actions = [
+                {
+                    "action": "write_file",
+                    "path": "config_parser.py",
+                    "content": (
+                        "def parse_line(line):\n"
+                        "    key, value = line.split('=', 1)\n"
+                        "    return key.strip(), value.strip()\n"
+                    ),
+                },
+                {"action": "run_tests"},
+                {
+                    "action": "finish",
+                    "claim": "The parser task is implemented and tests pass.",
+                    "source_event_ids": [
+                        "coding_stale_tests_001:event:006",
+                        "coding_stale_tests_001:event:011",
+                    ],
+                },
+                {
+                    "action": "write_file",
+                    "path": "config_parser.py",
+                    "content": solution_by_path["config_parser.py"],
+                },
+                {
+                    "action": "write_file",
+                    "path": "config_defaults.py",
+                    "content": solution_by_path["config_defaults.py"],
+                },
+                {
+                    "action": "write_file",
+                    "path": "config_loader.py",
+                    "content": solution_by_path["config_loader.py"],
+                },
+                {"action": "run_tests"},
+            ]
+            if self.calls <= len(actions):
+                action = actions[self.calls - 1]
+            else:
+                action = {
+                    "action": "finish",
+                    "claim": (
+                        "The parser, defaults, and loader now satisfy the "
+                        "requirements and fresh tests pass."
+                    ),
+                    "source_event_ids": self._current_sources(
+                        request.prompt
+                    ),
+                }
+            return ModelResponse(
+                text=json.dumps(action),
+                runtime="deterministic",
+                model_name=request.model_name,
+                model_family=request.model_family,
+                raw_response={"fake": True},
+            )
+
+    with patch(
+        "research.runner.benchmark_runner.create_model_adapter",
+        return_value=RepairingTaskAdapter(),
+    ):
+        run = BenchmarkRunner().run_task_id(
+            "coding_stale_tests_001",
+            BenchmarkRunConfig(
+                framework="langgraph_tools",
+                trace_mode="model_driven",
+                agent_variant="verified",
+                action_budget=8,
+                workspace_root=str(tmp_path),
+            ),
+        )
+
+    decisions = [
+        event
+        for event in run["trace_events"]
+        if event.get("event_type") == "verification_decision"
+    ]
+    assert [event["decision"] for event in decisions] == [
+        "block",
+        "allow",
+    ]
+    assert decisions[0]["independent_evaluator_status"] == "failure"
+    assert decisions[1]["independent_evaluator_status"] == "success"
+    assert run["interaction_metrics"]["memory_replanned_after_repair"] is True
+    assert run["interaction_metrics"]["memory_repair_recovery"] is True
+    assert run["interaction_metrics"]["evaluator_success"] is True
+    assert run["interaction_metrics"]["accepted_false_finishes"] == 0
+    assert run["memory_repair_summary"]["attempts_by_type"] == {
+        "implementation_evaluator_failure": 1
+    }
 
 
 @pytest.mark.parametrize(
