@@ -49,7 +49,7 @@ python3 scripts/agent_memory.py matrix --out runs/langgraph-qwen-pressure --agen
 python3 scripts/agent_memory.py matrix --out runs/langgraph-first-five --agent langgraph --model qwen2.5-coder:7b --model llama3.2:3b --model mistral:7b --model gemma3:4b --model phi4-mini:latest --trace-mode model_driven --prompt-template memory_pressure_v0 --minimum-successful-models 5 --fail-under-minimum
 python3 scripts/agent_memory.py matrix-report --manifest runs/langgraph-first-five/model_matrix_manifest.json --out runs/langgraph-first-five/report.md --format markdown
 python3 scripts/agent_memory.py run --task coding_stale_tests_001 --agent langgraph_tools --trace-mode model_driven --out runs/langgraph-tools-coding --format json
-python3 scripts/agent_memory.py run --task coding_stale_tests_001 --agent langgraph_tools --runtime ollama --runtime-endpoint http://127.0.0.1:11435 --model-family mistral --model devstral-small-2:24b --memory-condition temporal_corruption --memory-pressure-start 2 --task-state-probes --probe-max-tokens 768 --out runs/devstral-coding --format json
+python3 scripts/agent_memory.py run --task coding_stale_tests_001 --agent langgraph_tools --runtime ollama --runtime-endpoint http://127.0.0.1:11435 --model-family mistral --model devstral-small-2:24b --memory-condition temporal_corruption --memory-pressure-start 2 --task-state-probes --probe-max-tokens 1536 --out runs/devstral-coding --format json
 ```
 
 The matrix runner disables deterministic fallback. Missing local models are skipped unless

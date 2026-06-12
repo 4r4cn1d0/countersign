@@ -146,7 +146,7 @@ def run_model_matrix(
     active_probe_max_tokens = int(
         probe_max_tokens
         if probe_max_tokens is not None
-        else matrix.get("probe_max_tokens", 768)
+        else matrix.get("probe_max_tokens", 1536)
     )
     if active_probe_max_tokens < 128:
         raise ValueError("probe_max_tokens must be at least 128")

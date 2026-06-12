@@ -68,7 +68,7 @@ class BenchmarkRunConfig:
     memory_window: int = 8
     task_state_probes: bool = False
     probe_interval: int = 5
-    probe_max_tokens: int = 768
+    probe_max_tokens: int = 1536
     memory_repair: bool = True
 
 
@@ -586,6 +586,7 @@ class BenchmarkRunner:
             ) from exc
 
         events: list[dict] = []
+        shadow_probe_events: list[dict] = []
         workspace = self._tool_workspace_path(task, config)
         scenario = self._coding_tool_scenario(task)
 
@@ -679,6 +680,37 @@ class BenchmarkRunner:
                 task,
                 canonical_ledger,
                 workspace_revision=workspace_revision,
+                trace_events=events,
+                expected_next_action=(
+                    {"action": "none"}
+                    if state.get("terminated")
+                    else self._deterministic_action_for_state(
+                        scenario,
+                        state,
+                    )
+                ),
+                uncertainty_expected=bool(
+                    memory_view["induced_corruption"]
+                    or memory_view["dropped_evidence_ids"]
+                    or any(
+                        entry.get("stale")
+                        or entry.get("support_status")
+                        in {"contradicted", "unsupported"}
+                        for entry in canonical_ledger
+                    )
+                    or any(
+                        event.get("event_type") == "action_error"
+                        or (
+                            event.get("event_type") == "tool_call"
+                            and event.get("status") == "failure"
+                        )
+                        or (
+                            event.get("event_type") == "completion_claim"
+                            and event.get("proposal_status") == "blocked"
+                        )
+                        for event in events
+                    )
+                ),
             )
             if config.runtime == "deterministic":
                 payload = deterministic_probe_payload(task, expected)
@@ -702,23 +734,44 @@ class BenchmarkRunner:
                 probe_origin = "model_shadow_fork"
                 eligible = response.error is None
             scores = score_task_state_probe(payload, expected)
-            add(
-                "task_state_probe",
-                graph_node="shadow_probe",
-                checkpoint=checkpoint,
-                action_count=action_count,
-                workspace_revision=workspace_revision,
-                memory_condition=config.memory_condition,
-                memory_view_active=memory_view["active"],
-                memory_operations=memory_view["operations"],
-                probe_origin=probe_origin,
-                eligible_for_empirical_analysis=eligible,
-                raw_response=raw_response,
-                parsed_state=payload,
-                expected_state=expected,
-                source_type="measurement",
-                source_event_ids=[source_event_id],
-                **scores,
+            checkpoint_sequence_number = next(
+                (
+                    int(event["sequence_number"])
+                    for event in reversed(events)
+                    if event.get("event_id") == source_event_id
+                ),
+                len(events),
+            )
+            shadow_probe_events.append(
+                {
+                    "event_id": (
+                        f"{task['task_id']}:probe:"
+                        f"{len(shadow_probe_events) + 1:03d}"
+                    ),
+                    "event_type": "task_state_probe",
+                    "framework": "langgraph_tools",
+                    "graph_node": "shadow_probe",
+                    "probe_schema_version": (
+                        "agent-memory-task-state-probe/v0.2"
+                    ),
+                    "checkpoint": checkpoint,
+                    "checkpoint_sequence_number": (
+                        checkpoint_sequence_number
+                    ),
+                    "action_count": action_count,
+                    "workspace_revision": workspace_revision,
+                    "memory_condition": config.memory_condition,
+                    "memory_view_active": memory_view["active"],
+                    "memory_operations": memory_view["operations"],
+                    "probe_origin": probe_origin,
+                    "eligible_for_empirical_analysis": eligible,
+                    "raw_response": raw_response,
+                    "parsed_state": payload,
+                    "expected_state": expected,
+                    "source_type": "measurement",
+                    "source_event_ids": [source_event_id],
+                    **scores,
+                }
             )
 
         def retrieve_memory(state: ToolAgentState) -> dict:
@@ -1358,6 +1411,9 @@ class BenchmarkRunner:
             {"prompt": self._model_prompt(task, config)},
             config={"recursion_limit": max(100, config.action_budget * 6)},
         )
+        for probe_event in shadow_probe_events:
+            probe_event["sequence_number"] = len(events) + 1
+            events.append(probe_event)
         return final_state["model_response"], events
 
     def _model_prompt(self, task: dict, config: BenchmarkRunConfig) -> str:

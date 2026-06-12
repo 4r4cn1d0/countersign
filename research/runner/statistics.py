@@ -215,6 +215,34 @@ def build_paired_statistics(rows: list[dict]) -> dict:
             "baseline_probe_evidence_attribution_accuracy",
             "verified_probe_evidence_attribution_accuracy",
         ),
+        "objective_fidelity_probe_accuracy": (
+            "baseline_probe_objective_fidelity",
+            "verified_probe_objective_fidelity",
+        ),
+        "unsuccessful_attempt_probe_accuracy": (
+            "baseline_probe_unsuccessful_attempt_accuracy",
+            "verified_probe_unsuccessful_attempt_accuracy",
+        ),
+        "repository_state_probe_accuracy": (
+            "baseline_probe_repository_state_accuracy",
+            "verified_probe_repository_state_accuracy",
+        ),
+        "current_evidence_probe_accuracy": (
+            "baseline_probe_current_evidence_accuracy",
+            "verified_probe_current_evidence_accuracy",
+        ),
+        "stale_evidence_probe_accuracy": (
+            "baseline_probe_stale_evidence_accuracy",
+            "verified_probe_stale_evidence_accuracy",
+        ),
+        "uncertainty_calibration_probe_accuracy": (
+            "baseline_probe_uncertainty_calibration_accuracy",
+            "verified_probe_uncertainty_calibration_accuracy",
+        ),
+        "next_action_probe_accuracy": (
+            "baseline_probe_next_action_accuracy",
+            "verified_probe_next_action_accuracy",
+        ),
     }
     for name, (baseline_key, verified_key) in probe_metrics.items():
         probe_rows = [

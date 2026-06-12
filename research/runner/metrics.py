@@ -132,14 +132,42 @@ def compute_structured_memory_metrics(
     temporal_ordering_accuracy = probe_summary.get(
         "mean_temporal_ordering_accuracy"
     )
+    objective_fidelity = probe_summary.get(
+        "mean_objective_fidelity"
+    )
+    unsuccessful_attempt_accuracy = probe_summary.get(
+        "mean_unsuccessful_attempt_f1"
+    )
+    repository_state_accuracy = probe_summary.get(
+        "mean_repository_state_f1"
+    )
+    current_evidence_accuracy = probe_summary.get(
+        "mean_current_evidence_f1"
+    )
+    stale_evidence_accuracy = probe_summary.get(
+        "mean_stale_evidence_f1"
+    )
+    uncertainty_calibration_accuracy = probe_summary.get(
+        "mean_uncertainty_calibration_accuracy"
+    )
+    next_action_accuracy = probe_summary.get(
+        "mean_next_action_accuracy"
+    )
     components = [
         value
         for value in [
             requirement_recall,
+            objective_fidelity,
             subtask_accuracy,
             latest_evidence_accuracy,
             source_attribution_accuracy,
             temporal_ordering_accuracy,
+            unsuccessful_attempt_accuracy,
+            repository_state_accuracy,
+            current_evidence_accuracy,
+            stale_evidence_accuracy,
+            uncertainty_calibration_accuracy,
+            next_action_accuracy,
             1.0 - (unsupported_count / belief_count)
             if belief_count
             else 1.0,
@@ -155,10 +183,19 @@ def compute_structured_memory_metrics(
     return {
         "structured_memory_score": _round_score(mean(components)),
         "requirement_recall": requirement_recall,
+        "objective_fidelity": objective_fidelity,
         "subtask_state_accuracy": subtask_accuracy,
         "latest_evidence_selection_accuracy": latest_evidence_accuracy,
         "source_attribution_accuracy": source_attribution_accuracy,
         "temporal_ordering_accuracy": temporal_ordering_accuracy,
+        "unsuccessful_attempt_accuracy": unsuccessful_attempt_accuracy,
+        "repository_state_accuracy": repository_state_accuracy,
+        "current_evidence_accuracy": current_evidence_accuracy,
+        "stale_evidence_accuracy": stale_evidence_accuracy,
+        "uncertainty_calibration_accuracy": (
+            uncertainty_calibration_accuracy
+        ),
+        "next_action_accuracy": next_action_accuracy,
         "unsupported_repository_belief_count": unsupported_count,
         "unsupported_repository_belief_rate": _rate(
             unsupported_count,

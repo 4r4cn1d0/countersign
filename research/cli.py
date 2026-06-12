@@ -379,7 +379,7 @@ def _add_memory_experiment_arguments(
     parser.add_argument(
         "--probe-max-tokens",
         type=int,
-        default=768 if defaults else None,
+        default=1536 if defaults else None,
         help="Separate generation budget for structured task-state probes.",
     )
     parser.add_argument(

@@ -1103,16 +1103,24 @@ Acceptance bar for unfinished research tasks:
       The June 12, 2026 audit found and fixed a revision-field mismatch that had prevented
       temporal corruption from activating against operational-memory records._
 
-  - [ ] 32.3 Complete non-intervening task-state probes
+  - [x] 32.3 Complete non-intervening task-state probes
     - Fork the model at fixed action intervals without feeding probe output back into the agent
     - Measure objective, criteria, completed/pending/failed subtasks, failed attempts,
       repository assumptions, current and stale evidence, uncertainty, and intended next action
     - Score trajectories against canonical executable state
     - Exclude deterministic oracle probes from empirical outcomes
-    - _Status: Partial. Probes currently measure criteria, subtask state, current test state,
-      changed files, evidence attribution, temporal ordering, uncertainty, and next action.
-      Explicit failed-attempt, repository-assumption, and agent-identified-stale-belief fields
-      remain to be implemented._
+    - _Status: Complete. The v0.2 shadow-probe schema now measures objective fidelity,
+      remembered criteria, subtask states and source IDs, failed and blocked attempts,
+      repository path/state assumptions with provenance, latest-test freshness, current and
+      stale evidence IDs, changed files, uncertainty calibration, and structured intended
+      next action. Expected states are derived from canonical trace and operational-memory
+      state. Probe records are buffered outside the live trajectory and appended only after
+      agent execution, so they cannot shift action-time event IDs or enter agent memory.
+      Regression tests prove enabling probes leaves model actions, source references,
+      workspace files, interaction metrics, and outcomes unchanged. Deterministic oracle
+      probes remain explicitly ineligible for empirical summaries. Focused research tests
+      pass: 128 passed, 1 skipped. Full backend suite passes: 359 passed, 1 skipped
+      (`python3 -m pytest -q` from `backend/`)._
 
   - [x] 32.4 Replace weak headline semantic metrics
     - Use structured requirement recall, subtask-state accuracy, latest-evidence selection,

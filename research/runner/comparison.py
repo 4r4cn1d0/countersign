@@ -96,6 +96,34 @@ def compare_runs(baseline_run: dict, verified_run: dict) -> dict:
                     "mean_evidence_attribution_accuracy"
                 ),
             ),
+            "objective_fidelity_delta": _optional_delta(
+                baseline_probe.get("mean_objective_fidelity"),
+                verified_probe.get("mean_objective_fidelity"),
+            ),
+            "unsuccessful_attempt_accuracy_delta": _optional_delta(
+                baseline_probe.get("mean_unsuccessful_attempt_f1"),
+                verified_probe.get("mean_unsuccessful_attempt_f1"),
+            ),
+            "repository_state_accuracy_delta": _optional_delta(
+                baseline_probe.get("mean_repository_state_f1"),
+                verified_probe.get("mean_repository_state_f1"),
+            ),
+            "stale_evidence_accuracy_delta": _optional_delta(
+                baseline_probe.get("mean_stale_evidence_f1"),
+                verified_probe.get("mean_stale_evidence_f1"),
+            ),
+            "uncertainty_calibration_accuracy_delta": _optional_delta(
+                baseline_probe.get(
+                    "mean_uncertainty_calibration_accuracy"
+                ),
+                verified_probe.get(
+                    "mean_uncertainty_calibration_accuracy"
+                ),
+            ),
+            "next_action_accuracy_delta": _optional_delta(
+                baseline_probe.get("mean_next_action_accuracy"),
+                verified_probe.get("mean_next_action_accuracy"),
+            ),
         },
         "verification_decision_counts": verified_run.get(
             "verification_report", {}

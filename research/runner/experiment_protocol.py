@@ -34,7 +34,7 @@ def build_experiment_protocol(
     memory_window: int = 8,
     task_state_probes: bool = False,
     probe_interval: int = 5,
-    probe_max_tokens: int = 768,
+    probe_max_tokens: int = 1536,
     memory_repair: bool = True,
 ) -> dict:
     """Build a predeclared protocol whose identifier excludes wall-clock time."""
@@ -148,6 +148,13 @@ def build_experiment_protocol(
                 "latest_test_probe_accuracy",
                 "evidence_attribution_probe_accuracy",
                 "temporal_ordering_probe_accuracy",
+                "objective_fidelity_probe_accuracy",
+                "unsuccessful_attempt_probe_accuracy",
+                "repository_state_probe_accuracy",
+                "current_evidence_probe_accuracy",
+                "stale_evidence_probe_accuracy",
+                "uncertainty_calibration_probe_accuracy",
+                "next_action_probe_accuracy",
                 "memory_repair_recovery",
             ],
         },

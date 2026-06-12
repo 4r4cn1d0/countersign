@@ -24,7 +24,11 @@ from research.runner.operational_memory import (
     apply_event_to_memory,
     plan_memory_repair,
 )
-from research.runner.task_state_probes import score_task_state_probe
+from research.runner.task_state_probes import (
+    expected_task_state,
+    score_task_state_probe,
+    task_state_probe_schema,
+)
 
 
 CODING_FIXTURE_TASK_IDS = {
@@ -176,8 +180,13 @@ def test_operational_memory_invalidates_revision_bound_test_evidence():
 
 def test_probe_scoring_penalizes_wrong_state_and_lost_attribution():
     expected = {
+        "goal": "Fix the service and rerun tests.",
         "criterion_ids": ["criterion_1", "criterion_2"],
         "subtasks": {"inspect": "completed", "verify": "pending"},
+        "subtask_source_event_ids": {
+            "inspect": ["event-2"],
+            "verify": [],
+        },
         "latest_test": {
             "status": "passed",
             "source_event_id": "event-7",
@@ -185,6 +194,27 @@ def test_probe_scoring_penalizes_wrong_state_and_lost_attribution():
             "is_current": False,
         },
         "changed_files": ["service.py"],
+        "unsuccessful_attempts": [
+            {
+                "source_event_id": "event-6",
+                "action": "run_tests",
+                "outcome": "failed",
+                "reason": "tests failed",
+            }
+        ],
+        "repository_assumptions": [
+            {
+                "path": "service.py",
+                "state": "modified",
+                "source_event_ids": ["event-2"],
+            }
+        ],
+        "evidence_state": {
+            "current_event_ids": ["event-2"],
+            "stale_event_ids": ["event-7"],
+        },
+        "uncertainty_expected": True,
+        "next_action": {"action": "run_tests", "path": None},
     }
     prediction = {
         "goal_summary": "Fix the service.",
@@ -207,9 +237,25 @@ def test_probe_scoring_penalizes_wrong_state_and_lost_attribution():
             "workspace_revision": 1,
             "is_current": True,
         },
+        "unsuccessful_attempts": [],
+        "repository_assumptions": [
+            {
+                "path": "service.py",
+                "state": "observed",
+                "source_event_ids": [],
+            }
+        ],
+        "evidence_state": {
+            "current_event_ids": ["event-2", "event-7"],
+            "stale_event_ids": [],
+        },
         "changed_files": ["service.py", "unrelated.py"],
         "uncertainties": [],
-        "next_action": "Finish.",
+        "next_action": {
+            "action": "finish",
+            "path": None,
+            "reason": "The work looks complete.",
+        },
     }
 
     score = score_task_state_probe(prediction, expected)
@@ -218,8 +264,125 @@ def test_probe_scoring_penalizes_wrong_state_and_lost_attribution():
     assert score["criterion_recall"] == 0.5
     assert score["subtask_state_accuracy"] == 0.5
     assert score["latest_test_accuracy"] < 1.0
-    assert score["evidence_attribution_accuracy"] == 0.0
+    assert score["evidence_attribution_accuracy"] < 0.3
+    assert score["unsuccessful_attempt_f1"] == 0.0
+    assert score["repository_state_f1"] == 0.0
+    assert score["stale_evidence_f1"] == 0.0
+    assert score["uncertainty_calibration_accuracy"] == 0.0
+    assert score["next_action_accuracy"] == 0.5
     assert score["overall_accuracy"] < 0.7
+
+
+def test_expected_probe_state_tracks_failures_repository_and_stale_evidence():
+    task = BenchmarkRunner().get_task("coding_stale_tests_001")
+    ledger = [
+        {
+            "event_id": "event-read",
+            "tool_name": "read_file",
+            "path": "config_parser.py",
+            "status": "success",
+            "workspace_revision": 0,
+            "stale": False,
+        },
+        {
+            "event_id": "event-write",
+            "tool_name": "write_file",
+            "path": "config_parser.py",
+            "status": "success",
+            "workspace_revision": 1,
+            "stale": False,
+        },
+        {
+            "event_id": "event-test",
+            "tool_name": "run_tests",
+            "status": "failure",
+            "workspace_revision": 1,
+            "stale": True,
+        },
+    ]
+    trace_events = [
+        {
+            "event_id": "event-test",
+            "event_type": "tool_call",
+            "tool_name": "run_tests",
+            "status": "failure",
+            "content": "one test failed",
+        },
+        {
+            "event_id": "event-finish",
+            "event_type": "completion_claim",
+            "proposal_status": "blocked",
+        },
+        {
+            "event_id": "event-decision",
+            "event_type": "verification_decision",
+            "decision": "block",
+            "claim_event_id": "event-finish",
+            "reasons": ["stale evidence"],
+        },
+    ]
+
+    expected = expected_task_state(
+        task,
+        ledger,
+        workspace_revision=1,
+        trace_events=trace_events,
+        expected_next_action={"action": "run_tests"},
+        uncertainty_expected=True,
+    )
+
+    assert expected["latest_test"]["status"] == "failed"
+    assert expected["subtasks"]["rerun_after_final_edit"] == "failed"
+    assert expected["unsuccessful_attempts"] == [
+        {
+            "source_event_id": "event-test",
+            "action": "run_tests",
+            "outcome": "failed",
+            "reason": "one test failed",
+        },
+        {
+            "source_event_id": "event-finish",
+            "action": "finish",
+            "outcome": "blocked",
+            "reason": "stale evidence",
+        },
+    ]
+    assert expected["repository_assumptions"] == [
+        {
+            "path": "config_parser.py",
+            "state": "modified",
+            "source_event_ids": ["event-write"],
+        }
+    ]
+    assert expected["evidence_state"]["stale_event_ids"] == ["event-test"]
+    assert expected["uncertainty_expected"] is True
+    assert expected["next_action"] == {
+        "action": "run_tests",
+        "path": None,
+    }
+
+
+def test_probe_schema_requires_complete_state_measurement():
+    task = BenchmarkRunner().get_task("coding_stale_tests_001")
+    schema = task_state_probe_schema(task)
+
+    assert {
+        "unsuccessful_attempts",
+        "repository_assumptions",
+        "evidence_state",
+        "uncertainties",
+        "next_action",
+    }.issubset(schema["required"])
+    assert schema["properties"]["next_action"]["properties"]["action"][
+        "enum"
+    ] == [
+        "list_files",
+        "read_file",
+        "write_file",
+        "run_tests",
+        "finish",
+        "none",
+    ]
 
 
 @pytest.mark.parametrize(
@@ -419,9 +582,19 @@ def test_real_runtime_shadow_probe_is_measured_without_steering_main_loop(
                         "workspace_revision": None,
                         "is_current": False,
                     },
+                    "unsuccessful_attempts": [],
+                    "repository_assumptions": [],
+                    "evidence_state": {
+                        "current_event_ids": [],
+                        "stale_event_ids": [],
+                    },
                     "changed_files": [],
                     "uncertainties": ["Memory is incomplete."],
-                    "next_action": "Inspect the workspace.",
+                    "next_action": {
+                        "action": "list_files",
+                        "path": None,
+                        "reason": "Inspect the workspace.",
+                    },
                 }
             else:
                 payload = scripted_actions[
@@ -470,3 +643,84 @@ def test_real_runtime_shadow_probe_is_measured_without_steering_main_loop(
     )
     assert set(adapter.probe_token_budgets) == {640}
     assert run["interaction_metrics"]["evaluator_success"] is True
+
+
+def test_shadow_probes_do_not_change_agent_actions_or_workspace(tmp_path: Path):
+    pytest.importorskip("langgraph")
+    runner = BenchmarkRunner()
+    plain_root = tmp_path / "plain"
+    probed_root = tmp_path / "probed"
+    base_config = {
+        "framework": "langgraph_tools",
+        "trace_mode": "model_driven",
+        "runtime": "deterministic",
+        "action_budget": 24,
+    }
+
+    plain = runner.run_task_id(
+        "coding_stale_tests_001",
+        BenchmarkRunConfig(
+            **base_config,
+            workspace_root=str(plain_root),
+            task_state_probes=False,
+        ),
+    )
+    probed = runner.run_task_id(
+        "coding_stale_tests_001",
+        BenchmarkRunConfig(
+            **base_config,
+            workspace_root=str(probed_root),
+            task_state_probes=True,
+            probe_interval=2,
+        ),
+    )
+
+    def actions(run):
+        return [
+            event["parsed_action"]
+            for event in run["trace_events"]
+            if event.get("event_type") == "model_response"
+            and event.get("graph_node") == "choose_action"
+        ]
+
+    def workspace_files(run):
+        workspace = Path(run["run_metadata"]["workspace_path"])
+        return {
+            path.relative_to(workspace).as_posix(): path.read_text()
+            for path in sorted(workspace.rglob("*"))
+            if path.is_file() and "__pycache__" not in path.parts
+        }
+
+    assert actions(probed) == actions(plain)
+    assert workspace_files(probed) == workspace_files(plain)
+    assert probed["interaction_metrics"] == plain["interaction_metrics"]
+    probe_events = [
+        event
+        for event in probed["trace_events"]
+        if event.get("event_type") == "task_state_probe"
+    ]
+    assert [event["action_count"] for event in probe_events] == [
+        0,
+        2,
+        4,
+        6,
+        8,
+        10,
+        12,
+        14,
+        16,
+        18,
+        20,
+    ]
+    assert all(
+        event["probe_origin"] == "deterministic_oracle"
+        and event["eligible_for_empirical_analysis"] is False
+        and event["overall_accuracy"] == 1.0
+        and event["checkpoint_sequence_number"] < event["sequence_number"]
+        for event in probe_events
+    )
+    summary = probed["task_state_probe_summary"]
+    assert summary["probe_count"] == len(probe_events)
+    assert summary["eligible_probe_count"] == 0
+    assert summary["mean_overall_accuracy"] is None
+    assert summary["trajectory"] == []
