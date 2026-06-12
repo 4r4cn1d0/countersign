@@ -547,6 +547,18 @@ def _task_rows_for_model(
                 "verified_probe_unsuccessful_attempt_accuracy": (
                     verified_probe.get("mean_unsuccessful_attempt_f1")
                 ),
+                "baseline_probe_failed_attempt_accuracy": (
+                    baseline_probe.get("mean_failed_attempt_f1")
+                ),
+                "verified_probe_failed_attempt_accuracy": (
+                    verified_probe.get("mean_failed_attempt_f1")
+                ),
+                "baseline_probe_blocked_attempt_accuracy": (
+                    baseline_probe.get("mean_blocked_attempt_f1")
+                ),
+                "verified_probe_blocked_attempt_accuracy": (
+                    verified_probe.get("mean_blocked_attempt_f1")
+                ),
                 "baseline_probe_repository_state_accuracy": (
                     baseline_probe.get("mean_repository_state_f1")
                 ),
@@ -565,6 +577,22 @@ def _task_rows_for_model(
                 "verified_probe_stale_evidence_accuracy": (
                     verified_probe.get("mean_stale_evidence_f1")
                 ),
+                "baseline_probe_uncertain_evidence_accuracy": (
+                    baseline_probe.get("mean_uncertain_evidence_f1")
+                ),
+                "verified_probe_uncertain_evidence_accuracy": (
+                    verified_probe.get("mean_uncertain_evidence_f1")
+                ),
+                "baseline_probe_curve_auc": (
+                    baseline_probe.get("curve_statistics", {}).get(
+                        "area_under_curve"
+                    )
+                ),
+                "verified_probe_curve_auc": (
+                    verified_probe.get("curve_statistics", {}).get(
+                        "area_under_curve"
+                    )
+                ),
                 "baseline_probe_uncertainty_calibration_accuracy": (
                     baseline_probe.get(
                         "mean_uncertainty_calibration_accuracy"
@@ -576,10 +604,16 @@ def _task_rows_for_model(
                     )
                 ),
                 "baseline_probe_next_action_accuracy": (
-                    baseline_probe.get("mean_next_action_accuracy")
+                    baseline_probe.get(
+                        "mean_next_action_appropriateness",
+                        baseline_probe.get("mean_next_action_accuracy"),
+                    )
                 ),
                 "verified_probe_next_action_accuracy": (
-                    verified_probe.get("mean_next_action_accuracy")
+                    verified_probe.get(
+                        "mean_next_action_appropriateness",
+                        verified_probe.get("mean_next_action_accuracy"),
+                    )
                 ),
                 "extra_model_actions": (
                     verified_iterations - baseline_iterations

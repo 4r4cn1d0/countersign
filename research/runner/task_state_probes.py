@@ -22,6 +22,25 @@ NEXT_ACTIONS = (
 )
 
 
+def _attempt_schema(outcome: str) -> dict:
+    return {
+        "type": "object",
+        "properties": {
+            "source_event_id": {"type": "string"},
+            "action": {"type": "string"},
+            "outcome": {"type": "string", "enum": [outcome]},
+            "reason": {"type": "string"},
+        },
+        "required": [
+            "source_event_id",
+            "action",
+            "outcome",
+            "reason",
+        ],
+        "additionalProperties": False,
+    }
+
+
 def task_state_probe_schema(task: dict) -> dict:
     """Return a strict schema for a non-invasive task-state probe."""
 
@@ -111,6 +130,14 @@ def task_state_probe_schema(task: dict) -> dict:
                     "additionalProperties": False,
                 },
             },
+            "failed_attempts": {
+                "type": "array",
+                "items": _attempt_schema("failed"),
+            },
+            "blocked_attempts": {
+                "type": "array",
+                "items": _attempt_schema("blocked"),
+            },
             "repository_assumptions": {
                 "type": "array",
                 "items": {
@@ -121,12 +148,18 @@ def task_state_probe_schema(task: dict) -> dict:
                             "type": "string",
                             "enum": list(REPOSITORY_STATES),
                         },
+                        "workspace_revision": {"type": "integer"},
                         "source_event_ids": {
                             "type": "array",
                             "items": {"type": "string"},
                         },
                     },
-                    "required": ["path", "state", "source_event_ids"],
+                    "required": [
+                        "path",
+                        "state",
+                        "workspace_revision",
+                        "source_event_ids",
+                    ],
                     "additionalProperties": False,
                 },
             },
@@ -141,8 +174,16 @@ def task_state_probe_schema(task: dict) -> dict:
                         "type": "array",
                         "items": {"type": "string"},
                     },
+                    "uncertain_event_ids": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
                 },
-                "required": ["current_event_ids", "stale_event_ids"],
+                "required": [
+                    "current_event_ids",
+                    "stale_event_ids",
+                    "uncertain_event_ids",
+                ],
                 "additionalProperties": False,
             },
             "changed_files": {
@@ -172,7 +213,8 @@ def task_state_probe_schema(task: dict) -> dict:
             "remembered_criterion_ids",
             "subtasks",
             "latest_test",
-            "unsuccessful_attempts",
+            "failed_attempts",
+            "blocked_attempts",
             "repository_assumptions",
             "evidence_state",
             "changed_files",
@@ -216,11 +258,12 @@ def build_task_state_probe_prompt(
         f"Visible memory condition: {memory_view['condition']}\n"
         f"Visible evidence: {json.dumps(memory_view['evidence_ledger'], sort_keys=True)}\n"
         f"Recent observations: {json.dumps(memory_view['recent_observations'], sort_keys=True)}\n"
-        "Report the latest test you remember; unsuccessful failed or blocked "
-        "attempts; repository paths you believe were observed or modified with "
-        "their source event IDs; which evidence event IDs are current versus "
-        "stale; changed files; subtask status; uncertainties caused by missing "
-        "or conflicting memory; and the single best next action. Return JSON only."
+        "Report the latest test you remember; failed attempts and blocked "
+        "attempts separately; repository paths you believe were observed or "
+        "modified with their workspace revision and source event IDs; which "
+        "evidence event IDs are current versus stale versus uncertain; changed "
+        "files; subtask status; uncertainties caused by missing or conflicting "
+        "memory; and the single best next action. Return JSON only."
     )
 
 
@@ -232,6 +275,7 @@ def expected_task_state(
     trace_events: list[dict] | None = None,
     expected_next_action: dict | None = None,
     uncertainty_expected: bool = False,
+    uncertain_event_ids: list[str] | None = None,
 ) -> dict:
     """Build executable ground truth for a probe checkpoint."""
 
@@ -278,6 +322,16 @@ def expected_task_state(
         bool(fresh_success),
     ]
     unsuccessful_attempts = _unsuccessful_attempts(trace_events or [])
+    failed_attempts = [
+        attempt
+        for attempt in unsuccessful_attempts
+        if attempt["outcome"] == "failed"
+    ]
+    blocked_attempts = [
+        attempt
+        for attempt in unsuccessful_attempts
+        if attempt["outcome"] == "blocked"
+    ]
     blocked_finish = any(
         attempt["action"] == "finish"
         and attempt["outcome"] == "blocked"
@@ -375,10 +429,15 @@ def expected_task_state(
             }
         ),
         "unsuccessful_attempts": unsuccessful_attempts,
+        "failed_attempts": failed_attempts,
+        "blocked_attempts": blocked_attempts,
         "repository_assumptions": repository_assumptions,
         "evidence_state": {
             "current_event_ids": current_event_ids,
             "stale_event_ids": stale_event_ids,
+            "uncertain_event_ids": sorted(
+                {str(event_id) for event_id in uncertain_event_ids or []}
+            ),
         },
         "uncertainty_expected": bool(uncertainty_expected),
         "next_action": _normalize_next_action(expected_next_action),
@@ -403,6 +462,8 @@ def deterministic_probe_payload(task: dict, expected: dict) -> dict:
         ],
         "latest_test": expected["latest_test"],
         "unsuccessful_attempts": expected["unsuccessful_attempts"],
+        "failed_attempts": expected.get("failed_attempts", []),
+        "blocked_attempts": expected.get("blocked_attempts", []),
         "repository_assumptions": expected["repository_assumptions"],
         "evidence_state": expected["evidence_state"],
         "changed_files": expected["changed_files"],
@@ -454,8 +515,12 @@ def score_task_state_probe(payload: dict | None, expected: dict) -> dict:
             "repository_state_f1": 0.0,
             "current_evidence_f1": 0.0,
             "stale_evidence_f1": 0.0,
+            "uncertain_evidence_f1": 0.0,
+            "failed_attempt_f1": 0.0,
+            "blocked_attempt_f1": 0.0,
             "uncertainty_calibration_accuracy": 0.0,
             "next_action_accuracy": 0.0,
+            "next_action_appropriateness": 0.0,
         }
 
     predicted_subtasks = {
@@ -530,10 +595,36 @@ def score_task_state_probe(payload: dict | None, expected: dict) -> dict:
         expected.get("unsuccessful_attempts", []),
         fields=("source_event_id", "action", "outcome"),
     )
+    predicted_failed_attempts = _attempts_for_outcome(payload, "failed")
+    predicted_blocked_attempts = _attempts_for_outcome(payload, "blocked")
+    expected_failed_attempts = expected.get("failed_attempts")
+    if expected_failed_attempts is None:
+        expected_failed_attempts = [
+            item
+            for item in expected.get("unsuccessful_attempts", [])
+            if item.get("outcome") == "failed"
+        ]
+    expected_blocked_attempts = expected.get("blocked_attempts")
+    if expected_blocked_attempts is None:
+        expected_blocked_attempts = [
+            item
+            for item in expected.get("unsuccessful_attempts", [])
+            if item.get("outcome") == "blocked"
+        ]
+    failed_attempt_f1 = _record_set_f1(
+        predicted_failed_attempts,
+        expected_failed_attempts,
+        fields=("source_event_id", "action"),
+    )
+    blocked_attempt_f1 = _record_set_f1(
+        predicted_blocked_attempts,
+        expected_blocked_attempts,
+        fields=("source_event_id", "action"),
+    )
     repository_state_f1 = _record_set_f1(
         payload.get("repository_assumptions", []),
         expected.get("repository_assumptions", []),
-        fields=("path", "state"),
+        fields=("path", "state", "workspace_revision"),
     )
     repository_attribution = _repository_attribution_accuracy(
         payload.get("repository_assumptions", []),
@@ -561,6 +652,15 @@ def score_task_state_probe(payload: dict | None, expected: dict) -> dict:
             )
         ),
     )
+    uncertain_evidence_f1 = _set_f1(
+        set(predicted_evidence.get("uncertain_event_ids", [])),
+        set(
+            expected.get("evidence_state", {}).get(
+                "uncertain_event_ids",
+                [],
+            )
+        ),
+    )
     uncertainty_calibration = float(
         bool(payload.get("uncertainties"))
         is bool(expected.get("uncertainty_expected", False))
@@ -571,13 +671,15 @@ def score_task_state_probe(payload: dict | None, expected: dict) -> dict:
     expected_next_action = _normalize_next_action(
         expected.get("next_action")
     )
+    next_action_components = [
+        predicted_next_action["action"] == expected_next_action["action"]
+    ]
+    if expected_next_action["action"] in {"read_file", "write_file"}:
+        next_action_components.append(
+            predicted_next_action["path"] == expected_next_action["path"]
+        )
     next_action_accuracy = _accuracy(
-        [
-            predicted_next_action["action"]
-            == expected_next_action["action"],
-            predicted_next_action["path"]
-            == expected_next_action["path"],
-        ]
+        next_action_components
     )
     components = [
         objective_fidelity,
@@ -587,10 +689,12 @@ def score_task_state_probe(payload: dict | None, expected: dict) -> dict:
         temporal_ordering_accuracy,
         changed_file_f1,
         attribution_accuracy,
-        unsuccessful_attempt_f1,
+        failed_attempt_f1,
+        blocked_attempt_f1,
         repository_state_f1,
         current_evidence_f1,
         stale_evidence_f1,
+        uncertain_evidence_f1,
         uncertainty_calibration,
         next_action_accuracy,
     ]
@@ -626,14 +730,18 @@ def score_task_state_probe(payload: dict | None, expected: dict) -> dict:
             unsuccessful_attempt_f1,
             4,
         ),
+        "failed_attempt_f1": round(failed_attempt_f1, 4),
+        "blocked_attempt_f1": round(blocked_attempt_f1, 4),
         "repository_state_f1": round(repository_state_f1, 4),
         "current_evidence_f1": round(current_evidence_f1, 4),
         "stale_evidence_f1": round(stale_evidence_f1, 4),
+        "uncertain_evidence_f1": round(uncertain_evidence_f1, 4),
         "uncertainty_calibration_accuracy": round(
             uncertainty_calibration,
             4,
         ),
         "next_action_accuracy": round(next_action_accuracy, 4),
+        "next_action_appropriateness": round(next_action_accuracy, 4),
     }
 
 
@@ -645,8 +753,9 @@ def summarize_probe_scores(probes: list[dict]) -> dict:
         for probe in probes
         if probe.get("eligible_for_empirical_analysis")
     ]
+    curve = build_memory_accuracy_curve(eligible)
     return {
-        "schema_version": "agent-memory-probe-summary/v0.2",
+        "schema_version": "agent-memory-probe-summary/v0.3",
         "probe_count": len(probes),
         "eligible_probe_count": len(eligible),
         "mean_overall_accuracy": _mean_metric(
@@ -689,6 +798,14 @@ def summarize_probe_scores(probes: list[dict]) -> dict:
             eligible,
             "unsuccessful_attempt_f1",
         ),
+        "mean_failed_attempt_f1": _mean_metric(
+            eligible,
+            "failed_attempt_f1",
+        ),
+        "mean_blocked_attempt_f1": _mean_metric(
+            eligible,
+            "blocked_attempt_f1",
+        ),
         "mean_repository_state_f1": _mean_metric(
             eligible,
             "repository_state_f1",
@@ -701,6 +818,10 @@ def summarize_probe_scores(probes: list[dict]) -> dict:
             eligible,
             "stale_evidence_f1",
         ),
+        "mean_uncertain_evidence_f1": _mean_metric(
+            eligible,
+            "uncertain_evidence_f1",
+        ),
         "mean_uncertainty_calibration_accuracy": _mean_metric(
             eligible,
             "uncertainty_calibration_accuracy",
@@ -709,31 +830,124 @@ def summarize_probe_scores(probes: list[dict]) -> dict:
             eligible,
             "next_action_accuracy",
         ),
-        "trajectory": [
+        "mean_next_action_appropriateness": _mean_metric(
+            eligible,
+            "next_action_appropriateness",
+        ),
+        "memory_accuracy_curve_schema_version": curve[
+            "schema_version"
+        ],
+        "memory_accuracy_curve": curve["points"],
+        "curve_statistics": curve["statistics"],
+        "trajectory": curve["points"],
+    }
+
+
+def build_memory_accuracy_curve(probes: list[dict]) -> dict:
+    """Build an ordered, non-intervening per-run memory-accuracy curve."""
+
+    ordered = sorted(
+        probes,
+        key=lambda probe: (
+            int(probe.get("action_count") or 0),
+            int(probe.get("checkpoint_sequence_number") or 0),
+        ),
+    )
+    if not ordered:
+        return {
+            "schema_version": "agent-memory-accuracy-curve/v0.1",
+            "points": [],
+            "statistics": {
+                "point_count": 0,
+                "action_span": 0,
+                "area_under_curve": None,
+                "minimum_accuracy": None,
+                "terminal_accuracy": None,
+                "first_degradation_action": None,
+            },
+        }
+
+    maximum_action = max(int(probe.get("action_count") or 0) for probe in ordered)
+    points = []
+    previous_accuracy = None
+    initial_accuracy = float(ordered[0].get("overall_accuracy") or 0.0)
+    running_accuracies = []
+    for probe in ordered:
+        action_count = int(probe.get("action_count") or 0)
+        accuracy = float(probe.get("overall_accuracy") or 0.0)
+        running_accuracies.append(accuracy)
+        points.append(
             {
-                "action_count": probe.get("action_count"),
+                "checkpoint": probe.get("checkpoint"),
+                "checkpoint_sequence_number": probe.get(
+                    "checkpoint_sequence_number"
+                ),
+                "action_count": action_count,
+                "normalized_action_progress": round(
+                    action_count / maximum_action if maximum_action else 0.0,
+                    4,
+                ),
                 "workspace_revision": probe.get("workspace_revision"),
                 "memory_condition": probe.get("memory_condition"),
-                "overall_accuracy": probe.get("overall_accuracy"),
+                "memory_view_active": probe.get("memory_view_active"),
+                "overall_accuracy": round(accuracy, 4),
+                "cumulative_mean_accuracy": round(
+                    mean(running_accuracies),
+                    4,
+                ),
+                "accuracy_delta_from_previous": (
+                    None
+                    if previous_accuracy is None
+                    else round(accuracy - previous_accuracy, 4)
+                ),
+                "accuracy_delta_from_initial": round(
+                    accuracy - initial_accuracy,
+                    4,
+                ),
                 "objective_fidelity": probe.get("objective_fidelity"),
                 "subtask_state_accuracy": probe.get(
                     "subtask_state_accuracy"
                 ),
-                "unsuccessful_attempt_f1": probe.get(
-                    "unsuccessful_attempt_f1"
-                ),
+                "failed_attempt_f1": probe.get("failed_attempt_f1"),
+                "blocked_attempt_f1": probe.get("blocked_attempt_f1"),
                 "repository_state_f1": probe.get(
                     "repository_state_f1"
                 ),
-                "stale_evidence_f1": probe.get(
-                    "stale_evidence_f1"
+                "stale_evidence_f1": probe.get("stale_evidence_f1"),
+                "uncertain_evidence_f1": probe.get(
+                    "uncertain_evidence_f1"
                 ),
-                "next_action_accuracy": probe.get(
-                    "next_action_accuracy"
+                "next_action_appropriateness": probe.get(
+                    "next_action_appropriateness",
+                    probe.get("next_action_accuracy"),
                 ),
             }
-            for probe in eligible
-        ],
+        )
+        previous_accuracy = accuracy
+
+    first_degradation = next(
+        (
+            point["action_count"]
+            for point in points[1:]
+            if point["overall_accuracy"] < initial_accuracy
+        ),
+        None,
+    )
+    return {
+        "schema_version": "agent-memory-accuracy-curve/v0.1",
+        "points": points,
+        "statistics": {
+            "point_count": len(points),
+            "action_span": maximum_action
+            - int(points[0]["action_count"]),
+            "area_under_curve": _normalized_curve_area(points),
+            "minimum_accuracy": round(
+                min(point["overall_accuracy"] for point in points),
+                4,
+            ),
+            "terminal_accuracy": points[-1]["overall_accuracy"],
+            "first_degradation_action": first_degradation,
+        },
     }
 
 
@@ -766,6 +980,40 @@ def _set_f1(predicted: set[str], expected: set[str]) -> float:
 def _mean_metric(probes: list[dict], key: str) -> float | None:
     values = [float(probe[key]) for probe in probes if probe.get(key) is not None]
     return round(mean(values), 4) if values else None
+
+
+def _attempts_for_outcome(payload: dict, outcome: str) -> list[dict]:
+    explicit = payload.get(f"{outcome}_attempts")
+    if isinstance(explicit, list):
+        return explicit
+    return [
+        item
+        for item in payload.get("unsuccessful_attempts", [])
+        if isinstance(item, dict) and item.get("outcome") == outcome
+    ]
+
+
+def _normalized_curve_area(points: list[dict]) -> float:
+    if not points:
+        return 0.0
+    if len(points) == 1:
+        return round(float(points[0]["overall_accuracy"]), 4)
+    start = int(points[0]["action_count"])
+    end = int(points[-1]["action_count"])
+    span = end - start
+    if span <= 0:
+        return round(
+            mean(float(point["overall_accuracy"]) for point in points),
+            4,
+        )
+    area = 0.0
+    for left, right in zip(points, points[1:]):
+        width = int(right["action_count"]) - int(left["action_count"])
+        area += width * (
+            float(left["overall_accuracy"])
+            + float(right["overall_accuracy"])
+        ) / 2
+    return round(area / span, 4)
 
 
 def _unsuccessful_attempts(trace_events: list[dict]) -> list[dict]:
@@ -824,25 +1072,45 @@ def _unsuccessful_attempts(trace_events: list[dict]) -> list[dict]:
 
 
 def _repository_assumptions(entries: list[dict]) -> list[dict]:
-    latest_by_path: dict[str, dict] = {}
+    entries_by_path: dict[str, list[dict]] = {}
     for entry in entries:
         path = str(entry.get("path", ""))
         if path:
-            latest_by_path[path] = entry
-    return [
-        {
-            "path": path,
-            "state": (
-                "modified"
-                if entry.get("tool_name") == "write_file"
-                else "observed"
+            entries_by_path.setdefault(path, []).append(entry)
+    assumptions = []
+    for path, path_entries in sorted(entries_by_path.items()):
+        current_entries = [
+            entry for entry in path_entries if not entry.get("stale")
+        ] or path_entries[-1:]
+        latest = max(
+            current_entries,
+            key=lambda entry: (
+                int(entry.get("workspace_revision", 0)),
+                int(entry.get("sequence_number", 0)),
             ),
-            "source_event_ids": [str(entry["event_id"])]
-            if entry.get("event_id")
-            else [],
-        }
-        for path, entry in sorted(latest_by_path.items())
-    ]
+        )
+        writes = [
+            entry
+            for entry in current_entries
+            if entry.get("tool_name") == "write_file"
+        ]
+        state_source = writes[-1] if writes else latest
+        source_event_ids = []
+        for entry in [state_source, latest]:
+            event_id = entry.get("event_id")
+            if event_id and str(event_id) not in source_event_ids:
+                source_event_ids.append(str(event_id))
+        assumptions.append(
+            {
+                "path": path,
+                "state": "modified" if writes else "observed",
+                "workspace_revision": int(
+                    latest.get("workspace_revision", 0)
+                ),
+                "source_event_ids": source_event_ids,
+            }
+        )
+    return assumptions
 
 
 def _normalize_next_action(action: Any) -> dict:

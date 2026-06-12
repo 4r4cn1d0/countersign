@@ -1186,12 +1186,27 @@ Acceptance bar for unfinished research tasks:
     confidence intervals, and a natural-versus-induced corruption table._
 
 - [ ] 35. Complete shadow task-state measurement
-  - [ ] 35.1 Add failed attempts and blocked attempts to the probe schema
-  - [ ] 35.2 Add current repository assumptions with source event IDs
-  - [ ] 35.3 Ask the model which evidence it considers stale or uncertain
-  - [ ] 35.4 Score objective fidelity and intended-next-action appropriateness
-  - [ ] 35.5 Generate per-run memory-accuracy curves without steering the main trajectory
+  - [x] 35.1 Add failed attempts and blocked attempts to the probe schema
+  - [x] 35.2 Add current repository assumptions with source event IDs
+  - [x] 35.3 Ask the model which evidence it considers stale or uncertain
+  - [x] 35.4 Score objective fidelity and intended-next-action appropriateness
+  - [x] 35.5 Generate per-run memory-accuracy curves without steering the main trajectory
   - [ ] 35.6 Validate probe scoring on manually labeled checkpoints
+  - _Status: Tasks 35.1-35.5 are implemented in
+    `research/runner/task_state_probes.py`. Probe schema v0.3 records failed and blocked
+    attempts separately, revision-aware repository assumptions with exact source event IDs,
+    and current, stale, and uncertain evidence IDs. Scoring reports separate failed-attempt,
+    blocked-attempt, stale-evidence, uncertain-evidence, objective-fidelity, and
+    next-action-appropriateness outcomes._
+  - _Curve evidence: Every empirically eligible run now contains an ordered
+    `agent-memory-accuracy-curve/v0.1` with action progress, cumulative mean accuracy,
+    checkpoint deltas, component scores, normalized AUC, minimum and terminal accuracy,
+    and first degradation action. Probe generations remain buffered outside the live
+    trajectory and are appended only after execution; regression tests confirm probes do not
+    change model actions, workspace files, interaction metrics, or outcomes._
+  - _Verification: Focused probe, metrics, matrix, runner, and CLI tests pass:
+    114 passed. Full backend suite passes: 366 passed, 1 skipped. Task 35 remains open only
+    for 35.6 manual-label validation._
 
 - [ ] 36. Complete structured scientific metrics
   - [ ] 36.1 Extract repository-state beliefs beyond finish claims

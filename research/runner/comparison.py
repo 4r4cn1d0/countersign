@@ -104,6 +104,14 @@ def compare_runs(baseline_run: dict, verified_run: dict) -> dict:
                 baseline_probe.get("mean_unsuccessful_attempt_f1"),
                 verified_probe.get("mean_unsuccessful_attempt_f1"),
             ),
+            "failed_attempt_accuracy_delta": _optional_delta(
+                baseline_probe.get("mean_failed_attempt_f1"),
+                verified_probe.get("mean_failed_attempt_f1"),
+            ),
+            "blocked_attempt_accuracy_delta": _optional_delta(
+                baseline_probe.get("mean_blocked_attempt_f1"),
+                verified_probe.get("mean_blocked_attempt_f1"),
+            ),
             "repository_state_accuracy_delta": _optional_delta(
                 baseline_probe.get("mean_repository_state_f1"),
                 verified_probe.get("mean_repository_state_f1"),
@@ -111,6 +119,10 @@ def compare_runs(baseline_run: dict, verified_run: dict) -> dict:
             "stale_evidence_accuracy_delta": _optional_delta(
                 baseline_probe.get("mean_stale_evidence_f1"),
                 verified_probe.get("mean_stale_evidence_f1"),
+            ),
+            "uncertain_evidence_accuracy_delta": _optional_delta(
+                baseline_probe.get("mean_uncertain_evidence_f1"),
+                verified_probe.get("mean_uncertain_evidence_f1"),
             ),
             "uncertainty_calibration_accuracy_delta": _optional_delta(
                 baseline_probe.get(
@@ -121,8 +133,14 @@ def compare_runs(baseline_run: dict, verified_run: dict) -> dict:
                 ),
             ),
             "next_action_accuracy_delta": _optional_delta(
-                baseline_probe.get("mean_next_action_accuracy"),
-                verified_probe.get("mean_next_action_accuracy"),
+                baseline_probe.get(
+                    "mean_next_action_appropriateness",
+                    baseline_probe.get("mean_next_action_accuracy"),
+                ),
+                verified_probe.get(
+                    "mean_next_action_appropriateness",
+                    verified_probe.get("mean_next_action_accuracy"),
+                ),
             ),
         },
         "verification_decision_counts": verified_run.get(

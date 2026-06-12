@@ -27,6 +27,7 @@ from research.runner.operational_memory import (
 from research.runner.task_state_probes import (
     expected_task_state,
     score_task_state_probe,
+    summarize_probe_scores,
     task_state_probe_schema,
 )
 
@@ -261,16 +262,27 @@ def test_probe_scoring_penalizes_wrong_state_and_lost_attribution():
                 "reason": "tests failed",
             }
         ],
+        "failed_attempts": [
+            {
+                "source_event_id": "event-6",
+                "action": "run_tests",
+                "outcome": "failed",
+                "reason": "tests failed",
+            }
+        ],
+        "blocked_attempts": [],
         "repository_assumptions": [
             {
                 "path": "service.py",
                 "state": "modified",
+                "workspace_revision": 1,
                 "source_event_ids": ["event-2"],
             }
         ],
         "evidence_state": {
             "current_event_ids": ["event-2"],
             "stale_event_ids": ["event-7"],
+            "uncertain_event_ids": ["event-8"],
         },
         "uncertainty_expected": True,
         "next_action": {"action": "run_tests", "path": None},
@@ -297,16 +309,20 @@ def test_probe_scoring_penalizes_wrong_state_and_lost_attribution():
             "is_current": True,
         },
         "unsuccessful_attempts": [],
+        "failed_attempts": [],
+        "blocked_attempts": [],
         "repository_assumptions": [
             {
                 "path": "service.py",
                 "state": "observed",
+                "workspace_revision": 0,
                 "source_event_ids": [],
             }
         ],
         "evidence_state": {
             "current_event_ids": ["event-2", "event-7"],
             "stale_event_ids": [],
+            "uncertain_event_ids": [],
         },
         "changed_files": ["service.py", "unrelated.py"],
         "uncertainties": [],
@@ -325,10 +341,13 @@ def test_probe_scoring_penalizes_wrong_state_and_lost_attribution():
     assert score["latest_test_accuracy"] < 1.0
     assert score["evidence_attribution_accuracy"] < 0.3
     assert score["unsuccessful_attempt_f1"] == 0.0
+    assert score["failed_attempt_f1"] == 0.0
+    assert score["blocked_attempt_f1"] == 1.0
     assert score["repository_state_f1"] == 0.0
     assert score["stale_evidence_f1"] == 0.0
+    assert score["uncertain_evidence_f1"] == 0.0
     assert score["uncertainty_calibration_accuracy"] == 0.0
-    assert score["next_action_accuracy"] == 0.5
+    assert score["next_action_accuracy"] == 0.0
     assert score["overall_accuracy"] < 0.7
 
 
@@ -349,6 +368,15 @@ def test_expected_probe_state_tracks_failures_repository_and_stale_evidence():
             "path": "config_parser.py",
             "status": "success",
             "workspace_revision": 1,
+            "stale": False,
+        },
+        {
+            "event_id": "event-reread",
+            "tool_name": "read_file",
+            "path": "config_parser.py",
+            "status": "success",
+            "workspace_revision": 1,
+            "sequence_number": 3,
             "stale": False,
         },
         {
@@ -388,6 +416,7 @@ def test_expected_probe_state_tracks_failures_repository_and_stale_evidence():
         trace_events=trace_events,
         expected_next_action={"action": "run_tests"},
         uncertainty_expected=True,
+        uncertain_event_ids=["event-test"],
     )
 
     assert expected["latest_test"]["status"] == "failed"
@@ -406,14 +435,34 @@ def test_expected_probe_state_tracks_failures_repository_and_stale_evidence():
             "reason": "stale evidence",
         },
     ]
+    assert expected["failed_attempts"] == [
+        {
+            "source_event_id": "event-test",
+            "action": "run_tests",
+            "outcome": "failed",
+            "reason": "one test failed",
+        }
+    ]
+    assert expected["blocked_attempts"] == [
+        {
+            "source_event_id": "event-finish",
+            "action": "finish",
+            "outcome": "blocked",
+            "reason": "stale evidence",
+        }
+    ]
     assert expected["repository_assumptions"] == [
         {
             "path": "config_parser.py",
             "state": "modified",
-            "source_event_ids": ["event-write"],
+            "workspace_revision": 1,
+            "source_event_ids": ["event-write", "event-reread"],
         }
     ]
     assert expected["evidence_state"]["stale_event_ids"] == ["event-test"]
+    assert expected["evidence_state"]["uncertain_event_ids"] == [
+        "event-test"
+    ]
     assert expected["uncertainty_expected"] is True
     assert expected["next_action"] == {
         "action": "run_tests",
@@ -426,7 +475,8 @@ def test_probe_schema_requires_complete_state_measurement():
     schema = task_state_probe_schema(task)
 
     assert {
-        "unsuccessful_attempts",
+        "failed_attempts",
+        "blocked_attempts",
         "repository_assumptions",
         "evidence_state",
         "uncertainties",
@@ -442,6 +492,143 @@ def test_probe_schema_requires_complete_state_measurement():
         "finish",
         "none",
     ]
+    assert schema["properties"]["evidence_state"]["required"] == [
+        "current_event_ids",
+        "stale_event_ids",
+        "uncertain_event_ids",
+    ]
+
+
+def test_probe_scoring_separates_attempt_outcomes_and_uncertain_evidence():
+    expected = {
+        "goal": "Repair the cache safely.",
+        "criterion_ids": [],
+        "subtasks": {},
+        "subtask_source_event_ids": {},
+        "latest_test": {
+            "status": "not_run",
+            "source_event_id": None,
+            "workspace_revision": None,
+            "is_current": False,
+        },
+        "changed_files": [],
+        "unsuccessful_attempts": [
+            {
+                "source_event_id": "failed-1",
+                "action": "run_tests",
+                "outcome": "failed",
+                "reason": "test failure",
+            },
+            {
+                "source_event_id": "blocked-1",
+                "action": "finish",
+                "outcome": "blocked",
+                "reason": "stale evidence",
+            },
+        ],
+        "failed_attempts": [
+            {
+                "source_event_id": "failed-1",
+                "action": "run_tests",
+                "outcome": "failed",
+                "reason": "test failure",
+            }
+        ],
+        "blocked_attempts": [
+            {
+                "source_event_id": "blocked-1",
+                "action": "finish",
+                "outcome": "blocked",
+                "reason": "stale evidence",
+            }
+        ],
+        "repository_assumptions": [],
+        "evidence_state": {
+            "current_event_ids": ["current-1"],
+            "stale_event_ids": ["stale-1"],
+            "uncertain_event_ids": ["uncertain-1"],
+        },
+        "uncertainty_expected": True,
+        "next_action": {"action": "run_tests", "path": None},
+    }
+    prediction = {
+        "goal_summary": "Repair the cache safely.",
+        "remembered_criterion_ids": [],
+        "subtasks": [],
+        "latest_test": expected["latest_test"],
+        "unsuccessful_attempts": expected["failed_attempts"],
+        "failed_attempts": expected["failed_attempts"],
+        "blocked_attempts": [],
+        "repository_assumptions": [],
+        "evidence_state": {
+            "current_event_ids": ["current-1"],
+            "stale_event_ids": ["stale-1"],
+            "uncertain_event_ids": ["uncertain-1"],
+        },
+        "changed_files": [],
+        "uncertainties": ["uncertain-1 has incomplete provenance"],
+        "next_action": {
+            "action": "run_tests",
+            "path": "ignored-for-this-action",
+            "reason": "Obtain current test evidence.",
+        },
+    }
+
+    score = score_task_state_probe(prediction, expected)
+
+    assert score["failed_attempt_f1"] == 1.0
+    assert score["blocked_attempt_f1"] == 0.0
+    assert score["stale_evidence_f1"] == 1.0
+    assert score["uncertain_evidence_f1"] == 1.0
+    assert score["next_action_appropriateness"] == 1.0
+
+
+def test_probe_summary_generates_ordered_memory_accuracy_curve():
+    probes = [
+        {
+            "eligible_for_empirical_analysis": True,
+            "checkpoint": "after_action_10",
+            "checkpoint_sequence_number": 40,
+            "action_count": 10,
+            "workspace_revision": 2,
+            "memory_condition": "lossy_compaction",
+            "memory_view_active": True,
+            "overall_accuracy": 0.5,
+        },
+        {
+            "eligible_for_empirical_analysis": True,
+            "checkpoint": "initial_workspace",
+            "checkpoint_sequence_number": 3,
+            "action_count": 0,
+            "workspace_revision": 0,
+            "memory_condition": "lossy_compaction",
+            "memory_view_active": False,
+            "overall_accuracy": 1.0,
+        },
+    ]
+
+    summary = summarize_probe_scores(probes)
+    curve = summary["memory_accuracy_curve"]
+
+    assert summary["schema_version"] == "agent-memory-probe-summary/v0.3"
+    assert (
+        summary["memory_accuracy_curve_schema_version"]
+        == "agent-memory-accuracy-curve/v0.1"
+    )
+    assert [point["action_count"] for point in curve] == [0, 10]
+    assert curve[0]["normalized_action_progress"] == 0.0
+    assert curve[1]["normalized_action_progress"] == 1.0
+    assert curve[1]["accuracy_delta_from_previous"] == -0.5
+    assert curve[1]["cumulative_mean_accuracy"] == 0.75
+    assert summary["curve_statistics"] == {
+        "point_count": 2,
+        "action_span": 10,
+        "area_under_curve": 0.75,
+        "minimum_accuracy": 0.5,
+        "terminal_accuracy": 0.5,
+        "first_degradation_action": 10,
+    }
+    assert summary["trajectory"] == curve
 
 
 @pytest.mark.parametrize(
@@ -642,10 +829,13 @@ def test_real_runtime_shadow_probe_is_measured_without_steering_main_loop(
                         "is_current": False,
                     },
                     "unsuccessful_attempts": [],
+                    "failed_attempts": [],
+                    "blocked_attempts": [],
                     "repository_assumptions": [],
                     "evidence_state": {
                         "current_event_ids": [],
                         "stale_event_ids": [],
+                        "uncertain_event_ids": [],
                     },
                     "changed_files": [],
                     "uncertainties": ["Memory is incomplete."],
@@ -697,9 +887,19 @@ def test_real_runtime_shadow_probe_is_measured_without_steering_main_loop(
         event["probe_origin"] == "model_shadow_fork"
         for event in probe_events
     )
-    assert run["task_state_probe_summary"]["eligible_probe_count"] == len(
-        probe_events
+    summary = run["task_state_probe_summary"]
+    assert summary["eligible_probe_count"] == len(probe_events)
+    assert all(
+        event["probe_schema_version"]
+        == "agent-memory-task-state-probe/v0.3"
+        for event in probe_events
     )
+    assert len(summary["memory_accuracy_curve"]) == len(probe_events)
+    assert [
+        point["action_count"]
+        for point in summary["memory_accuracy_curve"]
+    ] == sorted(event["action_count"] for event in probe_events)
+    assert summary["curve_statistics"]["point_count"] == len(probe_events)
     assert set(adapter.probe_token_budgets) == {640}
     assert run["interaction_metrics"]["evaluator_success"] is True
 
@@ -782,4 +982,6 @@ def test_shadow_probes_do_not_change_agent_actions_or_workspace(tmp_path: Path):
     assert summary["probe_count"] == len(probe_events)
     assert summary["eligible_probe_count"] == 0
     assert summary["mean_overall_accuracy"] is None
+    assert summary["memory_accuracy_curve"] == []
+    assert summary["curve_statistics"]["point_count"] == 0
     assert summary["trajectory"] == []

@@ -138,6 +138,12 @@ def compute_structured_memory_metrics(
     unsuccessful_attempt_accuracy = probe_summary.get(
         "mean_unsuccessful_attempt_f1"
     )
+    failed_attempt_accuracy = probe_summary.get(
+        "mean_failed_attempt_f1"
+    )
+    blocked_attempt_accuracy = probe_summary.get(
+        "mean_blocked_attempt_f1"
+    )
     repository_state_accuracy = probe_summary.get(
         "mean_repository_state_f1"
     )
@@ -147,11 +153,15 @@ def compute_structured_memory_metrics(
     stale_evidence_accuracy = probe_summary.get(
         "mean_stale_evidence_f1"
     )
+    uncertain_evidence_accuracy = probe_summary.get(
+        "mean_uncertain_evidence_f1"
+    )
     uncertainty_calibration_accuracy = probe_summary.get(
         "mean_uncertainty_calibration_accuracy"
     )
     next_action_accuracy = probe_summary.get(
-        "mean_next_action_accuracy"
+        "mean_next_action_appropriateness",
+        probe_summary.get("mean_next_action_accuracy"),
     )
     components = [
         value
@@ -162,10 +172,16 @@ def compute_structured_memory_metrics(
             latest_evidence_accuracy,
             source_attribution_accuracy,
             temporal_ordering_accuracy,
-            unsuccessful_attempt_accuracy,
+            failed_attempt_accuracy
+            if failed_attempt_accuracy is not None
+            else unsuccessful_attempt_accuracy,
+            blocked_attempt_accuracy
+            if blocked_attempt_accuracy is not None
+            else unsuccessful_attempt_accuracy,
             repository_state_accuracy,
             current_evidence_accuracy,
             stale_evidence_accuracy,
+            uncertain_evidence_accuracy,
             uncertainty_calibration_accuracy,
             next_action_accuracy,
             1.0 - (unsupported_count / belief_count)
@@ -189,9 +205,12 @@ def compute_structured_memory_metrics(
         "source_attribution_accuracy": source_attribution_accuracy,
         "temporal_ordering_accuracy": temporal_ordering_accuracy,
         "unsuccessful_attempt_accuracy": unsuccessful_attempt_accuracy,
+        "failed_attempt_accuracy": failed_attempt_accuracy,
+        "blocked_attempt_accuracy": blocked_attempt_accuracy,
         "repository_state_accuracy": repository_state_accuracy,
         "current_evidence_accuracy": current_evidence_accuracy,
         "stale_evidence_accuracy": stale_evidence_accuracy,
+        "uncertain_evidence_accuracy": uncertain_evidence_accuracy,
         "uncertainty_calibration_accuracy": (
             uncertainty_calibration_accuracy
         ),

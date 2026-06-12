@@ -223,6 +223,14 @@ def build_paired_statistics(rows: list[dict]) -> dict:
             "baseline_probe_unsuccessful_attempt_accuracy",
             "verified_probe_unsuccessful_attempt_accuracy",
         ),
+        "failed_attempt_probe_accuracy": (
+            "baseline_probe_failed_attempt_accuracy",
+            "verified_probe_failed_attempt_accuracy",
+        ),
+        "blocked_attempt_probe_accuracy": (
+            "baseline_probe_blocked_attempt_accuracy",
+            "verified_probe_blocked_attempt_accuracy",
+        ),
         "repository_state_probe_accuracy": (
             "baseline_probe_repository_state_accuracy",
             "verified_probe_repository_state_accuracy",
@@ -234,6 +242,14 @@ def build_paired_statistics(rows: list[dict]) -> dict:
         "stale_evidence_probe_accuracy": (
             "baseline_probe_stale_evidence_accuracy",
             "verified_probe_stale_evidence_accuracy",
+        ),
+        "uncertain_evidence_probe_accuracy": (
+            "baseline_probe_uncertain_evidence_accuracy",
+            "verified_probe_uncertain_evidence_accuracy",
+        ),
+        "memory_accuracy_curve_auc": (
+            "baseline_probe_curve_auc",
+            "verified_probe_curve_auc",
         ),
         "uncertainty_calibration_probe_accuracy": (
             "baseline_probe_uncertainty_calibration_accuracy",

@@ -682,6 +682,20 @@ class BenchmarkRunner:
                 window=config.memory_window,
                 seed=config.seed,
             )
+            uncertain_event_ids = sorted(
+                {
+                    str(entry["event_id"])
+                    for entry in memory_view["evidence_ledger"]
+                    if entry.get("event_id")
+                    and (
+                        entry.get("provenance_lost")
+                        or entry.get("temporal_metadata_lost")
+                        or entry.get("synthetic_memory_pressure")
+                        or entry.get("support_status")
+                        in {"contradicted", "unsupported"}
+                    )
+                }
+            )
             expected = expected_task_state(
                 task,
                 canonical_ledger,
@@ -717,6 +731,7 @@ class BenchmarkRunner:
                         for event in events
                     )
                 ),
+                uncertain_event_ids=uncertain_event_ids,
             )
             if config.runtime == "deterministic":
                 payload = deterministic_probe_payload(task, expected)
@@ -758,7 +773,7 @@ class BenchmarkRunner:
                     "framework": "langgraph_tools",
                     "graph_node": "shadow_probe",
                     "probe_schema_version": (
-                        "agent-memory-task-state-probe/v0.2"
+                        "agent-memory-task-state-probe/v0.3"
                     ),
                     "checkpoint": checkpoint,
                     "checkpoint_sequence_number": (
