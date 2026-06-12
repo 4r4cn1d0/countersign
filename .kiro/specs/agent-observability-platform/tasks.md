@@ -13,6 +13,41 @@ The project does not claim that AI agents literally have dementia. Dementia, con
 - Measure whether agents drift away from the original goal, misremember evidence, confuse sources, or mark work complete without proof.
 - Build memory-verification mechanisms that reduce these failures before high-risk actions.
 
+## Current Implementation Status
+
+As of June 12, 2026:
+
+- The checked-in benchmark contains 10 tasks, including 8 fixture-backed coding tasks with
+  visible tests, hidden evaluators, repository hashes, false leads, delayed verification,
+  requirement changes, rollback pressure, and 20-action deterministic trajectories.
+- The LangGraph coding agent operates in an isolated Git workspace and can inspect files,
+  search code, inspect dependencies, read structured data, review Git status/diffs, apply
+  bounded patches, inspect test failures, and run targeted or full tests.
+- Every coding run retains its initial Git commit, timestamped revision-aware trace events,
+  final repository hash, final diff/status, latest test output, hidden-evaluator result, and
+  SHA-256-protected operational-memory checkpoint.
+- Operational memory models file, symbol, test, command, and requirement dependencies.
+  Targeted-test evidence is invalidated only when a covered file or symbol changes where the
+  available dependency evidence permits that precision.
+- Newer evidence explicitly supersedes and reconciles older contradictory observations while
+  preserving historical contradiction records for analysis.
+- Tasks 37 and 41 are complete. The full backend suite passes: 373 passed, 1 skipped.
+- Latest implementation commit on GitHub `main`: `f85b806`.
+
+Immediate independent work:
+
+- Task 35.6: manually validate task-state probe scoring.
+- Task 36: finish decision-linked structured scientific metrics.
+- Task 38: generalize active repair using the stronger dependency and tool evidence.
+- Task 40: extend verification from completion wording to consequential agent decisions.
+
+Empirical dependencies:
+
+- Task 33.6 requires fresh local-model runs demonstrating memory-specific failure rather than
+  coding incapability alone.
+- Task 34 and Task 42 require a frozen experimental protocol and reproducible local runtime.
+- Tasks 43-46 depend on completed empirical runs, human validation, plots, and final reporting.
+
 ## Research MVP Definition
 
 The MVP/demo should show a baseline open-source agent and a verification-augmented agent on the same long-horizon task.
@@ -27,6 +62,23 @@ Minimum demo capabilities:
 - Show before/after results in the dashboard.
 
 ## Work Log
+
+- Date: 2026-06-12 (Session 23)
+- Author: Codex (coding environment and operational memory)
+- Summary: Completed Tasks 41 and 37. Expanded the real LangGraph coding environment with
+  code search, Git inspection, structured-file parsing, dependency inspection, bounded patch
+  application, targeted/full test execution, test-failure inspection, committed workspace
+  baselines, and retained final evidence artifacts. Extended operational memory with typed
+  file/symbol/test/command/requirement dependencies, inferred targeted-test coverage, precise
+  dependency invalidation, integrity-checked resume checkpoints, and explicit contradiction
+  reconciliation.
+- Status: Focused coding-environment tests pass: 3 passed. Benchmark-runner tests pass:
+  31 passed. Focused coding-environment and memory-experiment tests pass: 53 passed. Full
+  backend suite passes: 373 passed, 1 skipped. Commit `f85b806` is pushed to GitHub `main`.
+- Next actions:
+  - Complete Task 35.6 using manually labeled probe checkpoints.
+  - Implement Task 36 decision-linked structured memory metrics.
+  - Use the new dependency graph and test scopes to complete generalized repair in Task 38.
 
 - Date: 2026-06-04 (Session 18)
 - Author: Codex (model-driven pressure matrix)
@@ -1135,10 +1187,12 @@ Acceptance bar for unfinished research tasks:
       confidence, support status, invalidation dependencies, last verification time,
       contradictions, and invalidation history
     - Automatically stale test evidence when a covered file changes
-    - _Status: Implemented at MVP level in `research/runner/operational_memory.py`.
-      Test evidence records command, return code, revision, covered files, dependencies, and
-      automatic invalidation. Dependency coverage is currently file-level rather than a full
-      code/test dependency graph._
+    - _Status: Implemented and subsequently strengthened by Task 37 in
+      `research/runner/operational_memory.py`. Evidence records typed file, symbol, test,
+      command, and requirement dependencies plus revision, command, return code, coverage,
+      invalidation, reconciliation, and checkpoint metadata. Targeted-test coverage is inferred
+      from local imports and symbol references, enabling symbol-level invalidation where that
+      dependency evidence is available._
 
   - [x] 32.6 Complete active memory repair
     - Detect, contain, repair, update memory, replan, and continue toward verified completion
