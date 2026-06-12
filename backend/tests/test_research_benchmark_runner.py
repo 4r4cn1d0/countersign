@@ -631,10 +631,18 @@ def test_verified_gate_blocks_finish_when_independent_task_evaluator_fails(
         "action": "refresh_requirements"
     }
     assert requirement_refresh["status"] == "success"
+    assert requirement_refresh["source_type"] == "ground_truth"
     assert requirement_refresh["requirement_snapshot"][
         "acceptance_criteria"
     ]
     assert requirement_refresh["evaluator_failure"]["status"] == "failure"
+    feedback = next(
+        event
+        for event in run["trace_events"]
+        if event.get("event_type") == "verification_feedback"
+    )
+    assert "implementation_evaluator_failure repair" in feedback["content"]
+    assert "stale evidence item" not in feedback["content"]
     assert run["interaction_metrics"]["memory_repair_attempts_by_type"] == {
         "implementation_evaluator_failure": 1
     }

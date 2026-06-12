@@ -76,6 +76,7 @@ def build_memory_item(event: dict, *, label: str) -> dict:
         "last_verification_time": (
             int(event.get("sequence_number", 0))
             if event.get("source_type") in {
+                "ground_truth",
                 "tool_output",
                 "file_state",
                 "user_instruction",
@@ -349,7 +350,12 @@ def _claim_for_event(event: dict, label: str) -> str:
 
 def _confidence_for_event(event: dict) -> float:
     source_type = event.get("source_type")
-    if source_type in {"tool_output", "file_state", "user_instruction"}:
+    if source_type in {
+        "ground_truth",
+        "tool_output",
+        "file_state",
+        "user_instruction",
+    }:
         return 1.0
     if source_type == "independent_evaluator":
         return 1.0

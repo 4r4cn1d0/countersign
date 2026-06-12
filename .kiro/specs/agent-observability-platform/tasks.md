@@ -1140,17 +1140,27 @@ Acceptance bar for unfinished research tasks:
       automatic invalidation. Dependency coverage is currently file-level rather than a full
       code/test dependency graph._
 
-  - [ ] 32.6 Complete active memory repair
+  - [x] 32.6 Complete active memory repair
     - Detect, contain, repair, update memory, replan, and continue toward verified completion
     - Measure detection, containment, repair attempt, repair success, and independently
       verified recovery separately
     - Support stale tests, lost provenance, contradictory evidence, missing requirements,
       and implementation/evaluator failures
-    - _Status: Partial. The loop now performs active stale-test repair and all 8 deterministic
-      coding runs recovered to independently evaluated success. Repair strategies for lost
-      provenance, contradictions, missing requirements, and implementation failure remain.
-      A fresh real-model repair audit is also pending because Homebrew Ollama `0.30.4`
-      currently fails generation without its `llama-server` binary._
+    - _Status: Implemented. `agent-memory-repair-plan/v0.2` selects bounded repair actions
+      for stale tests, lost provenance, contradictory evidence, missing requirements, and
+      implementation/evaluator failures. The verified LangGraph loop records typed detection,
+      containment, repair-plan, repair-result, requirement-refresh, replanning, and independent
+      recovery events; a successful memory refresh is not counted as task recovery unless a
+      later finish is accepted and the independent evaluator passes._
+    - _Completion evidence: The focused memory/runner/CLI suite passes with 87 tests. A real
+      Ollama run using `qwen2.5-coder:7b-ctx16k`, the verified variant, full-history memory,
+      and a 40-action budget is stored at
+      `runs/32-6-real-repair/qwen-cache-verified/coding_cache_invalidation_001_verified.json`.
+      The model made 4 false finish proposals; the gate detected and contained all 4, executed
+      4 typed implementation/evaluator memory repairs, and forced replanning. No false finish
+      was accepted. Independently verified recovery remained false because the model exhausted
+      its budget with failing visible and hidden validation; this negative result is preserved
+      rather than relabeled as repair success._
 
 - [ ] 33. Finish the real long-horizon benchmark
   - [x] 33.1 Convert all eight coding tasks to checked-in fixture repositories

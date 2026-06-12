@@ -1190,9 +1190,11 @@ class BenchmarkRunner:
                                 "Finish rejected: "
                                 + "; ".join(proposal["reasons"])
                                 + (
-                                    ". The memory controller refreshed the smallest "
-                                    "stale evidence item. Replan from the repaired "
-                                    "ledger, then cite exact current source_event_ids."
+                                    ". The memory controller completed the "
+                                    f"{repair_plan['repair_type']} repair: "
+                                    f"{repair_plan['success_criterion']} Replan from "
+                                    "the repaired ledger, then cite exact current "
+                                    "source_event_ids."
                                     if feedback_sources != [detection_event_id]
                                     else ". Use tools to repair the implementation or "
                                     "obtain missing evidence, then submit another finish "
@@ -2686,7 +2688,7 @@ class BenchmarkRunner:
             evaluator_failure=evaluator_failure,
             workspace_path=str(workspace.resolve()),
             workspace_revision=workspace_revision,
-            source_type="user_instruction",
+            source_type="ground_truth",
             source_event_ids=[source_event_id],
         )
 
