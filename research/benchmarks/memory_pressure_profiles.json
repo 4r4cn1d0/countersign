@@ -1,0 +1,105 @@
+{
+  "schema_version": "agent-memory-pressure-profiles/v0.1",
+  "frozen_before_execution": true,
+  "severity_definition": {
+    "control": {
+      "ordinal": 0,
+      "description": "Unmodified full conversation and evidence history."
+    },
+    "low": {
+      "ordinal": 1,
+      "description": "Pressure begins after 12 model actions with a 12-item visible evidence window."
+    },
+    "medium": {
+      "ordinal": 2,
+      "description": "Pressure begins after 8 model actions with an 8-item visible evidence window."
+    },
+    "high": {
+      "ordinal": 3,
+      "description": "Pressure begins after 4 model actions with a 4-item visible evidence window."
+    }
+  },
+  "profiles": [
+    {
+      "profile_id": "control_full_history",
+      "condition": "full_history",
+      "severity": "control",
+      "severity_ordinal": 0,
+      "activation_action_count": 0,
+      "visible_evidence_window": 12,
+      "induced_corruption": false
+    },
+    {
+      "profile_id": "temporal_low",
+      "condition": "temporal_corruption",
+      "severity": "low",
+      "severity_ordinal": 1,
+      "activation_action_count": 12,
+      "visible_evidence_window": 12,
+      "induced_corruption": true
+    },
+    {
+      "profile_id": "temporal_medium",
+      "condition": "temporal_corruption",
+      "severity": "medium",
+      "severity_ordinal": 2,
+      "activation_action_count": 8,
+      "visible_evidence_window": 8,
+      "induced_corruption": true
+    },
+    {
+      "profile_id": "temporal_high",
+      "condition": "temporal_corruption",
+      "severity": "high",
+      "severity_ordinal": 3,
+      "activation_action_count": 4,
+      "visible_evidence_window": 4,
+      "induced_corruption": true
+    },
+    {
+      "profile_id": "provenance_medium",
+      "condition": "provenance_loss",
+      "severity": "medium",
+      "severity_ordinal": 2,
+      "activation_action_count": 8,
+      "visible_evidence_window": 8,
+      "induced_corruption": true
+    },
+    {
+      "profile_id": "contradiction_medium",
+      "condition": "contradictory_evidence",
+      "severity": "medium",
+      "severity_ordinal": 2,
+      "activation_action_count": 8,
+      "visible_evidence_window": 8,
+      "induced_corruption": true
+    },
+    {
+      "profile_id": "lossy_medium",
+      "condition": "lossy_compaction",
+      "severity": "medium",
+      "severity_ordinal": 2,
+      "activation_action_count": 8,
+      "visible_evidence_window": 8,
+      "induced_corruption": true
+    },
+    {
+      "profile_id": "distractor_medium",
+      "condition": "distractor_pressure",
+      "severity": "medium",
+      "severity_ordinal": 2,
+      "activation_action_count": 8,
+      "visible_evidence_window": 8,
+      "induced_corruption": true
+    },
+    {
+      "profile_id": "resume_medium",
+      "condition": "resume_summary",
+      "severity": "medium",
+      "severity_ordinal": 2,
+      "activation_action_count": 8,
+      "visible_evidence_window": 8,
+      "induced_corruption": true
+    }
+  ]
+}

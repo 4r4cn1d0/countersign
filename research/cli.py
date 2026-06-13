@@ -154,6 +154,19 @@ def main(argv: list[str] | None = None) -> int:
     matrix_parser.add_argument("--trace-mode", choices=["scripted", "model_driven"])
     matrix_parser.add_argument("--prompt-template")
     _add_memory_experiment_arguments(matrix_parser, defaults=False)
+    matrix_parser.add_argument(
+        "--pressure-profile",
+        action="append",
+        dest="pressure_profiles",
+        help=(
+            "Frozen pressure profile ID. Repeat for a control and one or "
+            "more predeclared severities."
+        ),
+    )
+    matrix_parser.add_argument(
+        "--pressure-profiles-file",
+        default="research/benchmarks/memory_pressure_profiles.json",
+    )
     matrix_parser.add_argument("--minimum-successful-models", type=int)
     matrix_parser.add_argument("--fail-under-minimum", action="store_true")
     matrix_parser.add_argument("--format", choices=["table", "json", "markdown"], default="table")
@@ -320,6 +333,8 @@ def _matrix_command(args: argparse.Namespace) -> None:
         constrained_actions=args.constrained_actions,
         thinking=args.thinking,
         memory_conditions=args.memory_conditions,
+        pressure_profile_ids=args.pressure_profiles,
+        pressure_profiles_path=Path(args.pressure_profiles_file),
         memory_pressure_start=args.memory_pressure_start,
         memory_window=args.memory_window,
         task_state_probes=args.task_state_probes,

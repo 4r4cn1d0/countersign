@@ -22,7 +22,11 @@ from .experiment_protocol import (
     write_frozen_protocol,
 )
 from .metrics import build_memory_health_report
-from .memory_pressure import validate_memory_condition
+from .memory_pressure import (
+    DEFAULT_PRESSURE_PROFILES_PATH,
+    resolve_pressure_profiles,
+    validate_memory_condition,
+)
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -57,6 +61,8 @@ def run_model_matrix(
     constrained_actions: bool | None = None,
     thinking: bool | None = None,
     memory_conditions: list[str] | None = None,
+    pressure_profile_ids: list[str] | None = None,
+    pressure_profiles_path: Path = DEFAULT_PRESSURE_PROFILES_PATH,
     memory_pressure_start: int | None = None,
     memory_window: int | None = None,
     task_state_probes: bool | None = None,
@@ -133,6 +139,22 @@ def run_model_matrix(
         if memory_window is not None
         else matrix.get("memory_window", 8)
     )
+    if pressure_profile_ids is not None and memory_conditions is not None:
+        raise ValueError(
+            "Use pressure profiles or memory conditions, not both"
+        )
+    active_pressure_profiles = resolve_pressure_profiles(
+        profile_ids=pressure_profile_ids,
+        registry_path=pressure_profiles_path,
+        memory_conditions=active_memory_conditions,
+        memory_pressure_start=active_memory_pressure_start,
+        memory_window=active_memory_window,
+    )
+    active_memory_conditions = list(
+        dict.fromkeys(
+            profile["condition"] for profile in active_pressure_profiles
+        )
+    )
     active_task_state_probes = (
         bool(task_state_probes)
         if task_state_probes is not None
@@ -161,15 +183,27 @@ def run_model_matrix(
         else matrix.get("minimum_successful_models", 5)
     )
 
-    enabled_models = [
-        item for item in matrix["models"] if item.get("enabled", True)
-    ]
+    configured_models = list(matrix["models"])
     if model_names:
         requested_models = set(model_names)
         enabled_models = [
             item
-            for item in enabled_models
+            for item in configured_models
             if item["model_name"] in requested_models
+        ]
+        missing_models = requested_models - {
+            item["model_name"] for item in enabled_models
+        }
+        if missing_models:
+            raise ValueError(
+                "Unknown configured models: "
+                + ", ".join(sorted(missing_models))
+            )
+    else:
+        enabled_models = [
+            item
+            for item in configured_models
+            if item.get("enabled", True)
         ]
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -190,6 +224,12 @@ def run_model_matrix(
         constrained_actions=active_constrained_actions,
         thinking=active_thinking,
         memory_conditions=active_memory_conditions,
+        pressure_profiles=active_pressure_profiles,
+        pressure_profiles_path=(
+            pressure_profiles_path
+            if pressure_profile_ids is not None
+            else None
+        ),
         memory_pressure_start=active_memory_pressure_start,
         memory_window=active_memory_window,
         task_state_probes=active_task_state_probes,
@@ -224,6 +264,7 @@ def run_model_matrix(
             constrained_actions=active_constrained_actions,
             thinking=active_thinking,
             memory_conditions=active_memory_conditions,
+            pressure_profiles=active_pressure_profiles,
             memory_pressure_start=active_memory_pressure_start,
             memory_window=active_memory_window,
             task_state_probes=active_task_state_probes,
@@ -294,6 +335,12 @@ def run_model_matrix(
         "constrained_actions": active_constrained_actions,
         "thinking": active_thinking,
         "memory_conditions": active_memory_conditions,
+        "pressure_profiles": active_pressure_profiles,
+        "pressure_profiles_path": (
+            str(pressure_profiles_path.resolve())
+            if pressure_profile_ids is not None
+            else None
+        ),
         "memory_pressure_start": active_memory_pressure_start,
         "memory_window": active_memory_window,
         "task_state_probes": active_task_state_probes,
@@ -312,7 +359,7 @@ def run_model_matrix(
         "planned_run_count": (
             len(enabled_models)
             * len(active_task_ids)
-            * len(active_memory_conditions)
+            * len(active_pressure_profiles)
             * len(active_seeds)
             * len(active_variants)
         ),
@@ -361,6 +408,7 @@ def _run_one_model(
     constrained_actions: bool,
     thinking: bool,
     memory_conditions: list[str],
+    pressure_profiles: list[dict],
     memory_pressure_start: int,
     memory_window: int,
     task_state_probes: bool,
@@ -381,7 +429,7 @@ def _run_one_model(
     )
     planned_run_count = (
         len(task_ids)
-        * len(memory_conditions)
+        * len(pressure_profiles)
         * len(seeds)
         * len(variants)
     )
@@ -423,10 +471,18 @@ def _run_one_model(
 
     run_paths: dict[tuple[str, str, int, str], Path] = {}
     for task_id in task_ids:
-        for memory_condition in memory_conditions:
+        for pressure_profile in pressure_profiles:
+            profile_id = pressure_profile["profile_id"]
+            memory_condition = pressure_profile["condition"]
+            profile_pressure_start = int(
+                pressure_profile["activation_action_count"]
+            )
+            profile_memory_window = int(
+                pressure_profile["visible_evidence_window"]
+            )
             for seed in seeds:
                 trial_id = (
-                    f"{model_slug}:{task_id}:{memory_condition}:seed-{seed}"
+                    f"{model_slug}:{task_id}:{profile_id}:seed-{seed}"
                 )
                 for variant in variants:
                     run_config = BenchmarkRunConfig(
@@ -447,8 +503,22 @@ def _run_one_model(
                         constrained_actions=constrained_actions,
                         thinking=thinking,
                         memory_condition=memory_condition,
-                        memory_pressure_start=memory_pressure_start,
-                        memory_window=memory_window,
+                        pressure_profile_id=profile_id,
+                        pressure_severity=str(
+                            pressure_profile.get(
+                                "severity",
+                                "unspecified",
+                            )
+                        ),
+                        pressure_severity_ordinal=int(
+                            pressure_profile.get(
+                                "severity_ordinal",
+                                0,
+                            )
+                            or 0
+                        ),
+                        memory_pressure_start=profile_pressure_start,
+                        memory_window=profile_memory_window,
                         task_state_probes=task_state_probes,
                         probe_interval=probe_interval,
                         probe_max_tokens=probe_max_tokens,
@@ -459,7 +529,7 @@ def _run_one_model(
                         output_dir
                         / "runs"
                         / model_slug
-                        / memory_condition
+                        / profile_id
                         / seed_dir
                         / variant
                         / f"{task_id}.json"
@@ -472,6 +542,10 @@ def _run_one_model(
                             {
                                 "task_id": task_id,
                                 "memory_condition": memory_condition,
+                                "pressure_profile_id": profile_id,
+                                "pressure_severity": (
+                                    pressure_profile.get("severity")
+                                ),
                                 "seed": seed,
                                 "variant": variant,
                                 "trial_id": trial_id,
@@ -485,12 +559,21 @@ def _run_one_model(
                         "protocol_id": protocol_id,
                         "trial_id": trial_id,
                         "memory_condition": memory_condition,
+                        "pressure_profile_id": profile_id,
+                        "pressure_severity": pressure_profile.get(
+                            "severity"
+                        ),
+                        "pressure_severity_ordinal": (
+                            pressure_profile.get("severity_ordinal")
+                        ),
+                        "memory_pressure_start": profile_pressure_start,
+                        "memory_window": profile_memory_window,
                         "seed": seed,
                         "variant": variant,
                     }
                     _write_json(run_path, run)
                     run_paths[
-                        (task_id, memory_condition, seed, variant)
+                        (task_id, profile_id, seed, variant)
                     ] = run_path
                     run_info = indexed_artifact(
                         run_path,
@@ -498,6 +581,15 @@ def _run_one_model(
                         extra={
                             "task_id": task_id,
                             "memory_condition": memory_condition,
+                            "pressure_profile_id": profile_id,
+                            "pressure_severity": pressure_profile.get(
+                                "severity"
+                            ),
+                            "pressure_severity_ordinal": (
+                                pressure_profile.get(
+                                    "severity_ordinal"
+                                )
+                            ),
                             "seed": seed,
                             "variant": variant,
                             "trial_id": trial_id,
@@ -520,7 +612,7 @@ def _run_one_model(
                             output_dir
                             / "scores"
                             / model_slug
-                            / memory_condition
+                            / profile_id
                             / seed_dir
                             / f"{task_id}.json"
                         )
@@ -535,7 +627,7 @@ def _run_one_model(
                             output_dir
                             / "verifications"
                             / model_slug
-                            / memory_condition
+                            / profile_id
                             / seed_dir
                             / f"{task_id}.json"
                         )
@@ -551,17 +643,17 @@ def _run_one_model(
                         )
 
                 baseline_path = run_paths.get(
-                    (task_id, memory_condition, seed, "baseline")
+                    (task_id, profile_id, seed, "baseline")
                 )
                 verified_path = run_paths.get(
-                    (task_id, memory_condition, seed, "verified")
+                    (task_id, profile_id, seed, "verified")
                 )
                 if baseline_path and verified_path:
                     comparison_path = (
                         output_dir
                         / "comparisons"
                         / model_slug
-                        / memory_condition
+                        / profile_id
                         / f"seed-{seed}"
                         / f"{task_id}.json"
                     )
@@ -572,6 +664,13 @@ def _run_one_model(
                         "protocol_id": protocol_id,
                         "trial_id": trial_id,
                         "memory_condition": memory_condition,
+                        "pressure_profile_id": profile_id,
+                        "pressure_severity": pressure_profile.get(
+                            "severity"
+                        ),
+                        "pressure_severity_ordinal": (
+                            pressure_profile.get("severity_ordinal")
+                        ),
                         "seed": seed,
                     }
                     _write_json(comparison_path, comparison)
@@ -582,6 +681,15 @@ def _run_one_model(
                             extra={
                                 "task_id": task_id,
                                 "memory_condition": memory_condition,
+                                "pressure_profile_id": profile_id,
+                                "pressure_severity": (
+                                    pressure_profile.get("severity")
+                                ),
+                                "pressure_severity_ordinal": (
+                                    pressure_profile.get(
+                                        "severity_ordinal"
+                                    )
+                                ),
                                 "seed": seed,
                                 "trial_id": trial_id,
                                 "blocked_actions": comparison[
@@ -700,6 +808,8 @@ def _model_matrix_summary(manifest: dict) -> str:
         f"- Constrained actions: `{manifest['constrained_actions']}`",
         f"- Thinking mode: `{manifest['thinking']}`",
         f"- Memory conditions: `{manifest['memory_conditions']}`",
+        "- Pressure profiles: "
+        f"`{[profile['profile_id'] for profile in manifest['pressure_profiles']]}`",
         f"- Task-state probes: `{manifest['task_state_probes']}`",
         f"- Planned runs: `{manifest['planned_run_count']}`",
         f"- Completed runs: `{manifest['completed_run_count']}`",

@@ -7,6 +7,7 @@ from .decision_beliefs import (
     extract_decision_beliefs,
     summarize_decision_beliefs,
 )
+from .failure_attribution import classify_run_failure
 from .artifacts import generate_artifact_bundle, generate_artifact_summary
 from .labeling import label_high_risk_claims
 from .metrics import (
@@ -26,6 +27,10 @@ from .matrix_analysis import (
 from .measurement_validation import (
     load_manual_measurement_labels,
     validate_manual_measurements,
+)
+from .memory_pressure import (
+    load_pressure_profiles,
+    resolve_pressure_profiles,
 )
 from .model_adapters import (
     DeterministicModelAdapter,
@@ -78,8 +83,11 @@ __all__ = [
     "write_model_matrix_analysis",
     "load_model_matrix",
     "load_manual_measurement_labels",
+    "load_pressure_profiles",
+    "resolve_pressure_profiles",
     "validate_manual_measurements",
     "compare_runs",
+    "classify_run_failure",
     "extract_decision_beliefs",
     "summarize_decision_beliefs",
     "build_memory_health_report",

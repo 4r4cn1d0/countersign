@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import socket
 import urllib.error
 import urllib.request
@@ -197,6 +198,24 @@ def _deterministic_tool_action(prompt: str) -> dict:
     return action if isinstance(action, dict) else {"action": "invalid", "source_event_ids": []}
 
 
+def _runtime_timeout_seconds() -> float:
+    raw_value = os.getenv(
+        "AGENT_MEMORY_RUNTIME_TIMEOUT_SECONDS",
+        "900",
+    )
+    try:
+        timeout = float(raw_value)
+    except ValueError as exc:
+        raise ValueError(
+            "AGENT_MEMORY_RUNTIME_TIMEOUT_SECONDS must be numeric"
+        ) from exc
+    if timeout <= 0:
+        raise ValueError(
+            "AGENT_MEMORY_RUNTIME_TIMEOUT_SECONDS must be positive"
+        )
+    return timeout
+
+
 def _post_json(url: str, payload: dict) -> dict:
     request = urllib.request.Request(
         url,
@@ -205,7 +224,10 @@ def _post_json(url: str, payload: dict) -> dict:
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=300) as response:
+        with urllib.request.urlopen(
+            request,
+            timeout=_runtime_timeout_seconds(),
+        ) as response:
             return json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace").strip()

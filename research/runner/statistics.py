@@ -123,6 +123,11 @@ def build_paired_statistics(rows: list[dict]) -> dict:
                 "memory_condition",
                 "full_history",
             ),
+            "pressure_profile_id": row.get(
+                "pressure_profile_id",
+                row.get("memory_condition", "full_history"),
+            ),
+            "pressure_severity": row.get("pressure_severity"),
             "seed": row.get("seed"),
             "reason": row.get("exclusion_reason") or "unspecified",
         }
@@ -302,7 +307,7 @@ def build_paired_statistics(rows: list[dict]) -> dict:
         )
     return {
         "schema_version": "agent-memory-paired-statistics/v0.1",
-        "analysis_unit": "model-task-memory-condition-seed pair",
+        "analysis_unit": "model-task-pressure-profile-seed pair",
         "planned_pair_count": len(rows),
         "eligible_pair_count": len(eligible),
         "excluded_pair_count": len(exclusions),

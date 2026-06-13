@@ -19,6 +19,7 @@ from .decision_beliefs import (
     extract_decision_beliefs,
     summarize_decision_beliefs,
 )
+from .failure_attribution import classify_run_failure
 from .coding_environment import (
     CODING_TOOL_ACTIONS,
     apply_bounded_patch,
@@ -87,6 +88,9 @@ class BenchmarkRunConfig:
     constrained_actions: bool = True
     thinking: bool = False
     memory_condition: str = "full_history"
+    pressure_profile_id: str = "full_history"
+    pressure_severity: str = "unspecified"
+    pressure_severity_ordinal: int = 0
     memory_pressure_start: int = 6
     memory_window: int = 8
     task_state_probes: bool = False
@@ -149,6 +153,7 @@ class BenchmarkRunner:
             f"{task['task_id']}:{run_config.framework}:"
             f"{run_config.model_name}:{run_config.agent_variant}:"
             f"{run_config.trace_mode}:{run_config.memory_condition}:"
+            f"{run_config.pressure_profile_id}:"
             f"probes-{run_config.task_state_probes}:"
             f"repair-{run_config.memory_repair}:{run_config.seed}"
         )
@@ -177,6 +182,11 @@ class BenchmarkRunner:
                 "constrained_actions": run_config.constrained_actions,
                 "thinking": run_config.thinking,
                 "memory_condition": run_config.memory_condition,
+                "pressure_profile_id": run_config.pressure_profile_id,
+                "pressure_severity": run_config.pressure_severity,
+                "pressure_severity_ordinal": (
+                    run_config.pressure_severity_ordinal
+                ),
                 "memory_pressure_start": run_config.memory_pressure_start,
                 "memory_window": run_config.memory_window,
                 "task_state_probes": run_config.task_state_probes,
@@ -354,6 +364,7 @@ class BenchmarkRunner:
             run = verify_run(run)
             run["raw_memory_claims"] = raw_run["memory_claims"]
             run["raw_memory_health_report"] = raw_run["memory_health_report"]
+        run["failure_attribution"] = classify_run_failure(run)
         return run
 
     def run_task_id(

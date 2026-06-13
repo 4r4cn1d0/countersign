@@ -5,7 +5,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -23,6 +23,7 @@ from research.runner import (
     generate_artifact_bundle,
     generate_artifact_summary,
 )
+from research.runner import model_adapters
 
 
 def test_deterministic_model_adapter_contract():
@@ -123,6 +124,42 @@ def test_ollama_adapter_sends_explicit_thinking_mode():
         )
 
     assert post_json.call_args.args[1]["think"] is True
+
+
+def test_local_runtime_timeout_defaults_to_fifteen_minutes(monkeypatch):
+    monkeypatch.delenv("AGENT_MEMORY_RUNTIME_TIMEOUT_SECONDS", raising=False)
+
+    assert model_adapters._runtime_timeout_seconds() == 900.0
+
+
+def test_local_runtime_timeout_is_configurable(monkeypatch):
+    monkeypatch.setenv("AGENT_MEMORY_RUNTIME_TIMEOUT_SECONDS", "1200")
+    response = MagicMock()
+    response.read.return_value = b'{"message":{"content":"ok"}}'
+    response.__enter__.return_value = response
+
+    with patch(
+        "research.runner.model_adapters.urllib.request.urlopen",
+        return_value=response,
+    ) as urlopen:
+        payload = model_adapters._post_json(
+            "http://127.0.0.1:11435/api/chat",
+            {"model": "local"},
+        )
+
+    assert payload["message"]["content"] == "ok"
+    assert urlopen.call_args.kwargs["timeout"] == 1200.0
+
+
+@pytest.mark.parametrize("value", ["zero", "0", "-1"])
+def test_local_runtime_timeout_rejects_invalid_values(
+    monkeypatch,
+    value,
+):
+    monkeypatch.setenv("AGENT_MEMORY_RUNTIME_TIMEOUT_SECONDS", value)
+
+    with pytest.raises(ValueError, match="must be"):
+        model_adapters._runtime_timeout_seconds()
 
 
 def test_runner_records_runtime_metadata_and_model_response():

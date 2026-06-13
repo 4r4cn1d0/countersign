@@ -3,9 +3,19 @@
 from __future__ import annotations
 
 import copy
+import json
 import random
+from pathlib import Path
 from typing import Any
 
+
+ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_PRESSURE_PROFILES_PATH = (
+    ROOT
+    / "research"
+    / "benchmarks"
+    / "memory_pressure_profiles.json"
+)
 
 MEMORY_CONDITIONS = (
     "full_history",
@@ -37,6 +47,86 @@ def validate_memory_condition(condition: str) -> str:
             f"{', '.join(MEMORY_CONDITIONS)}"
         )
     return condition
+
+
+def load_pressure_profiles(
+    path: Path = DEFAULT_PRESSURE_PROFILES_PATH,
+) -> dict:
+    """Load and validate the frozen pressure-profile registry."""
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if payload.get("schema_version") != (
+        "agent-memory-pressure-profiles/v0.1"
+    ):
+        raise ValueError("Unsupported memory pressure profile schema")
+    profiles = payload.get("profiles", [])
+    profile_ids = [profile.get("profile_id") for profile in profiles]
+    if not profiles or len(profile_ids) != len(set(profile_ids)):
+        raise ValueError(
+            "Memory pressure profiles must have unique profile IDs"
+        )
+    for profile in profiles:
+        validate_memory_condition(str(profile.get("condition")))
+        if int(profile.get("activation_action_count", -1)) < 0:
+            raise ValueError(
+                "Pressure activation action count must be non-negative"
+            )
+        if int(profile.get("visible_evidence_window", 0)) < 2:
+            raise ValueError(
+                "Pressure visible evidence window must be at least 2"
+            )
+    return payload
+
+
+def resolve_pressure_profiles(
+    *,
+    profile_ids: list[str] | None = None,
+    registry_path: Path = DEFAULT_PRESSURE_PROFILES_PATH,
+    memory_conditions: list[str] | None = None,
+    memory_pressure_start: int = 6,
+    memory_window: int = 8,
+) -> list[dict]:
+    """Resolve frozen profiles or produce backward-compatible ad hoc profiles."""
+
+    if profile_ids is not None:
+        registry = load_pressure_profiles(registry_path)
+        by_id = {
+            profile["profile_id"]: profile
+            for profile in registry["profiles"]
+        }
+        missing = [
+            profile_id
+            for profile_id in profile_ids
+            if profile_id not in by_id
+        ]
+        if missing:
+            raise ValueError(
+                "Unknown memory pressure profiles: "
+                + ", ".join(missing)
+            )
+        return [
+            copy.deepcopy(by_id[profile_id])
+            for profile_id in dict.fromkeys(profile_ids)
+        ]
+
+    conditions = memory_conditions or ["full_history"]
+    return [
+        {
+            "profile_id": condition,
+            "condition": validate_memory_condition(condition),
+            "severity": (
+                "control" if condition == "full_history" else "ad_hoc"
+            ),
+            "severity_ordinal": 0 if condition == "full_history" else None,
+            "activation_action_count": memory_pressure_start,
+            "visible_evidence_window": memory_window,
+            "induced_corruption": (
+                condition in INDUCED_CORRUPTION_CONDITIONS
+            ),
+            "frozen_registry_profile": False,
+        }
+        for condition in dict.fromkeys(conditions)
+    ]
 
 
 def build_agent_memory_view(

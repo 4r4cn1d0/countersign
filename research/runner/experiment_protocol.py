@@ -30,6 +30,8 @@ def build_experiment_protocol(
     constrained_actions: bool,
     thinking: bool,
     memory_conditions: list[str] | None = None,
+    pressure_profiles: list[dict] | None = None,
+    pressure_profiles_path: Path | None = None,
     memory_pressure_start: int = 6,
     memory_window: int = 8,
     task_state_probes: bool = False,
@@ -40,6 +42,23 @@ def build_experiment_protocol(
     """Build a predeclared protocol whose identifier excludes wall-clock time."""
 
     active_memory_conditions = memory_conditions or ["full_history"]
+    active_pressure_profiles = pressure_profiles or [
+        {
+            "profile_id": condition,
+            "condition": condition,
+            "severity": (
+                "control" if condition == "full_history" else "ad_hoc"
+            ),
+            "severity_ordinal": (
+                0 if condition == "full_history" else None
+            ),
+            "activation_action_count": memory_pressure_start,
+            "visible_evidence_window": memory_window,
+            "induced_corruption": condition != "full_history",
+            "frozen_registry_profile": False,
+        }
+        for condition in active_memory_conditions
+    ]
     protocol_body = {
         "schema_version": "agent-memory-experiment-protocol/v0.1",
         "research_question": (
@@ -58,6 +77,7 @@ def build_experiment_protocol(
             "variants": variants,
             "seeds": seeds,
             "memory_conditions": active_memory_conditions,
+            "pressure_profiles": active_pressure_profiles,
             "execution_order": (
                 "For each model, task, memory condition, and seed, execute "
                 "variants in the declared order."
@@ -75,6 +95,15 @@ def build_experiment_protocol(
         },
         "memory_pressure": {
             "conditions": active_memory_conditions,
+            "profiles": active_pressure_profiles,
+            "profile_registry": (
+                {
+                    "path": _portable_path(pressure_profiles_path),
+                    "sha256": sha256_file(pressure_profiles_path),
+                }
+                if pressure_profiles_path
+                else None
+            ),
             "activation_action_count": memory_pressure_start,
             "visible_evidence_window": memory_window,
             "canonical_evaluator_state_is_never_transformed": True,
@@ -175,20 +204,22 @@ def build_experiment_protocol(
             ),
         },
         "exclusion_policy": {
-            "exclude": [
+            "exclude_from_complete_case_paired_inference": [
                 "a baseline or verified artifact is missing",
                 "a local runtime request fails before a run artifact is produced",
                 "a run artifact records a runtime error",
             ],
-            "never_exclude": [
+            "retain_as_observed_outcomes": [
                 "action-budget exhaustion",
                 "invalid model action output",
                 "independent evaluator failure",
                 "failure to issue an accepted finish",
             ],
             "reporting": (
-                "Every excluded pair must appear in the exclusion ledger with its "
-                "model, task, memory condition, seed, and reason."
+                "Every planned run remains in intention-to-run execution "
+                "accounting. Every pair omitted from complete-case inference "
+                "appears in the exclusion ledger with model, task, pressure "
+                "profile, seed, and reason."
             ),
         },
         "source_revision": git_revision(),

@@ -8,6 +8,7 @@ from pathlib import Path
 from statistics import mean
 from typing import Any
 
+from .failure_attribution import classify_run_failure
 from .statistics import build_paired_statistics
 
 
@@ -16,6 +17,7 @@ def analyze_model_matrix_manifest(manifest_path: Path) -> dict:
 
     manifest = _read_json(manifest_path)
     manifest_dir = manifest_path.parent
+    pressure_profiles = _manifest_pressure_profiles(manifest)
     model_rows = []
     task_rows = []
 
@@ -24,10 +26,7 @@ def analyze_model_matrix_manifest(manifest_path: Path) -> dict:
             model,
             manifest_dir,
             task_ids=manifest.get("task_ids", []),
-            memory_conditions=manifest.get(
-                "memory_conditions",
-                ["full_history"],
-            ),
+            pressure_profiles=pressure_profiles,
             seeds=manifest.get("seeds", [0]),
         )
         task_rows.extend(rows)
@@ -38,7 +37,7 @@ def analyze_model_matrix_manifest(manifest_path: Path) -> dict:
     ]
     paired_statistics = build_paired_statistics(task_rows)
     return {
-        "schema_version": "agent-memory-model-matrix-analysis/v0.2",
+        "schema_version": "agent-memory-model-matrix-analysis/v0.3",
         "manifest_path": str(manifest_path.resolve()),
         "protocol_id": manifest.get("protocol_id"),
         "protocol_path": manifest.get("protocol_path"),
@@ -53,6 +52,7 @@ def analyze_model_matrix_manifest(manifest_path: Path) -> dict:
             "memory_conditions",
             ["full_history"],
         ),
+        "pressure_profiles": pressure_profiles,
         "task_state_probes": manifest.get("task_state_probes", False),
         "seeds": manifest.get("seeds", [0]),
         "model_count": len(model_rows),
@@ -64,6 +64,11 @@ def analyze_model_matrix_manifest(manifest_path: Path) -> dict:
         "tasks": task_rows,
         "aggregate": _aggregate_summary(successful_rows, task_rows),
         "paired_statistics": paired_statistics,
+        "execution_accounting": _execution_accounting(
+            manifest,
+            task_rows,
+        ),
+        "pressure_analysis": _pressure_analysis(task_rows),
         "limitations": manifest.get("limitations", []),
     }
 
@@ -104,6 +109,8 @@ def format_model_matrix_analysis_markdown(report: dict) -> str:
         f"- Runtime: `{report.get('runtime')}`",
         f"- Seeds: `{report.get('seeds')}`",
         f"- Memory conditions: `{report.get('memory_conditions')}`",
+        "- Pressure profiles: "
+        f"`{[profile['profile_id'] for profile in report.get('pressure_profiles', [])]}`",
         f"- Task-state probes: `{report.get('task_state_probes')}`",
         f"- Constrained actions: `{report.get('constrained_actions')}`",
         f"- Thinking mode: `{report.get('thinking')}`",
@@ -168,20 +175,24 @@ def format_model_matrix_analysis_markdown(report: dict) -> str:
             "",
             "## Coding-Agent Intervention Matrix",
             "",
-            "| Model | Task | Memory | Seed | Eligible | Baseline Outcome | Verified Outcome | Baseline Accepted False | Blocked False | Repair Attempts | Repair Recovery | Verified Accepted False | Baseline Structured Memory | Verified Structured Memory | Extra Actions |",
-            "|---|---|---|---:|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+            "| Model | Task | Pressure Profile | Severity | Seed | Eligible | Baseline Outcome | Verified Outcome | Baseline Memory Failure | Baseline Accepted False | Blocked False | Repair Attempts | Repair Recovery | Verified Accepted False | Baseline Structured Memory | Verified Structured Memory | Extra Actions |",
+            "|---|---|---|---|---:|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
         ]
     )
     for row in report["tasks"]:
         lines.append(
-            "| `{model}` | `{task}` | `{memory}` | {seed} | {eligible} | `{baseline_outcome}` | `{verified_outcome}` | {baseline_false} | {blocked_false} | {repair_attempts} | {repair_recovery} | {verified_false} | {baseline_structured} | {verified_structured} | {actions} |".format(
+            "| `{model}` | `{task}` | `{profile}` | `{severity}` | {seed} | {eligible} | `{baseline_outcome}` | `{verified_outcome}` | {memory_failure} | {baseline_false} | {blocked_false} | {repair_attempts} | {repair_recovery} | {verified_false} | {baseline_structured} | {verified_structured} | {actions} |".format(
                 model=row["model_name"],
                 task=row["task_id"],
-                memory=row["memory_condition"],
+                profile=row["pressure_profile_id"],
+                severity=row["pressure_severity"],
                 seed=row["seed"],
                 eligible=row["pair_eligible"],
                 baseline_outcome=row["baseline_task_outcome"],
                 verified_outcome=row["verified_task_outcome"],
+                memory_failure=row[
+                    "baseline_memory_contributed_failure"
+                ],
                 baseline_false=row["baseline_accepted_false_finishes"],
                 blocked_false=row["verified_blocked_false_finishes"],
                 repair_attempts=row["verified_memory_repair_attempts"],
@@ -216,10 +227,14 @@ def format_model_matrix_analysis_markdown(report: dict) -> str:
     lines.extend(["", "## Exclusion Ledger", ""])
     if statistics["exclusion_ledger"]:
         lines.extend(
-            "- `{model}` / `{task}` / `{memory}` / seed `{seed}`: {reason}".format(
+            "- `{model}` / `{task}` / `{profile}` (`{severity}`) / seed `{seed}`: {reason}".format(
                 model=item["model_name"],
                 task=item["task_id"],
-                memory=item.get("memory_condition", "full_history"),
+                profile=item.get(
+                    "pressure_profile_id",
+                    item.get("memory_condition", "full_history"),
+                ),
+                severity=item.get("pressure_severity"),
                 seed=item["seed"],
                 reason=item["reason"],
             )
@@ -227,6 +242,35 @@ def format_model_matrix_analysis_markdown(report: dict) -> str:
         )
     else:
         lines.append("- No pairs excluded.")
+
+    accounting = report["execution_accounting"]
+    lines.extend(["", "## Intention-To-Run Accounting", ""])
+    for key, value in accounting.items():
+        if key not in {"schema_version", "note"}:
+            lines.append(f"- `{key}`: `{value}`")
+    lines.append(f"- Note: {accounting['note']}")
+
+    lines.extend(["", "## Pressure Dose Response", ""])
+    for item in report["pressure_analysis"]["dose_response"]:
+        lines.append(
+            "- Severity `{severity}`: planned `{planned}`, "
+            "memory-contributed failures `{failures}` "
+            "(rate `{rate}`), evaluator success rate `{success}`, "
+            "mean probe accuracy `{probe}`.".format(
+                severity=item["severity_ordinal"],
+                planned=item["planned_baseline_run_count"],
+                failures=item["memory_contributed_failure_count"],
+                rate=item[
+                    "memory_contributed_failure_rate_all_planned"
+                ],
+                success=item["evaluator_success_rate_all_planned"],
+                probe=item["mean_probe_accuracy"],
+            )
+        )
+    lines.append(
+        "- Natural versus induced-associated counts: "
+        f"`{report['pressure_analysis']['natural_vs_induced_corruption_counts']}`"
+    )
 
     lines.extend(["", "## Aggregate", ""])
     for key, value in report["aggregate"].items():
@@ -244,7 +288,7 @@ def _task_rows_for_model(
     manifest_dir: Path,
     *,
     task_ids: list[str],
-    memory_conditions: list[str],
+    pressure_profiles: list[dict],
     seeds: list[int],
 ) -> list[dict]:
     runs_by_pair: dict[
@@ -252,24 +296,31 @@ def _task_rows_for_model(
         dict[str, dict],
     ] = defaultdict(dict)
     for task_id in task_ids:
-        for memory_condition in memory_conditions:
+        for pressure_profile in pressure_profiles:
             for seed in seeds:
                 runs_by_pair[
-                    (task_id, memory_condition, int(seed))
+                    (
+                        task_id,
+                        pressure_profile["profile_id"],
+                        int(seed),
+                    )
                 ]
     for run_info in model.get("runs", []):
         seed = int(run_info.get("seed", 0))
-        memory_condition = run_info.get(
-            "memory_condition",
-            "full_history",
+        pressure_profile_id = run_info.get(
+            "pressure_profile_id",
+            run_info.get("memory_condition", "full_history"),
         )
-        runs_by_pair[(run_info["task_id"], memory_condition, seed)][
+        runs_by_pair[(run_info["task_id"], pressure_profile_id, seed)][
             run_info["variant"]
         ] = run_info
     for error in model.get("errors", []):
         key = (
             error["task_id"],
-            error.get("memory_condition", "full_history"),
+            error.get(
+                "pressure_profile_id",
+                error.get("memory_condition", "full_history"),
+            ),
             int(error.get("seed", 0)),
         )
         runs_by_pair[key].setdefault(
@@ -278,13 +329,41 @@ def _task_rows_for_model(
         )
 
     rows = []
-    for (task_id, memory_condition, seed), pair in sorted(
+    profiles_by_id = {
+        profile["profile_id"]: profile for profile in pressure_profiles
+    }
+    for (task_id, pressure_profile_id, seed), pair in sorted(
         runs_by_pair.items()
     ):
+        pressure_profile = profiles_by_id.get(
+            pressure_profile_id,
+            {
+                "profile_id": pressure_profile_id,
+                "condition": pressure_profile_id,
+                "severity": "unspecified",
+                "severity_ordinal": None,
+                "activation_action_count": None,
+                "visible_evidence_window": None,
+                "induced_corruption": False,
+            },
+        )
+        memory_condition = pressure_profile["condition"]
         baseline_info = pair.get("baseline")
         verified_info = pair.get("verified")
         baseline = _read_run_info(baseline_info, manifest_dir)
         verified = _read_run_info(verified_info, manifest_dir)
+        baseline_attribution = (
+            baseline.get("failure_attribution")
+            or classify_run_failure(baseline)
+            if baseline
+            else {}
+        )
+        verified_attribution = (
+            verified.get("failure_attribution")
+            or classify_run_failure(verified)
+            if verified
+            else {}
+        )
         baseline_metadata = baseline.get("run_metadata", {})
         verified_metadata = verified.get("run_metadata", {})
         baseline_interaction = baseline.get("interaction_metrics", {})
@@ -326,6 +405,20 @@ def _task_rows_for_model(
                 "model_family": model.get("model_family"),
                 "task_id": task_id,
                 "memory_condition": memory_condition,
+                "pressure_profile_id": pressure_profile_id,
+                "pressure_severity": pressure_profile.get("severity"),
+                "pressure_severity_ordinal": pressure_profile.get(
+                    "severity_ordinal"
+                ),
+                "pressure_activation_action_count": pressure_profile.get(
+                    "activation_action_count"
+                ),
+                "pressure_visible_evidence_window": pressure_profile.get(
+                    "visible_evidence_window"
+                ),
+                "induced_corruption_condition": bool(
+                    pressure_profile.get("induced_corruption")
+                ),
                 "seed": seed,
                 "trial_id": (
                     baseline_info or verified_info or {}
@@ -430,6 +523,22 @@ def _task_rows_for_model(
                 ),
                 "verified_evaluator_returncode": verified_final.get(
                     "returncode"
+                ),
+                "baseline_failure_attribution": baseline_attribution,
+                "verified_failure_attribution": verified_attribution,
+                "baseline_memory_contributed_failure": bool(
+                    baseline_attribution.get("memory_contributed")
+                ),
+                "verified_memory_contributed_failure": bool(
+                    verified_attribution.get("memory_contributed")
+                ),
+                "baseline_corruption_origin": baseline_attribution.get(
+                    "corruption_origin",
+                    "not_observed",
+                ),
+                "verified_corruption_origin": verified_attribution.get(
+                    "corruption_origin",
+                    "not_observed",
                 ),
                 "baseline_protocol_completion_status": (
                     baseline_interaction.get("protocol_completion_status")
@@ -639,6 +748,26 @@ def _task_rows_for_model(
                 "verified_probe_curve_auc": (
                     verified_probe.get("curve_statistics", {}).get(
                         "area_under_curve"
+                    )
+                ),
+                "baseline_probe_first_degradation_action": (
+                    baseline_probe.get("curve_statistics", {}).get(
+                        "first_degradation_action"
+                    )
+                ),
+                "verified_probe_first_degradation_action": (
+                    verified_probe.get("curve_statistics", {}).get(
+                        "first_degradation_action"
+                    )
+                ),
+                "baseline_first_memory_signal_sequence": (
+                    baseline_attribution.get(
+                        "first_memory_signal_sequence"
+                    )
+                ),
+                "verified_first_memory_signal_sequence": (
+                    verified_attribution.get(
+                        "first_memory_signal_sequence"
                     )
                 ),
                 "baseline_probe_uncertainty_calibration_accuracy": (
@@ -987,6 +1116,309 @@ def _aggregate_summary(
         ),
         "blocked_actions_by_model": dict(sorted(blocked_by_model.items())),
     }
+
+
+def _manifest_pressure_profiles(manifest: dict) -> list[dict]:
+    profiles = manifest.get("pressure_profiles")
+    if profiles:
+        return profiles
+    return [
+        {
+            "profile_id": condition,
+            "condition": condition,
+            "severity": (
+                "control" if condition == "full_history" else "ad_hoc"
+            ),
+            "severity_ordinal": (
+                0 if condition == "full_history" else None
+            ),
+            "activation_action_count": manifest.get(
+                "memory_pressure_start"
+            ),
+            "visible_evidence_window": manifest.get("memory_window"),
+            "induced_corruption": condition != "full_history",
+        }
+        for condition in manifest.get(
+            "memory_conditions",
+            ["full_history"],
+        )
+    ]
+
+
+def _execution_accounting(manifest: dict, rows: list[dict]) -> dict:
+    planned = int(manifest.get("planned_run_count", 0))
+    completed = int(manifest.get("completed_run_count", 0))
+    failed = int(manifest.get("failed_run_count", 0))
+    skipped = int(manifest.get("skipped_run_count", 0))
+    unaccounted = max(0, planned - completed - failed - skipped)
+    outcome_counts: Counter[str] = Counter()
+    for row in rows:
+        for prefix in ("baseline", "verified"):
+            attribution = row.get(f"{prefix}_failure_attribution", {})
+            if attribution:
+                outcome_counts[
+                    attribution.get("outcome_class", "unknown")
+                ] += 1
+    return {
+        "schema_version": "agent-execution-accounting/v0.1",
+        "intention_to_run_denominator": planned,
+        "completed_artifact_count": completed,
+        "runtime_failure_count": failed,
+        "skipped_run_count": skipped,
+        "unaccounted_run_count": unaccounted,
+        "completed_artifact_rate": _planned_rate(completed, planned),
+        "runtime_failure_rate": _planned_rate(failed, planned),
+        "skipped_run_rate": _planned_rate(skipped, planned),
+        "all_planned_runs_accounted_for": unaccounted == 0,
+        "observed_outcome_class_counts": dict(
+            sorted(outcome_counts.items())
+        ),
+        "complete_case_inferential_pair_count": sum(
+            1 for row in rows if row.get("pair_eligible")
+        ),
+        "planned_pair_slot_count": len(rows),
+        "note": (
+            "Runtime failures, skipped runs, and missing artifacts remain in "
+            "the intention-to-run denominator. Paired inferential statistics "
+            "use complete artifacts and report their separate exclusion ledger."
+        ),
+    }
+
+
+def _pressure_analysis(rows: list[dict]) -> dict:
+    by_profile: dict[str, list[dict]] = defaultdict(list)
+    for row in rows:
+        by_profile[row["pressure_profile_id"]].append(row)
+
+    profile_summaries = []
+    for profile_id, profile_rows in sorted(
+        by_profile.items(),
+        key=lambda item: (
+            item[1][0].get("pressure_severity_ordinal")
+            if item[1][0].get("pressure_severity_ordinal") is not None
+            else 999,
+            item[0],
+        ),
+    ):
+        observed = [row for row in profile_rows if row.get("run_path")]
+        memory_failures = sum(
+            row["baseline_memory_contributed_failure"]
+            for row in observed
+        )
+        evaluator_successes = sum(
+            row["baseline_evaluator_success"] is True
+            for row in observed
+        )
+        origin_counts = Counter(
+            row["baseline_corruption_origin"] for row in observed
+        )
+        profile_summaries.append(
+            {
+                "pressure_profile_id": profile_id,
+                "memory_condition": profile_rows[0][
+                    "memory_condition"
+                ],
+                "severity": profile_rows[0]["pressure_severity"],
+                "severity_ordinal": profile_rows[0][
+                    "pressure_severity_ordinal"
+                ],
+                "activation_action_count": profile_rows[0][
+                    "pressure_activation_action_count"
+                ],
+                "visible_evidence_window": profile_rows[0][
+                    "pressure_visible_evidence_window"
+                ],
+                "induced_corruption_condition": profile_rows[0][
+                    "induced_corruption_condition"
+                ],
+                "planned_baseline_run_count": len(profile_rows),
+                "observed_baseline_run_count": len(observed),
+                "missing_baseline_run_count": (
+                    len(profile_rows) - len(observed)
+                ),
+                "memory_contributed_failure_count": memory_failures,
+                "memory_contributed_failure_rate_all_planned": (
+                    _planned_rate(memory_failures, len(profile_rows))
+                ),
+                "memory_contributed_failure_rate_observed": (
+                    _planned_rate(memory_failures, len(observed))
+                ),
+                "evaluator_success_count": evaluator_successes,
+                "evaluator_success_rate_all_planned": _planned_rate(
+                    evaluator_successes,
+                    len(profile_rows),
+                ),
+                "corruption_origin_counts": dict(
+                    sorted(origin_counts.items())
+                ),
+                "mean_probe_accuracy": _mean(
+                    row["baseline_probe_overall_accuracy"]
+                    for row in observed
+                    if row["baseline_probe_overall_accuracy"] is not None
+                ),
+                "mean_first_degradation_action": _mean(
+                    row["baseline_probe_first_degradation_action"]
+                    for row in observed
+                    if row[
+                        "baseline_probe_first_degradation_action"
+                    ]
+                    is not None
+                ),
+                "mean_first_memory_signal_sequence": _mean(
+                    row["baseline_first_memory_signal_sequence"]
+                    for row in observed
+                    if row["baseline_first_memory_signal_sequence"]
+                    is not None
+                ),
+                "mean_trajectory_actions": _mean(
+                    row["baseline_model_action_count"]
+                    for row in observed
+                ),
+            }
+        )
+
+    matched_effects = _matched_pressure_effects(rows)
+    severity_groups: dict[int, list[dict]] = defaultdict(list)
+    for summary in profile_summaries:
+        ordinal = summary.get("severity_ordinal")
+        if ordinal is not None:
+            severity_groups[int(ordinal)].append(summary)
+    dose_response = []
+    for ordinal, summaries in sorted(severity_groups.items()):
+        planned = sum(
+            summary["planned_baseline_run_count"]
+            for summary in summaries
+        )
+        memory_failures = sum(
+            summary["memory_contributed_failure_count"]
+            for summary in summaries
+        )
+        evaluator_successes = sum(
+            summary["evaluator_success_count"]
+            for summary in summaries
+        )
+        dose_response.append(
+            {
+                "severity_ordinal": ordinal,
+                "severity_labels": sorted(
+                    {
+                        str(summary["severity"])
+                        for summary in summaries
+                    }
+                ),
+                "planned_baseline_run_count": planned,
+                "memory_contributed_failure_count": memory_failures,
+                "memory_contributed_failure_rate_all_planned": (
+                    _planned_rate(memory_failures, planned)
+                ),
+                "evaluator_success_rate_all_planned": _planned_rate(
+                    evaluator_successes,
+                    planned,
+                ),
+                "mean_probe_accuracy": _mean(
+                    summary["mean_probe_accuracy"]
+                    for summary in summaries
+                ),
+                "mean_first_degradation_action": _mean(
+                    summary["mean_first_degradation_action"]
+                    for summary in summaries
+                    if summary["mean_first_degradation_action"] != 0.0
+                ),
+                "mean_trajectory_actions": _mean(
+                    summary["mean_trajectory_actions"]
+                    for summary in summaries
+                ),
+            }
+        )
+
+    origin_counts = Counter(
+        row["baseline_corruption_origin"]
+        for row in rows
+        if row.get("run_path")
+    )
+    return {
+        "schema_version": "agent-memory-pressure-analysis/v0.1",
+        "profile_summaries": profile_summaries,
+        "matched_control_effects": matched_effects,
+        "dose_response": dose_response,
+        "natural_vs_induced_corruption_counts": dict(
+            sorted(origin_counts.items())
+        ),
+        "causal_guardrail": (
+            "Induced-associated means the first strict memory signal occurred "
+            "after an active pressure transformation. Causal attribution "
+            "requires a matched control regression and is still limited to "
+            "the declared model-task-seed tuple."
+        ),
+    }
+
+
+def _matched_pressure_effects(rows: list[dict]) -> list[dict]:
+    controls = {
+        (row["model_name"], row["task_id"], row["seed"]): row
+        for row in rows
+        if row.get("pressure_severity_ordinal") == 0
+        and row.get("run_path")
+    }
+    effects = []
+    for row in rows:
+        if (
+            row.get("pressure_severity_ordinal") in {None, 0}
+            or not row.get("run_path")
+        ):
+            continue
+        key = (row["model_name"], row["task_id"], row["seed"])
+        control = controls.get(key)
+        if not control:
+            continue
+        control_probe = control.get("baseline_probe_overall_accuracy")
+        pressure_probe = row.get("baseline_probe_overall_accuracy")
+        effects.append(
+            {
+                "model_name": row["model_name"],
+                "task_id": row["task_id"],
+                "seed": row["seed"],
+                "control_profile_id": control["pressure_profile_id"],
+                "pressure_profile_id": row["pressure_profile_id"],
+                "severity": row["pressure_severity"],
+                "severity_ordinal": row[
+                    "pressure_severity_ordinal"
+                ],
+                "control_evaluator_success": control[
+                    "baseline_evaluator_success"
+                ],
+                "pressure_evaluator_success": row[
+                    "baseline_evaluator_success"
+                ],
+                "evaluator_regression": bool(
+                    control["baseline_evaluator_success"] is True
+                    and row["baseline_evaluator_success"] is False
+                ),
+                "new_memory_contributed_failure": bool(
+                    not control[
+                        "baseline_memory_contributed_failure"
+                    ]
+                    and row["baseline_memory_contributed_failure"]
+                ),
+                "control_memory_contributed_failure": control[
+                    "baseline_memory_contributed_failure"
+                ],
+                "pressure_memory_contributed_failure": row[
+                    "baseline_memory_contributed_failure"
+                ],
+                "probe_accuracy_delta_pressure_minus_control": (
+                    round(float(pressure_probe) - float(control_probe), 4)
+                    if pressure_probe is not None
+                    and control_probe is not None
+                    else None
+                ),
+            }
+        )
+    return effects
+
+
+def _planned_rate(count: int, total: int) -> float | None:
+    return round(count / total, 4) if total else None
 
 
 def _pair_exclusion_reason(
