@@ -1095,6 +1095,10 @@ class BenchmarkRunner:
                     self._tool_action_response_schema(
                         available_actions,
                         workspace_files=sorted(scenario["initial_files"]),
+                        readable_files=self._model_readable_files(
+                            scenario,
+                            canonical_ledger,
+                        ),
                     )
                     if config.constrained_actions
                     else None
@@ -4400,14 +4404,19 @@ class BenchmarkRunner:
         available_actions: list[str] | None = None,
         *,
         workspace_files: list[str] | None = None,
+        readable_files: list[str] | None = None,
     ) -> dict:
         allowed = available_actions or list(CODING_TOOL_ACTIONS)
         files = sorted(set(workspace_files or []))
+        readable = sorted(set(readable_files or files))
         structured_files = [
             path
             for path in files
             if Path(path).suffix.lower()
             in {".json", ".toml", ".yaml", ".yml", ".xml", ".plist"}
+        ]
+        readable_structured_files = [
+            path for path in readable if path in structured_files
         ]
         python_files = [
             path for path in files if Path(path).suffix.lower() == ".py"
@@ -4460,7 +4469,7 @@ class BenchmarkRunner:
         }
         action_fields = {
             "read_file": (
-                {"path": path_schema(files)},
+                {"path": path_schema(readable)},
                 ["path"],
             ),
             "write_file": (
@@ -4471,7 +4480,7 @@ class BenchmarkRunner:
                 ["path", "content"],
             ),
             "read_structured_file": (
-                {"path": path_schema(structured_files)},
+                {"path": path_schema(readable_structured_files)},
                 ["path"],
             ),
             "inspect_dependency": (
@@ -4544,6 +4553,21 @@ class BenchmarkRunner:
         }
 
     @classmethod
+    def _model_readable_files(
+        cls,
+        scenario: dict,
+        evidence_ledger: list[dict],
+    ) -> list[str]:
+        return [
+            path
+            for path in sorted(scenario["initial_files"])
+            if not cls._redundant_action_reason(
+                {"action": "read_file", "path": path},
+                evidence_ledger,
+            )
+        ]
+
+    @classmethod
     def _available_tool_actions(
         cls,
         scenario: dict,
@@ -4591,6 +4615,10 @@ class BenchmarkRunner:
         if any(
             Path(path).suffix.lower()
             in {".json", ".toml", ".yaml", ".yml", ".xml", ".plist"}
+            and not cls._redundant_action_reason(
+                {"action": "read_structured_file", "path": path},
+                evidence_ledger,
+            )
             for path in scenario["initial_files"]
         ):
             available.append("read_structured_file")

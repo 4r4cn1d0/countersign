@@ -1357,7 +1357,7 @@ Acceptance bar for unfinished research tasks:
     finish claims, two completed repair replans, zero accepted false completions,
     and final hidden-evaluator failure due action-budget exhaustion. This is useful
     failure evidence but does not satisfy 38.7 recovery._
-  - _Verification: All research tests pass: 184 passed, 1 skipped. Full backend
+  - _Verification: All research tests pass: 185 passed, 1 skipped. Full backend
     database-backed integration tests require PostgreSQL/TimescaleDB outside the
     managed sandbox; the sandbox blocks localhost DB sockets. Task 38 remains open
     for successful 38.7 real local-model recovery evidence._

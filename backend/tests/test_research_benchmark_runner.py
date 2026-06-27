@@ -1361,6 +1361,31 @@ def test_action_availability_only_exposes_supported_structured_reads():
     ]
 
 
+def test_tool_action_schema_excludes_redundant_read_paths_only():
+    schema = BenchmarkRunner._tool_action_response_schema(
+        ["read_file", "write_file"],
+        workspace_files=[
+            "config_loader.py",
+            "config_parser.py",
+            "test_config_parser.py",
+        ],
+        readable_files=["config_parser.py"],
+    )
+    variants = {
+        variant["properties"]["action"]["const"]: variant
+        for variant in schema["oneOf"]
+    }
+
+    assert variants["read_file"]["properties"]["path"]["enum"] == [
+        "config_parser.py"
+    ]
+    assert variants["write_file"]["properties"]["path"]["enum"] == [
+        "config_loader.py",
+        "config_parser.py",
+        "test_config_parser.py",
+    ]
+
+
 def test_read_test_failure_is_available_once_per_new_failure():
     runner = BenchmarkRunner()
     scenario = {"initial_files": {"agent.py": "", "test_agent.py": ""}}

@@ -38,7 +38,7 @@ The project is a working MVP/demo, not just a write-up.
 
 Latest verified test state:
 
-- Research suite: 184 passed, 1 skipped.
+- Research suite: 185 passed, 1 skipped.
 - Full backend suite: database-backed integration tests require PostgreSQL/TimescaleDB
   outside the managed sandbox; the sandbox blocks localhost DB sockets.
 - Frontend: 26 passed; production build succeeds.
