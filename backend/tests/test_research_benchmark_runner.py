@@ -1175,15 +1175,32 @@ def test_langgraph_tool_loop_requests_structured_action_output(tmp_path: Path):
 
     assert adapter.schemas
     assert all(
-        schema["required"] == ["action", "beliefs"]
+        schema["oneOf"]
         for schema in adapter.schemas
     )
     assert all(
-        schema["properties"]["beliefs"]["maxItems"] == 8
+        schema["$defs"]["beliefs"]["maxItems"] == 4
         for schema in adapter.schemas
     )
     assert all(
-        "finish" in schema["properties"]["action"]["enum"]
+        all(
+            variant["properties"]["beliefs"] == {
+                "$ref": "#/$defs/beliefs"
+            }
+            for variant in schema["oneOf"]
+        )
+        for schema in adapter.schemas
+    )
+    assert all(
+        len(json.dumps(schema)) < 6_000
+        for schema in adapter.schemas
+    )
+    assert all(
+        "finish"
+        in {
+            variant["properties"]["action"]["const"]
+            for variant in schema["oneOf"]
+        }
         for schema in adapter.schemas
     )
     assert all(
@@ -1237,12 +1254,504 @@ def test_action_availability_removes_current_no_ops_and_breaks_redundant_write_l
             }
         ],
     )
+    search_cooldown = runner._available_tool_actions(
+        scenario,
+        ledger,
+        [
+            {
+                "status": "rejected_redundant",
+                "rejected_action": {
+                    "action": "search_code",
+                    "query": "parse_line",
+                },
+            }
+        ],
+    )
+    progress_only = runner._available_tool_actions(
+        scenario,
+        ledger,
+        [
+            {"status": "tool_error", "rejected_action": {"action": "read_file"}},
+            {
+                "status": "rejected_redundant",
+                "rejected_action": {"action": "search_code"},
+            },
+            {"status": "rejected", "rejected_action": {"action": "git_status"}},
+        ],
+        enforce_no_progress_guard=True,
+    )
+    stalled_after_write = runner._available_tool_actions(
+        scenario,
+        ledger,
+        [],
+        no_progress_action_count=3,
+        enforce_no_progress_guard=True,
+    )
+    stalled_before_write = runner._available_tool_actions(
+        scenario,
+        ledger[:2],
+        [],
+        no_progress_action_count=6,
+        enforce_no_progress_guard=True,
+    )
 
     assert "list_files" not in available
     assert "run_tests" not in available
     assert "read_file" in available
     assert {"write_file", "finish"}.issubset(available)
     assert terminal_only == ["finish"]
+    assert "search_code" not in search_cooldown
+    assert {"read_file", "write_file", "finish"}.issubset(search_cooldown)
+    assert set(progress_only) <= {
+        "write_file",
+        "apply_patch",
+        "run_targeted_tests",
+        "run_tests",
+        "run_full_tests",
+        "read_test_failure",
+        "finish",
+    }
+    assert {"write_file", "apply_patch", "finish"}.issubset(progress_only)
+    assert set(stalled_after_write) <= {
+        "write_file",
+        "apply_patch",
+        "run_targeted_tests",
+        "run_tests",
+        "run_full_tests",
+        "read_test_failure",
+        "finish",
+    }
+    assert "run_targeted_tests" not in stalled_after_write
+    assert {"write_file", "apply_patch", "finish"}.issubset(
+        stalled_after_write
+    )
+    assert set(stalled_before_write) == {
+        "write_file",
+        "apply_patch",
+        "finish",
+    }
+    assert "read_structured_file" not in available
+
+
+def test_action_availability_only_exposes_supported_structured_reads():
+    runner = BenchmarkRunner()
+    scenario = {
+        "initial_files": {
+            "agent.py": "print('ok')\n",
+            "settings.json": '{"enabled": true}\n',
+        }
+    }
+
+    available = runner._available_tool_actions(scenario, [], [])
+    schema = runner._tool_action_response_schema(
+        available,
+        workspace_files=sorted(scenario["initial_files"]),
+    )
+    variants = {
+        variant["properties"]["action"]["const"]: variant
+        for variant in schema["oneOf"]
+    }
+
+    assert "read_structured_file" in available
+    assert variants["read_structured_file"]["properties"]["path"]["enum"] == [
+        "settings.json"
+    ]
+    assert variants["inspect_dependency"]["properties"]["path"]["enum"] == [
+        "agent.py"
+    ]
+
+
+def test_read_test_failure_is_available_once_per_new_failure():
+    runner = BenchmarkRunner()
+    scenario = {"initial_files": {"agent.py": "", "test_agent.py": ""}}
+    ledger = [
+        {
+            "label": "run_tests",
+            "tool_name": "run_tests",
+            "status": "failure",
+        }
+    ]
+
+    assert "read_test_failure" in runner._available_tool_actions(
+        scenario,
+        ledger,
+        [],
+    )
+    ledger.append(
+        {
+            "label": "read_test_failure",
+            "tool_name": "read_test_failure",
+            "status": "success",
+        }
+    )
+    assert "read_test_failure" not in runner._available_tool_actions(
+        scenario,
+        ledger,
+        [],
+    )
+    ledger.append(
+        {
+            "label": "run_tests",
+            "tool_name": "run_tests",
+            "status": "failure",
+        }
+    )
+    assert "read_test_failure" in runner._available_tool_actions(
+        scenario,
+        ledger,
+        [],
+    )
+
+
+@pytest.mark.parametrize(
+    "action",
+    [
+        {"action": "search_code", "query": "parse_line", "path": "."},
+        {"action": "git_diff"},
+        {"action": "git_status"},
+        {
+            "action": "inspect_dependency",
+            "path": "config_parser.py",
+            "symbol": "parse_line",
+        },
+        {
+            "action": "read_structured_file",
+            "path": "config.json",
+        },
+        {
+            "action": "run_targeted_tests",
+            "targets": ["test_config_parser.py"],
+        },
+    ],
+)
+def test_exact_observational_actions_are_redundant_until_a_write(action):
+    runner = BenchmarkRunner()
+    ledger = [
+        {
+            "label": runner._action_label(action),
+            "tool_name": action["action"],
+            "status": "success",
+        }
+    ]
+
+    assert runner._redundant_action_reason(action, ledger)
+
+    ledger.append(
+        {
+            "label": (
+                "write_file:"
+                + (
+                    action["path"]
+                    if action["action"]
+                    in {"read_structured_file", "inspect_dependency"}
+                    else "config_parser.py"
+                )
+            ),
+            "tool_name": "write_file",
+            "path": (
+                action["path"]
+                if action["action"]
+                in {"read_structured_file", "inspect_dependency"}
+                else "config_parser.py"
+            ),
+            "status": "success",
+        }
+    )
+    assert runner._redundant_action_reason(action, ledger) is None
+
+
+def test_tool_action_schema_requires_action_specific_fields():
+    schema = BenchmarkRunner._tool_action_response_schema(
+        ["write_file", "run_targeted_tests", "finish"]
+    )
+    requirements = {
+        variant["properties"]["action"]["const"]:
+        set(variant["required"])
+        for variant in schema["oneOf"]
+    }
+
+    assert requirements == {
+        "write_file": {"action", "path", "content", "beliefs"},
+        "run_targeted_tests": {"action", "targets", "beliefs"},
+        "finish": {"action", "claim", "beliefs"},
+    }
+    targeted = next(
+        variant
+        for variant in schema["oneOf"]
+        if variant["properties"]["action"]["const"]
+        == "run_targeted_tests"
+    )
+    assert targeted["properties"]["targets"]["minItems"] == 1
+
+
+def test_tool_action_schema_constrains_model_selected_workspace_paths():
+    schema = BenchmarkRunner._tool_action_response_schema(
+        [
+            "read_file",
+            "write_file",
+            "read_structured_file",
+            "inspect_dependency",
+            "run_targeted_tests",
+        ],
+        workspace_files=[
+            "agent.py",
+            "test_agent.py",
+            "settings.json",
+            "README.md",
+        ],
+    )
+    variants = {
+        variant["properties"]["action"]["const"]: variant
+        for variant in schema["oneOf"]
+    }
+
+    assert variants["read_file"]["properties"]["path"]["enum"] == [
+        "README.md",
+        "agent.py",
+        "settings.json",
+        "test_agent.py",
+    ]
+    assert variants["write_file"]["properties"]["path"]["enum"] == [
+        "README.md",
+        "agent.py",
+        "settings.json",
+        "test_agent.py",
+    ]
+    assert variants["read_structured_file"]["properties"]["path"]["enum"] == [
+        "settings.json"
+    ]
+    assert variants["inspect_dependency"]["properties"]["path"]["enum"] == [
+        "agent.py",
+        "test_agent.py",
+    ]
+    assert variants["run_targeted_tests"]["properties"]["targets"]["items"][
+        "enum"
+    ] == ["test_agent.py"]
+
+
+def test_invalid_tool_action_schema_preserves_attempted_action():
+    parsed = BenchmarkRunner._parse_tool_action_response(
+        json.dumps(
+            {
+                "action": "run_targeted_tests",
+                "beliefs": [],
+                "source_event_ids": [],
+            }
+        )
+    )
+
+    assert parsed == {
+        "parse_status": "invalid_schema",
+        "attempted_action": "run_targeted_tests",
+    }
+
+
+def test_langgraph_tool_loop_persists_incremental_trace_journal(tmp_path: Path):
+    pytest.importorskip("langgraph")
+
+    run = BenchmarkRunner().run_task_id(
+        "coding_stale_tests_001",
+        BenchmarkRunConfig(
+            framework="langgraph_tools",
+            trace_mode="model_driven",
+            action_budget=3,
+            workspace_root=str(tmp_path),
+        ),
+    )
+
+    journal_path = Path(run["run_metadata"]["trace_journal_path"])
+    checkpoint_path = Path(run["run_metadata"]["run_checkpoint_path"])
+    workspace_path = Path(run["run_metadata"]["workspace_path"])
+    journal_events = [
+        json.loads(line)
+        for line in journal_path.read_text(encoding="utf-8").splitlines()
+    ]
+    checkpoint = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+
+    assert journal_path.exists()
+    assert checkpoint_path.exists()
+    assert checkpoint["status"] == "completed"
+    assert checkpoint["next_node"] == "__end__"
+    assert checkpoint["workspace_path"] == str(workspace_path.resolve())
+    assert journal_path.parent == workspace_path.parent
+    assert journal_path.parent != workspace_path
+    assert [event["event_id"] for event in journal_events] == [
+        event["event_id"] for event in run["trace_events"]
+    ]
+
+
+def test_langgraph_tool_loop_resumes_after_durable_model_action_without_replay(
+    tmp_path: Path,
+):
+    pytest.importorskip("langgraph")
+
+    class CountingAdapter:
+        runtime = "deterministic"
+
+        def __init__(self):
+            self.requests = []
+
+        def generate(self, request):
+            self.requests.append(request)
+            marker = "DETERMINISTIC_ACTION:"
+            action = json.loads(
+                request.prompt.split(marker, 1)[1].strip().splitlines()[0]
+            )
+            return ModelResponse(
+                text=json.dumps(action),
+                runtime="deterministic",
+                model_name=request.model_name,
+                model_family=request.model_family,
+                raw_response={"fake": True},
+            )
+
+    class InterruptingRunner(BenchmarkRunner):
+        def __init__(self):
+            super().__init__()
+            self.interrupted = False
+
+        def _after_tool_run_checkpoint(self, checkpoint):
+            if (
+                not self.interrupted
+                and checkpoint["next_node"] == "process_action"
+            ):
+                self.interrupted = True
+                raise RuntimeError("simulated process interruption")
+
+    interrupted_adapter = CountingAdapter()
+    runner = InterruptingRunner()
+    config = BenchmarkRunConfig(
+        framework="langgraph_tools",
+        trace_mode="model_driven",
+        action_budget=8,
+        workspace_root=str(tmp_path / "interrupted"),
+    )
+    with patch(
+        "research.runner.benchmark_runner.create_model_adapter",
+        return_value=interrupted_adapter,
+    ):
+        with pytest.raises(RuntimeError, match="simulated process interruption"):
+            runner.run_task_id("coding_stale_tests_001", config)
+
+        checkpoint_path = next(
+            (tmp_path / "interrupted").glob("*.run-checkpoint.json")
+        )
+        checkpoint = BenchmarkRunner._load_tool_run_checkpoint(
+            checkpoint_path
+        )
+        assert checkpoint["next_node"] == "process_action"
+        assert checkpoint["state"]["action_count"] == 0
+        assert len(interrupted_adapter.requests) == 1
+
+        resumed = runner.resume_task(checkpoint_path)
+
+    baseline_adapter = CountingAdapter()
+    with patch(
+        "research.runner.benchmark_runner.create_model_adapter",
+        return_value=baseline_adapter,
+    ):
+        baseline = BenchmarkRunner().run_task_id(
+            "coding_stale_tests_001",
+            BenchmarkRunConfig(
+                framework="langgraph_tools",
+                trace_mode="model_driven",
+                action_budget=8,
+                workspace_root=str(tmp_path / "baseline"),
+            ),
+        )
+
+    assert len(interrupted_adapter.requests) == len(baseline_adapter.requests)
+    assert resumed["interaction_metrics"]["model_action_count"] == (
+        baseline["interaction_metrics"]["model_action_count"]
+    )
+    assert resumed["run_metadata"]["resumed_from_checkpoint"] is True
+    assert resumed["run_metadata"]["resume_count"] == 1
+    assert sum(
+        event.get("event_type") == "run_resume"
+        for event in resumed["trace_events"]
+    ) == 1
+    assert (
+        resumed["run_metadata"]["final_repository_hash"]
+        == baseline["run_metadata"]["final_repository_hash"]
+    )
+
+
+def test_tool_run_resume_rejects_workspace_changed_after_checkpoint(
+    tmp_path: Path,
+):
+    pytest.importorskip("langgraph")
+
+    class InterruptingRunner(BenchmarkRunner):
+        def __init__(self):
+            super().__init__()
+            self.interrupted = False
+
+        def _after_tool_run_checkpoint(self, checkpoint):
+            if (
+                not self.interrupted
+                and checkpoint["next_node"] == "choose_action"
+            ):
+                self.interrupted = True
+                raise RuntimeError("simulated process interruption")
+
+    runner = InterruptingRunner()
+    with pytest.raises(RuntimeError, match="simulated process interruption"):
+        runner.run_task_id(
+            "coding_stale_tests_001",
+            BenchmarkRunConfig(
+                framework="langgraph_tools",
+                trace_mode="model_driven",
+                workspace_root=str(tmp_path),
+            ),
+        )
+
+    checkpoint_path = next(tmp_path.glob("*.run-checkpoint.json"))
+    checkpoint = BenchmarkRunner._load_tool_run_checkpoint(checkpoint_path)
+    workspace = Path(checkpoint["workspace_path"])
+    (workspace / "config_parser.py").write_text(
+        "def parse_line(line):\n    return ('tampered', line)\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="workspace hash does not match"):
+        runner.resume_task(checkpoint_path)
+
+
+def test_tool_run_resume_rejects_tampered_checkpoint_and_config(
+    tmp_path: Path,
+):
+    pytest.importorskip("langgraph")
+
+    run = BenchmarkRunner().run_task_id(
+        "coding_stale_tests_001",
+        BenchmarkRunConfig(
+            framework="langgraph_tools",
+            trace_mode="model_driven",
+            action_budget=3,
+            workspace_root=str(tmp_path),
+        ),
+    )
+    checkpoint_path = Path(run["run_metadata"]["run_checkpoint_path"])
+    checkpoint = BenchmarkRunner._load_tool_run_checkpoint(checkpoint_path)
+    mismatched_config = {
+        **checkpoint["config"],
+        "temperature": 0.5,
+        "resume_from": str(checkpoint_path),
+    }
+
+    with pytest.raises(ValueError, match="configuration does not match"):
+        BenchmarkRunner().run_task_id(
+            "coding_stale_tests_001",
+            BenchmarkRunConfig(**mismatched_config),
+        )
+
+    checkpoint["state"]["action_count"] = 999
+    checkpoint_path.write_text(
+        json.dumps(checkpoint),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="integrity check failed"):
+        BenchmarkRunner().resume_task(checkpoint_path)
 
 
 def test_langgraph_tool_loop_executes_model_selected_action_without_substitution(
@@ -1417,6 +1926,203 @@ def test_tool_action_prompt_exposes_acceptance_criteria_without_planner_ids():
     assert '"subtask_id"' not in prompt
     assert "Do not repeat a successful" in prompt
     assert "DETERMINISTIC_ACTION" not in prompt
+
+
+def test_model_visible_evidence_projection_is_bounded_without_mutating_memory():
+    runner = BenchmarkRunner()
+    canonical = [
+        {
+            "memory_id": f"memory-{index}",
+            "event_id": f"event-{index}",
+            "label": f"read_file:file_{index}.py",
+            "event_type": "tool_call",
+            "tool_name": "read_file",
+            "status": "success",
+            "source_type": "tool_output",
+            "workspace_revision": 0,
+            "support_status": "supported",
+            "stale": False,
+            "path": f"file_{index}.py",
+            "claim": f"Observed file_{index}.py.",
+            "content": f"payload-{index}-" + ("x" * 5_000),
+            "structured_output": {
+                "path": f"file_{index}.py",
+                "content": "x" * 5_000,
+                "content_sha256": "a" * 64,
+            },
+        }
+        for index in range(8)
+    ]
+    canonical_before = json.loads(json.dumps(canonical))
+
+    projected = runner._model_visible_evidence_ledger(canonical)
+
+    assert len(json.dumps(projected, sort_keys=True)) <= 8_000
+    assert [item["event_id"] for item in projected] == [
+        f"event-{index}" for index in range(8)
+    ]
+    assert canonical == canonical_before
+    assert all(
+        len(item.get("content", "")) <= 1_600
+        for item in projected
+    )
+    assert all(
+        "content" not in item.get("structured_output", {})
+        for item in projected
+    )
+
+
+def test_model_visible_evaluator_diagnosis_preserves_replan_evidence():
+    failing_assertion = 'assert parse_line(" retries = 3 ") == ("retries", "3")'
+    entry = {
+        "memory_id": "repair-event:memory",
+        "event_id": "repair-event",
+        "label": "diagnose_evaluator_failure",
+        "event_type": "evaluator_diagnosis",
+        "tool_name": "diagnose_evaluator_failure",
+        "status": "success",
+        "source_type": "tool_output",
+        "workspace_revision": 0,
+        "support_status": "supported",
+        "content": "Diagnosed the independent evaluator failure.",
+        "requirement_snapshot": {
+            "goal": "large duplicated requirement",
+            "history": [{"content": "y" * 4_000}],
+        },
+        "evaluator_failure": {
+            "visible_test_status": "success",
+            "hidden_validation_status": "failure",
+            "content": "duplicated evaluator output",
+        },
+        "structured_output": {
+            "failed_components": ["hidden_validation"],
+            "changed_files": [],
+            "current_diff": "",
+            "evaluator_output": (
+                ("traceback frame\n" * 200)
+                + failing_assertion
+                + "\nAssertionError"
+            ),
+            "latest_test_failure": None,
+            "requirement_snapshot": {
+                "goal": "large duplicated requirement",
+            },
+        },
+    }
+
+    projected = BenchmarkRunner._model_visible_evidence_entry(entry)
+
+    assert projected["memory_id"] == "repair-event:memory"
+    assert projected["diagnosis"]["failed_components"] == [
+        "hidden_validation"
+    ]
+    assert projected["diagnosis"]["visible_test_status"] == "success"
+    assert projected["diagnosis"]["hidden_validation_status"] == "failure"
+    assert failing_assertion in projected["diagnosis"]["evaluator_output"]
+    assert "requirement_snapshot" not in projected
+    assert "evaluator_failure" not in projected
+    assert "structured_output" not in projected
+
+
+def test_model_visible_ledger_never_evicts_evaluator_diagnosis():
+    failing_assertion = 'assert parse_line(" # ignored") is None'
+    entries = [
+        {
+            "memory_id": f"memory-{index}",
+            "event_id": f"event-{index}",
+            "tool_name": "read_file",
+            "status": "success",
+            "source_type": "tool_output",
+            "workspace_revision": index,
+            "support_status": "supported",
+            "path": f"file_{index}.py",
+            "content": "x" * 1_500,
+        }
+        for index in range(20)
+    ]
+    entries.insert(
+        8,
+        {
+            "memory_id": "diagnosis-event:memory",
+            "event_id": "diagnosis-event",
+            "tool_name": "diagnose_evaluator_failure",
+            "status": "success",
+            "source_type": "tool_output",
+            "workspace_revision": 3,
+            "support_status": "supported",
+            "content": "Diagnosed hidden validation.",
+            "evaluator_failure": {
+                "visible_test_status": "success",
+                "hidden_validation_status": "failure",
+            },
+            "structured_output": {
+                "failed_components": ["hidden_validation"],
+                "changed_files": ["config_parser.py"],
+                "current_diff": "diff line\n" * 300,
+                "evaluator_output": (
+                    ("traceback frame\n" * 200)
+                    + failing_assertion
+                    + "\nValueError: ignored line"
+                ),
+            },
+        },
+    )
+
+    projected = BenchmarkRunner._model_visible_evidence_ledger(entries)
+    diagnosis = next(
+        item for item in projected if item.get("event_id") == "diagnosis-event"
+    )
+
+    assert len(json.dumps(projected, sort_keys=True)) <= 8_000
+    assert diagnosis["diagnosis"]["failed_components"] == [
+        "hidden_validation"
+    ]
+    assert failing_assertion in diagnosis["diagnosis"]["evaluator_output"]
+
+
+def test_tool_action_prompt_uses_bounded_evidence_projection():
+    runner = BenchmarkRunner()
+    task = runner.get_task("coding_stale_tests_001")
+    ledger = [
+        {
+            "memory_id": f"memory-{index}",
+            "event_id": f"event-{index}",
+            "label": f"read_file:file_{index}.py",
+            "event_type": "tool_call",
+            "tool_name": "read_file",
+            "status": "success",
+            "source_type": "tool_output",
+            "workspace_revision": 0,
+            "support_status": "supported",
+            "path": f"file_{index}.py",
+            "content": f"UNBOUNDED-{index}-" + ("z" * 6_000),
+        }
+        for index in range(8)
+    ]
+
+    prompt = runner._tool_action_prompt(
+        task,
+        runner._coding_tool_scenario(task),
+        ledger,
+        [],
+        BenchmarkRunConfig(
+            framework="langgraph_tools",
+            trace_mode="model_driven",
+            runtime="ollama",
+        ),
+        action_count=8,
+        deterministic_action={},
+    )
+    ledger_text = prompt.split("Evidence ledger: ", 1)[1].split(
+        "\nRecent observations:",
+        1,
+    )[0]
+    projected = json.loads(ledger_text)
+
+    assert len(json.dumps(projected, sort_keys=True)) <= 8_000
+    assert len(projected) == len(ledger)
+    assert prompt.count("UNBOUNDED-") == len(ledger)
+    assert "z" * 6_000 not in prompt
 
 
 def test_hidden_parser_validation_checks_behavior_not_fixture_test_name(

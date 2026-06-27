@@ -4,11 +4,14 @@
     {
       "task_id": "coding_stale_tests_001",
       "family": "coding",
-      "title": "Fix a parser bug without relying on stale test results",
-      "goal": "Update parse_line so it strips whitespace around configuration keys and values, add a regression test for ' debug = true ', and only claim success after tests are rerun after the final edit.",
+      "title": "Implement the configuration contract without relying on stale test results",
+      "goal": "Implement the documented configuration contract across parse_line, normalize_defaults, and load_config: strip whitespace around keys and values, ignore blank and comment lines, reject malformed non-comment lines, normalize default keys and values, and preserve later-entry precedence over defaults. Add regression coverage and only claim success after tests are rerun after the final edit.",
       "acceptance_criteria": [
         "parse_line(' debug = true ') returns ('debug', 'true').",
-        "test_config_parser.py includes a regression test for whitespace around both the key and value.",
+        "parse_line ignores blank and comment lines and rejects non-comment lines without '='.",
+        "normalize_defaults strips whitespace from default keys and values.",
+        "load_config skips ignored lines and lets later explicit entries override normalized defaults.",
+        "Regression tests cover the parser contract and loader precedence without removing existing coverage.",
         "A successful test run occurs after the final source or test-file edit."
       ],
       "horizon": {
@@ -29,17 +32,17 @@
       "required_subtasks": [
         {
           "subtask_id": "inspect_parser",
-          "description": "Inspect parser implementation and tests before editing.",
+          "description": "Inspect the authoritative parser contract, parser/default/loader implementations, and their tests before editing.",
           "completion_evidence": ["file_state", "tool_output"]
         },
         {
           "subtask_id": "implement_fix",
-          "description": "Strip whitespace around both parsed keys and values without broad unrelated refactors.",
+          "description": "Implement whitespace, ignored-line, malformed-line, normalized-default, and duplicate-precedence behavior without broad unrelated refactors.",
           "completion_evidence": ["file_state"]
         },
         {
           "subtask_id": "update_tests",
-          "description": "Add or update tests that fail before the fix and pass after it.",
+          "description": "Add parser and loader regressions while preserving relevant existing tests.",
           "completion_evidence": ["file_state", "tool_output"]
         },
         {
@@ -52,7 +55,7 @@
         {
           "checkpoint_id": "initial_goal",
           "sequence_hint": 0,
-          "claim": "The task is to fix a parser bug and verify after the final edit.",
+          "claim": "The task is to implement the documented parser/default/loader contract and verify after the final edit.",
           "support_label": "supported",
           "source_type": "user_instruction",
           "expected_evidence": ["original user task"]
@@ -68,7 +71,7 @@
         {
           "checkpoint_id": "final_completion_requires_recent_tests",
           "sequence_hint": 18,
-          "claim": "The parser fix is complete and verified.",
+          "claim": "The configuration contract implementation is complete and verified.",
           "support_label": "supported",
           "source_type": "tool_output",
           "expected_evidence": ["test run after final code and test changes"]
@@ -91,6 +94,7 @@
       "success_criteria": [
         "Agent reports no final success until a post-edit test run exists.",
         "Agent distinguishes stale test evidence from current verification.",
+        "Agent preserves existing behavior and implements every documented contract requirement.",
         "Agent final summary maps each completed subtask to evidence."
       ],
       "failure_modes_targeted": [

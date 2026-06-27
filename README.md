@@ -26,17 +26,21 @@ The project is a working MVP/demo, not just a write-up.
   model matrices, and matrix reports.
 - Real-agent path: bounded LangGraph benchmark graph using local Ollama models, plus a
   coding-focused LangGraph tool loop with real file and test tools.
-- Benchmark suite: 10 long-horizon tasks, including 8 coding tasks and 4
+- Benchmark suite: 10 long-horizon tasks, including 8 coding tasks and 8
   fixture-backed repositories with independent hidden validators.
 - Controlled experiments: 8 model-visible memory conditions, canonical evaluator state,
   repeatable condition/seed pairing, and non-intervening task-state probes.
-- Current Mistral path: `devstral-small-2:24b` is installed and has completed a real
-  eight-action coding run with valid structured actions and evaluator success.
+- Current Mistral path: `devstral-small-2:24b-ctx8k` is installed and has completed
+  a real durable `langgraph_tools` recovery run. The verifier blocked four false
+  finish claims and accepted zero false completions; the run exhausted its action
+  budget before hidden evaluator success, so it is failure evidence rather than a
+  solved recovery demo.
 
 Latest verified test state:
 
-- Focused research suite: 101 passed, 1 skipped.
-- Full backend suite with PostgreSQL/TimescaleDB running: 332 passed, 1 skipped.
+- Research suite: 184 passed, 1 skipped.
+- Full backend suite: database-backed integration tests require PostgreSQL/TimescaleDB
+  outside the managed sandbox; the sandbox blocks localhost DB sockets.
 - Frontend: 26 passed; production build succeeds.
 
 ## Historical Five-Model Result
@@ -119,6 +123,9 @@ Detailed task taxonomy:
 
 The main pieces are documented here:
 
+- [Complete Implementation Reference](docs/IMPLEMENTATION_REFERENCE.md) - exhaustive,
+  evidence-grounded description of the backend, SDK, frontend, benchmark, agent loop,
+  memory model, verification, repair, experiments, tests, limitations, and remaining work.
 - [Architecture](docs/ARCHITECTURE.md) - backend, frontend, SDK, research runner, agents,
   artifacts, and data flow.
 - [Tool-Using Agents](docs/TOOL_USING_AGENTS.md) - how to move from bounded LangGraph to
@@ -214,6 +221,20 @@ python3 scripts/agent_memory.py run \
   --out runs/langgraph-tools-coding \
   --format json
 ```
+
+Every `langgraph_tools` run writes a sibling `*.run-checkpoint.json` after
+each graph node. If the process is interrupted, continue from the last durable
+state without replaying completed model actions:
+
+```bash
+python3 scripts/agent_memory.py resume \
+  --checkpoint runs/langgraph-tools-coding/workspaces/<run>.run-checkpoint.json \
+  --out runs/langgraph-tools-coding/resumed.json \
+  --format json
+```
+
+Resume verifies the checkpoint checksum, original run configuration, and exact
+workspace content hash before continuing.
 
 Run tests:
 

@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Optional, TypedDict
 from uuid import NAMESPACE_URL, uuid5
@@ -42,7 +44,7 @@ from .memory_pressure import (
     validate_memory_condition,
 )
 from .metrics import build_memory_health_report
-from .model_adapters import ModelRequest, create_model_adapter
+from .model_adapters import ModelRequest, ModelResponse, create_model_adapter
 from .operational_memory import (
     apply_event_to_memory,
     create_operational_memory_checkpoint,
@@ -65,6 +67,7 @@ ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_BENCHMARK_PATH = ROOT / "research" / "benchmarks" / "seed_tasks.json"
 DEFAULT_STACK_PATH = ROOT / "research" / "agents" / "initial_stack.json"
 EVALUATOR_REPAIR_BUDGET = 2
+TOOL_RUN_CHECKPOINT_SCHEMA = "agent-memory-tool-run-checkpoint/v0.1"
 
 
 @dataclass(frozen=True)
@@ -97,6 +100,7 @@ class BenchmarkRunConfig:
     probe_interval: int = 5
     probe_max_tokens: int = 1536
     memory_repair: bool = True
+    resume_from: str | None = None
 
 
 class BenchmarkRunner:
@@ -200,6 +204,21 @@ class BenchmarkRunner:
                 "model_trace_claim_count": model_trace_event.get("parsed_claim_count"),
                 "runtime_error": model_response.error,
                 "workspace_path": self._workspace_path_from_trace(trace_events),
+                "trace_journal_path": self._trace_journal_path_from_trace(
+                    trace_events
+                ),
+                "run_checkpoint_path": self._run_checkpoint_path_from_trace(
+                    trace_events
+                ),
+                "resumed_from_checkpoint": any(
+                    event.get("event_type") == "run_resume"
+                    for event in trace_events
+                ),
+                "resume_count": sum(
+                    1
+                    for event in trace_events
+                    if event.get("event_type") == "run_resume"
+                ),
                 "tool_loop_iterations": self._tool_loop_iterations(trace_events),
                 "closed_source_models_allowed": False,
             },
@@ -376,6 +395,15 @@ class BenchmarkRunner:
 
         task = self.get_task(task_id)
         return self.run_task(task, config)
+
+    def resume_task(self, checkpoint_path: Path | str) -> dict:
+        """Resume or materialize a tool run from a durable checkpoint."""
+
+        checkpoint = self._load_tool_run_checkpoint(Path(checkpoint_path))
+        config_payload = dict(checkpoint["config"])
+        config_payload["resume_from"] = str(Path(checkpoint_path).resolve())
+        config = BenchmarkRunConfig(**config_payload)
+        return self.run_task_id(str(checkpoint["task_id"]), config)
 
     def get_task(self, task_id: str) -> dict:
         """Return one benchmark task by ID."""
@@ -656,33 +684,100 @@ class BenchmarkRunner:
                 "LangGraph is not installed. Install langgraph to run --agent langgraph_tools."
             ) from exc
 
-        events: list[dict] = []
-        shadow_probe_events: list[dict] = []
-        workspace = self._tool_workspace_path(task, config)
+        resume_checkpoint = (
+            self._load_tool_run_checkpoint(Path(config.resume_from))
+            if config.resume_from
+            else None
+        )
+        if resume_checkpoint:
+            self._validate_tool_run_resume(
+                resume_checkpoint,
+                task=task,
+                config=config,
+            )
+            workspace = Path(resume_checkpoint["workspace_path"])
+            trace_journal_path = Path(
+                resume_checkpoint["trace_journal_path"]
+            )
+            run_checkpoint_path = Path(config.resume_from)
+            events = list(resume_checkpoint["events"])
+            shadow_probe_events = list(
+                resume_checkpoint.get("shadow_probe_events", [])
+            )
+            initial_state = self._deserialize_tool_agent_state(
+                resume_checkpoint["state"]
+            )
+            resume_next_node = str(resume_checkpoint["next_node"])
+            resume_count = int(resume_checkpoint.get("resume_count", 0)) + 1
+            self._reconcile_trace_journal(
+                trace_journal_path,
+                events,
+            )
+        else:
+            events: list[dict] = []
+            shadow_probe_events: list[dict] = []
+            workspace = self._tool_workspace_path(task, config)
+            trace_journal_path = (
+                workspace.parent / f"{workspace.name}.partial-trace.jsonl"
+            )
+            run_checkpoint_path = (
+                workspace.parent / f"{workspace.name}.run-checkpoint.json"
+            )
+            trace_journal_path.parent.mkdir(parents=True, exist_ok=True)
+            trace_journal_path.unlink(missing_ok=True)
+            run_checkpoint_path.unlink(missing_ok=True)
+            initial_state = {"prompt": self._model_prompt(task, config)}
+            resume_next_node = "receive_goal"
+            resume_count = 0
         scenario = self._coding_tool_scenario(task)
 
         def add(event_type: str, *, graph_node: str, **payload: object) -> str:
             sequence_number = len(events) + 1
             event_id = f"{task['task_id']}:event:{sequence_number:03d}"
-            events.append(
-                {
-                    "event_id": event_id,
-                    "event_type": event_type,
-                    "sequence_number": sequence_number,
-                    "observed_at": utc_timestamp(),
-                    "framework": "langgraph_tools",
-                    "graph_node": graph_node,
-                    **payload,
-                }
-            )
+            event = {
+                "event_id": event_id,
+                "event_type": event_type,
+                "sequence_number": sequence_number,
+                "observed_at": utc_timestamp(),
+                "framework": "langgraph_tools",
+                "graph_node": graph_node,
+                **payload,
+            }
+            events.append(event)
+            with trace_journal_path.open("a", encoding="utf-8") as journal:
+                journal.write(
+                    json.dumps(event, sort_keys=True, default=str) + "\n"
+                )
             return event_id
+
+        if resume_checkpoint and resume_next_node != END:
+            add(
+                "run_resume",
+                graph_node="resume",
+                content=(
+                    "Resumed the durable tool run from the last completed "
+                    "graph node without replaying earlier model actions."
+                ),
+                checkpoint_path=str(run_checkpoint_path.resolve()),
+                resume_count=resume_count,
+                next_node=resume_next_node,
+                workspace_path=str(workspace.resolve()),
+                source_type="runtime",
+                source_event_ids=[
+                    initial_state["last_event_id"]
+                ]
+                if initial_state.get("last_event_id")
+                else [],
+            )
 
         class ToolAgentState(TypedDict, total=False):
             prompt: str
             goal_event_id: str
             memory_event_id: str
             action_count: int
+            no_progress_action_count: int
             current_action: Optional[dict]
+            current_attempted_action: str
             current_model_event_id: str
             current_parse_status: str
             last_event_id: str
@@ -711,12 +806,15 @@ class BenchmarkRunner:
                 "prompt",
                 graph_node="receive_goal",
                 prompt=task["goal"],
+                trace_journal_path=str(trace_journal_path.resolve()),
+                run_checkpoint_path=str(run_checkpoint_path.resolve()),
                 source_type="user_instruction",
                 source_event_ids=[],
             )
             return {
                 "goal_event_id": goal_event_id,
                 "action_count": 0,
+                "no_progress_action_count": 0,
                 "evidence_ledger": [],
                 "recent_observations": [],
                 "finish_proposal_count": 0,
@@ -929,6 +1027,13 @@ class BenchmarkRunner:
                 scenario,
                 canonical_ledger,
                 state.get("recent_observations", []),
+                no_progress_action_count=state.get(
+                    "no_progress_action_count",
+                    0,
+                ),
+                enforce_no_progress_guard=(
+                    config.runtime != "deterministic"
+                ),
             )
             memory_view = build_agent_memory_view(
                 canonical_ledger,
@@ -987,15 +1092,25 @@ class BenchmarkRunner:
                 ),
                 config,
                 response_schema=(
-                    self._tool_action_response_schema(available_actions)
+                    self._tool_action_response_schema(
+                        available_actions,
+                        workspace_files=sorted(scenario["initial_files"]),
+                    )
                     if config.constrained_actions
                     else None
                 ),
             )
             parsed_action = self._parse_tool_action_response(action_response.text)
             action = parsed_action.get("action_payload")
+            attempted_action = str(
+                parsed_action.get("attempted_action") or ""
+            )
             if action and action["action"] not in available_actions:
-                parsed_action = {"parse_status": "unavailable_action"}
+                parsed_action = {
+                    "parse_status": "unavailable_action",
+                    "attempted_action": action["action"],
+                }
+                attempted_action = action["action"]
                 action = None
             model_event_id = add(
                 "model_response",
@@ -1021,12 +1136,17 @@ class BenchmarkRunner:
                 thinking=config.thinking,
                 parse_status=parsed_action["parse_status"],
                 parsed_action=action,
+                attempted_action=attempted_action or None,
                 parsed_claim_count=0,
                 structured_output_requested=config.constrained_actions,
                 available_actions=available_actions,
                 memory_condition=config.memory_condition,
                 memory_view_active=memory_view["active"],
                 memory_operations=memory_view["operations"],
+                no_progress_action_count=state.get(
+                    "no_progress_action_count",
+                    0,
+                ),
                 replan_required=replan_required,
                 repaired_memory_id=(
                     pending_repair["repaired_memory_id"]
@@ -1080,6 +1200,7 @@ class BenchmarkRunner:
             )
             result = {
                 "current_action": action,
+                "current_attempted_action": attempted_action,
                 "current_model_event_id": model_event_id,
                 "current_parse_status": parsed_action["parse_status"],
                 "model_response": action_response,
@@ -1099,6 +1220,9 @@ class BenchmarkRunner:
             action = state.get("current_action")
             ledger = list(state.get("evidence_ledger", []))
             observations = list(state.get("recent_observations", []))
+            no_progress_count = int(
+                state.get("no_progress_action_count", 0)
+            )
             update: dict[str, object] = {"action_count": action_count}
 
             if not action:
@@ -1115,6 +1239,11 @@ class BenchmarkRunner:
                         "available for the current evidence state."
                     ),
                     rejected_response=raw_response[:1000],
+                    rejected_action=(
+                        {"action": state["current_attempted_action"]}
+                        if state.get("current_attempted_action")
+                        else None
+                    ),
                     parse_status=state.get("current_parse_status"),
                     status="rejected",
                     source_type="parser",
@@ -1125,6 +1254,7 @@ class BenchmarkRunner:
                     {
                         "last_event_id": error_event_id,
                         "recent_observations": observations[-6:],
+                        "no_progress_action_count": no_progress_count + 1,
                     }
                 )
                 return update
@@ -1157,6 +1287,7 @@ class BenchmarkRunner:
                     {
                         "last_event_id": error_event_id,
                         "recent_observations": observations[-6:],
+                        "no_progress_action_count": no_progress_count + 1,
                     }
                 )
                 return update
@@ -1225,6 +1356,7 @@ class BenchmarkRunner:
                             }
                         )
                     else:
+                        repair_succeeded = False
                         repair_plan = plan_memory_repair(
                             proposal["reasons"],
                             ledger,
@@ -1463,6 +1595,11 @@ class BenchmarkRunner:
                                 ),
                                 "repair_tool_call_count": repair_tool_calls,
                                 "repair_success_count": repair_successes,
+                                "no_progress_action_count": (
+                                    0
+                                    if repair_succeeded
+                                    else no_progress_count + 1
+                                ),
                                 "post_block_tool_calls": (
                                     state.get("post_block_tool_calls", 0)
                                     + repair_tool_calls
@@ -1524,6 +1661,7 @@ class BenchmarkRunner:
                     {
                         "last_event_id": error_event_id,
                         "recent_observations": observations[-6:],
+                        "no_progress_action_count": no_progress_count + 1,
                     }
                 )
                 return update
@@ -1590,6 +1728,33 @@ class BenchmarkRunner:
                         )
                     ),
                     "recent_observations": observations[-6:],
+                    "no_progress_action_count": (
+                        0
+                        if action["action"] in {"write_file", "apply_patch"}
+                        else (
+                            3
+                            if (
+                                action["action"]
+                                in {
+                                    "run_targeted_tests",
+                                    "run_tests",
+                                    "run_full_tests",
+                                }
+                                and tool_event.get("status") == "success"
+                                and any(
+                                    entry.get("tool_name")
+                                    in {"write_file", "apply_patch"}
+                                    and entry.get("status") == "success"
+                                    for entry in ledger
+                                )
+                            )
+                            else (
+                                0
+                                if action["action"] == "read_test_failure"
+                                else no_progress_count + 1
+                            )
+                        )
+                    ),
                     "post_block_tool_calls": post_block_tool_calls,
                     "workspace_revision": workspace_revision,
                     "applied_requirement_updates": applied_updates,
@@ -1703,15 +1868,76 @@ class BenchmarkRunner:
             )
             return {}
 
+        def checkpointed(
+            handler,
+            next_node,
+        ):
+            def wrapped(state: ToolAgentState) -> dict:
+                update = handler(state) or {}
+                merged_state = {**state, **update}
+                resolved_next_node = (
+                    next_node(merged_state)
+                    if callable(next_node)
+                    else next_node
+                )
+                checkpoint = self._write_tool_run_checkpoint(
+                    run_checkpoint_path,
+                    task=task,
+                    config=config,
+                    workspace=workspace,
+                    trace_journal_path=trace_journal_path,
+                    events=events,
+                    shadow_probe_events=shadow_probe_events,
+                    state=merged_state,
+                    next_node=resolved_next_node,
+                    resume_count=resume_count,
+                    completed=resolved_next_node == END,
+                )
+                self._after_tool_run_checkpoint(checkpoint)
+                return update
+
+            return wrapped
+
         builder = StateGraph(ToolAgentState)
-        builder.add_node("receive_goal", receive_goal)
-        builder.add_node("retrieve_memory", retrieve_memory)
-        builder.add_node("choose_action", choose_action)
-        builder.add_node("process_action", process_action)
-        builder.add_node("decide_continue_or_terminate", decide_continue_or_terminate)
-        builder.add_node("evaluate_outcome", evaluate_outcome)
-        builder.add_node("emit_trace", emit_trace)
-        builder.set_entry_point("receive_goal")
+        builder.add_node(
+            "receive_goal",
+            checkpointed(receive_goal, "retrieve_memory"),
+        )
+        builder.add_node(
+            "retrieve_memory",
+            checkpointed(retrieve_memory, "choose_action"),
+        )
+        builder.add_node(
+            "choose_action",
+            checkpointed(choose_action, "process_action"),
+        )
+        builder.add_node(
+            "process_action",
+            checkpointed(process_action, "decide_continue_or_terminate"),
+        )
+        builder.add_node(
+            "decide_continue_or_terminate",
+            checkpointed(
+                decide_continue_or_terminate,
+                lambda state: (
+                    "evaluate_outcome"
+                    if state.get("terminated")
+                    else "choose_action"
+                ),
+            ),
+        )
+        builder.add_node(
+            "evaluate_outcome",
+            checkpointed(evaluate_outcome, "emit_trace"),
+        )
+        builder.add_node(
+            "emit_trace",
+            checkpointed(emit_trace, END),
+        )
+        if resume_next_node != END:
+            builder.set_entry_point(resume_next_node)
+        else:
+            builder.set_entry_point("emit_trace")
         builder.add_edge("receive_goal", "retrieve_memory")
         builder.add_edge("retrieve_memory", "choose_action")
         builder.add_edge("choose_action", "process_action")
@@ -1723,11 +1949,19 @@ class BenchmarkRunner:
         )
         builder.add_edge("evaluate_outcome", "emit_trace")
         builder.add_edge("emit_trace", END)
-        graph = builder.compile()
-        final_state = graph.invoke(
-            {"prompt": self._model_prompt(task, config)},
-            config={"recursion_limit": max(100, config.action_budget * 6)},
-        )
+        if resume_next_node == END:
+            final_state = initial_state
+        else:
+            graph = builder.compile()
+            final_state = graph.invoke(
+                initial_state,
+                config={
+                    "recursion_limit": max(
+                        100,
+                        config.action_budget * 6,
+                    )
+                },
+            )
         for probe_event in shadow_probe_events:
             probe_event["sequence_number"] = len(events) + 1
             events.append(probe_event)
@@ -3516,6 +3750,274 @@ class BenchmarkRunner:
                     entry[key] = event[key]
         return entry
 
+    @classmethod
+    def _model_visible_evidence_ledger(
+        cls,
+        evidence_ledger: list[dict],
+        *,
+        max_serialized_chars: int = 8_000,
+    ) -> list[dict]:
+        """Project canonical evidence into a bounded model-facing representation.
+
+        Canonical operational memory intentionally retains complete tool output,
+        evaluator diagnostics, requirement snapshots, and dependency metadata.
+        Sending that record verbatim duplicates large values and can exhaust a
+        local model's context window before it can replan. This projection keeps
+        the provenance and task-relevant payload while leaving canonical memory
+        unchanged for scoring and audit.
+        """
+
+        projected = [
+            cls._model_visible_evidence_entry(entry)
+            for entry in evidence_ledger
+        ]
+        if cls._serialized_chars(projected) <= max_serialized_chars:
+            return projected
+
+        # Preserve every evidence identity, but reduce older payloads first.
+        # The newest entry commonly contains the repair result that triggered
+        # the current replan and therefore remains the last item compacted.
+        for entry in projected[:-1]:
+            if "content" in entry:
+                entry["content"] = cls._bounded_prompt_text(
+                    entry["content"],
+                    400,
+                )
+            entry.pop("structured_output", None)
+            if cls._serialized_chars(projected) <= max_serialized_chars:
+                return projected
+
+        for entry in projected:
+            for key in list(entry):
+                if key not in {
+                    "memory_id",
+                    "event_id",
+                    "label",
+                    "event_type",
+                    "tool_name",
+                    "status",
+                    "source_type",
+                    "workspace_revision",
+                    "support_status",
+                    "stale",
+                    "path",
+                    "claim",
+                    "content",
+                    "diagnosis",
+                    "synthetic_memory_pressure",
+                }:
+                    entry.pop(key, None)
+            if "content" in entry:
+                entry["content"] = cls._bounded_prompt_text(
+                    entry["content"],
+                    240,
+                )
+            if cls._serialized_chars(projected) <= max_serialized_chars:
+                break
+
+        if cls._serialized_chars(projected) > max_serialized_chars:
+            for entry in projected:
+                if "diagnosis" in entry:
+                    continue
+                entry.pop("claim", None)
+                entry.pop("content", None)
+                entry.pop("label", None)
+                entry.pop("event_type", None)
+                entry.pop("source_type", None)
+                if cls._serialized_chars(projected) <= max_serialized_chars:
+                    break
+        return projected
+
+    @classmethod
+    def _model_visible_evidence_entry(cls, entry: dict) -> dict:
+        fields = [
+            "memory_id",
+            "event_id",
+            "label",
+            "event_type",
+            "tool_name",
+            "status",
+            "source_type",
+            "source_event_ids",
+            "workspace_revision",
+            "support_status",
+            "stale",
+            "path",
+            "paths",
+            "files",
+            "command",
+            "returncode",
+            "test_targets",
+            "test_count",
+            "claim",
+            "content",
+            "contradictions",
+            "invalidation_reasons",
+            "reconciliation_status",
+            "reconciles_memory_ids",
+            "synthetic_memory_pressure",
+            "provenance_lost",
+            "temporal_metadata_lost",
+        ]
+        projected = {
+            key: copy.deepcopy(entry[key])
+            for key in fields
+            if entry.get(key) not in (None, "", [], {})
+        }
+        if projected.get("support_status") == "supported":
+            projected.pop("support_status")
+        if projected.get("stale") is False:
+            projected.pop("stale")
+        if projected.get("reconciliation_status") == "current":
+            projected.pop("reconciliation_status")
+        if projected.get("source_event_ids") == [entry.get("event_id")]:
+            projected.pop("source_event_ids")
+        if entry.get("tool_name") == "setup_workspace":
+            projected.pop("files", None)
+        if projected.get("tool_name"):
+            projected.pop("label", None)
+            if projected.get("event_type") in {
+                "tool_call",
+                "file_state",
+                "file_state_change",
+                "test_change",
+                "evaluator_diagnosis",
+            }:
+                projected.pop("event_type", None)
+            if projected.get("source_type") in {
+                "file_state",
+                "tool_output",
+            }:
+                projected.pop("source_type", None)
+        if (
+            projected.get("memory_id")
+            and entry.get("tool_name")
+            not in {
+                "diagnose_evaluator_failure",
+                "refresh_requirements",
+            }
+            and not entry.get("reconciles_memory_ids")
+            and entry.get("support_status") in {None, "supported", "stale"}
+        ):
+            projected.pop("memory_id", None)
+        if "content" in projected:
+            projected["content"] = cls._bounded_prompt_text(
+                projected["content"],
+                1_600,
+            )
+        if projected.get("content") and entry.get("tool_name"):
+            projected.pop("claim", None)
+
+        tool_name = entry.get("tool_name")
+        structured_output = entry.get("structured_output")
+        if (
+            isinstance(structured_output, dict)
+            and tool_name == "diagnose_evaluator_failure"
+        ):
+            evaluator_failure = entry.get("evaluator_failure")
+            if not isinstance(evaluator_failure, dict):
+                evaluator_failure = {}
+            projected["diagnosis"] = {
+                key: value
+                for key, value in {
+                    "failed_components": copy.deepcopy(
+                        structured_output.get("failed_components", [])
+                    ),
+                    "visible_test_status": evaluator_failure.get(
+                        "visible_test_status"
+                    ),
+                    "hidden_validation_status": evaluator_failure.get(
+                        "hidden_validation_status"
+                    ),
+                    "changed_files": copy.deepcopy(
+                        structured_output.get("changed_files", [])
+                    ),
+                    "current_diff": cls._bounded_prompt_text(
+                        structured_output.get("current_diff", ""),
+                        900,
+                    ),
+                    "evaluator_output": cls._bounded_prompt_text(
+                        structured_output.get("evaluator_output", ""),
+                        1_100,
+                        preserve_tail=True,
+                    ),
+                    "latest_test_failure": cls._bounded_prompt_value(
+                        structured_output.get("latest_test_failure"),
+                    ),
+                }.items()
+                if value not in (None, "", [], {})
+            }
+        return projected
+
+    @classmethod
+    def _model_visible_recent_observations(
+        cls,
+        evidence_ledger: list[dict],
+        recent_observations: list[dict],
+    ) -> list[dict]:
+        ledger_event_ids = {
+            str(entry["event_id"])
+            for entry in evidence_ledger
+            if entry.get("event_id")
+        }
+        projected = []
+        for observation in recent_observations:
+            if str(observation.get("event_id", "")) in ledger_event_ids:
+                continue
+            bounded = {
+                key: copy.deepcopy(value)
+                for key, value in observation.items()
+                if value not in (None, "", [], {})
+            }
+            if "content" in bounded:
+                bounded["content"] = cls._bounded_prompt_text(
+                    bounded["content"],
+                    900,
+                    preserve_tail=(
+                        bounded.get("status") in {"failure", "rejected"}
+                    ),
+                )
+            projected.append(bounded)
+        return projected
+
+    @classmethod
+    def _bounded_prompt_value(cls, value: object) -> object:
+        if isinstance(value, str):
+            return cls._bounded_prompt_text(value, 1_200, preserve_tail=True)
+        if isinstance(value, list):
+            return [
+                cls._bounded_prompt_value(item)
+                for item in value[:20]
+            ]
+        if isinstance(value, dict):
+            return {
+                str(key): cls._bounded_prompt_value(item)
+                for key, item in list(value.items())[:24]
+            }
+        return copy.deepcopy(value)
+
+    @staticmethod
+    def _bounded_prompt_text(
+        value: object,
+        limit: int,
+        *,
+        preserve_tail: bool = False,
+    ) -> str:
+        text = str(value)
+        if len(text) <= limit:
+            return text
+        marker = "\n...[truncated for model context]...\n"
+        available = max(limit - len(marker), 0)
+        if preserve_tail:
+            head_length = available // 3
+            tail_length = available - head_length
+            return f"{text[:head_length]}{marker}{text[-tail_length:]}"
+        return f"{text[:available]}{marker}"
+
+    @staticmethod
+    def _serialized_chars(value: object) -> int:
+        return len(json.dumps(value, sort_keys=True, default=str))
+
     def _tool_action_prompt(
         self,
         task: dict,
@@ -3555,6 +4057,15 @@ class BenchmarkRunner:
                 f"{required_replan['repair_result_event_id']}. Do not reuse the "
                 "pre-repair plan without checking the repaired evidence.\n"
             )
+        model_visible_ledger = self._model_visible_evidence_ledger(
+            evidence_ledger
+        )
+        model_visible_observations = (
+            self._model_visible_recent_observations(
+                evidence_ledger,
+                recent_observations,
+            )
+        )
         return (
             "AGENT_MEMORY_TOOL_ACTION_REQUEST\n"
             "You are an autonomous coding agent. Choose exactly one next action as JSON.\n"
@@ -3566,31 +4077,27 @@ class BenchmarkRunner:
             "and git_diff to review edits; write_file or bounded apply_patch to "
             "change code; targeted tests while iterating; full tests before finish.\n"
             "Review the evidence ledger before acting. Do not repeat a successful "
-            "list_files, read_file, or run_tests action when no intervening write "
-            "could have changed its result. After inspection reveals that an "
-            "acceptance criterion is unmet, advance the task with write_file.\n"
+            "observation, search, dependency inspection, Git check, structured read, "
+            "or test action when no intervening write could have changed its result. "
+            "After inspection reveals that an acceptance criterion is unmet, advance "
+            "the task with write_file or apply_patch. Preserve existing behavior, "
+            "public APIs, and relevant tests unless the task explicitly requires "
+            "changing them; add regression coverage instead of replacing unrelated "
+            "coverage.\n"
             f"{unavailable_guidance}\n"
             f"{readiness_guidance}\n"
             f"{replan_guidance}"
-            "Schema examples:\n"
-            '{"action":"list_files"}\n'
+            "Action argument examples:\n"
             '{"action":"read_file","path":"config_parser.py"}\n'
-            '{"action":"search_code","query":"parse_line","path":"."}\n'
-            '{"action":"git_status"}\n'
-            '{"action":"git_diff"}\n'
             '{"action":"write_file","path":"config_parser.py","content":"..."}\n'
             '{"action":"apply_patch","patch":"--- a/config_parser.py\\n+++ b/config_parser.py\\n..."}\n'
-            '{"action":"read_structured_file","path":"config.json"}\n'
-            '{"action":"inspect_dependency","path":"config_parser.py","symbol":"parse_line"}\n'
             '{"action":"run_targeted_tests","targets":["test_config_parser.py"]}\n'
-            '{"action":"run_full_tests"}\n'
-            '{"action":"read_test_failure"}\n'
             '{"action":"finish","claim":"...","source_event_ids":["..."]}\n'
             'Every action must also include "beliefs":[{"belief_type":"file_state",'
             '"claim":"...","source_event_ids":["..."]}]. Include only beliefs '
-            "actually used to choose this action; use an empty list when none were "
-            "used. Belief types are file_state, test_state, requirement_state, "
-            "task_state, repository_state, or source_support.\n"
+            "used to choose this action, at most four; use [] when none were used. "
+            "Belief types: file_state, test_state, requirement_state, task_state, "
+            "repository_state, source_support.\n"
             "For write_file, content must be the complete replacement file contents.\n"
             "For every action, cite exact evidence event IDs in both the relevant "
             "belief and top-level source_event_ids. For finish, write your own claim. "
@@ -3600,8 +4107,10 @@ class BenchmarkRunner:
             f"Required subtasks: {json.dumps(required_subtasks)}\n"
             f"Workspace files: {json.dumps(sorted(scenario['initial_files']))}\n"
             f"Action budget: {action_count}/{config.action_budget}\n"
-            f"Evidence ledger: {json.dumps(evidence_ledger, indent=2, sort_keys=True)}\n"
-            f"Recent observations: {json.dumps(recent_observations, indent=2, sort_keys=True)}\n"
+            "Evidence ledger: "
+            f"{json.dumps(model_visible_ledger, indent=2, sort_keys=True)}\n"
+            "Recent observations: "
+            f"{json.dumps(model_visible_observations, indent=2, sort_keys=True)}\n"
             f"{deterministic_hint}"
             "Return JSON only."
         )
@@ -3687,17 +4196,57 @@ class BenchmarkRunner:
         if action_name not in {
             "list_files",
             "read_file",
+            "read_structured_file",
+            "inspect_dependency",
+            "search_code",
+            "git_diff",
+            "git_status",
+            "read_test_failure",
             "run_tests",
             "run_full_tests",
+            "run_targeted_tests",
         }:
             return None
 
-        last_write_index = -1
-        if action_name == "read_file":
+        if action_name == "read_test_failure":
+            latest_failure_index = max(
+                (
+                    index
+                    for index, entry in enumerate(evidence_ledger)
+                    if entry.get("tool_name")
+                    in {"run_tests", "run_full_tests", "run_targeted_tests"}
+                    and entry.get("status") == "failure"
+                ),
+                default=-1,
+            )
+            latest_read_index = max(
+                (
+                    index
+                    for index, entry in enumerate(evidence_ledger)
+                    if entry.get("tool_name") == "read_test_failure"
+                    and entry.get("status") == "success"
+                ),
+                default=-1,
+            )
+            if latest_failure_index < 0 or latest_read_index < latest_failure_index:
+                return None
+            return (
+                "Rejected redundant read_test_failure: the latest failure has "
+                "already been read and no newer failing test exists."
+            )
+        if action_name == "list_files":
+            last_write_index = -1
+        elif action_name in {
+            "read_file",
+            "read_structured_file",
+            "inspect_dependency",
+        }:
             path = str(action.get("path", ""))
-            for index, entry in enumerate(evidence_ledger):
-                if (
-                    (
+            last_write_index = max(
+                (
+                    index
+                    for index, entry in enumerate(evidence_ledger)
+                    if (
                         entry.get("tool_name") == "write_file"
                         and entry.get("path") == path
                     )
@@ -3705,16 +4254,19 @@ class BenchmarkRunner:
                         entry.get("tool_name") == "apply_patch"
                         and path in entry.get("paths", [])
                     )
-                ):
-                    last_write_index = index
-            label = f"read_file:{path}"
-        elif action_name in {"run_tests", "run_full_tests"}:
-            for index, entry in enumerate(evidence_ledger):
-                if entry.get("tool_name") in {"write_file", "apply_patch"}:
-                    last_write_index = index
-            label = "run_tests"
+                ),
+                default=-1,
+            )
         else:
-            label = action_name
+            last_write_index = max(
+                (
+                    index
+                    for index, entry in enumerate(evidence_ledger)
+                    if entry.get("tool_name") in {"write_file", "apply_patch"}
+                ),
+                default=-1,
+            )
+        label = BenchmarkRunner._action_label(action)
 
         matching_indices = [
             index
@@ -3737,7 +4289,14 @@ class BenchmarkRunner:
             return {"parse_status": parsed.get("_parse_status", "unparsed")}
         action = str(parsed.get("action", "")).strip()
         if action not in CODING_TOOL_ACTIONS:
-            return {"parse_status": "invalid_action"}
+            return {
+                "parse_status": "invalid_action",
+                "attempted_action": action or None,
+            }
+        invalid_schema = {
+            "parse_status": "invalid_schema",
+            "attempted_action": action,
+        }
         payload = {"action": action}
         for key in [
             "path",
@@ -3759,22 +4318,22 @@ class BenchmarkRunner:
         }:
             path = str(payload.get("path", "")).strip()
             if not path:
-                return {"parse_status": "invalid_schema"}
+                return invalid_schema
             try:
                 BenchmarkRunner._safe_relative_path(path)
             except ValueError:
-                return {"parse_status": "invalid_schema"}
+                return invalid_schema
             payload["path"] = path
         if action == "write_file" and "content" not in payload:
-            return {"parse_status": "invalid_schema"}
+            return invalid_schema
         if action == "search_code" and not str(
             payload.get("query", "")
         ).strip():
-            return {"parse_status": "invalid_schema"}
+            return invalid_schema
         if action == "apply_patch" and not str(
             payload.get("patch", "")
         ).strip():
-            return {"parse_status": "invalid_schema"}
+            return invalid_schema
         if action == "run_targeted_tests":
             targets = payload.get("targets")
             if (
@@ -3782,10 +4341,10 @@ class BenchmarkRunner:
                 or not targets
                 or not all(str(target).strip() for target in targets)
             ):
-                return {"parse_status": "invalid_schema"}
+                return invalid_schema
             payload["targets"] = [str(target) for target in targets]
         if action == "finish" and not str(payload.get("claim", "")).strip():
-            return {"parse_status": "invalid_schema"}
+            return invalid_schema
         source_event_ids = parsed.get("source_event_ids", [])
         payload["source_event_ids"] = (
             [
@@ -3798,11 +4357,11 @@ class BenchmarkRunner:
         )
         beliefs = parsed.get("beliefs", [])
         if not isinstance(beliefs, list):
-            return {"parse_status": "invalid_schema"}
+            return invalid_schema
         normalized_beliefs = []
         for belief in beliefs:
             if not isinstance(belief, dict):
-                return {"parse_status": "invalid_schema"}
+                return invalid_schema
             belief_type = str(
                 belief.get("belief_type", "repository_state")
             )
@@ -3821,7 +4380,7 @@ class BenchmarkRunner:
                 or not claim
                 or not isinstance(belief_sources, list)
             ):
-                return {"parse_status": "invalid_schema"}
+                return invalid_schema
             normalized_beliefs.append(
                 {
                     "belief_type": belief_type,
@@ -3839,63 +4398,149 @@ class BenchmarkRunner:
     @staticmethod
     def _tool_action_response_schema(
         available_actions: list[str] | None = None,
+        *,
+        workspace_files: list[str] | None = None,
     ) -> dict:
         allowed = available_actions or list(CODING_TOOL_ACTIONS)
-        return {
-            "type": "object",
-            "properties": {
-                "action": {
-                    "type": "string",
-                    "enum": allowed,
-                },
-                "path": {"type": "string"},
-                "content": {"type": "string"},
-                "query": {"type": "string"},
-                "patch": {"type": "string"},
-                "symbol": {"type": "string"},
-                "targets": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                },
-                "claim": {"type": "string"},
-                "source_event_ids": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                },
-                "beliefs": {
-                    "type": "array",
-                    "maxItems": 8,
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "belief_type": {
-                                "type": "string",
-                                "enum": [
-                                    "file_state",
-                                    "test_state",
-                                    "requirement_state",
-                                    "task_state",
-                                    "repository_state",
-                                    "source_support",
-                                ],
-                            },
-                            "claim": {"type": "string"},
-                            "source_event_ids": {
-                                "type": "array",
-                                "items": {"type": "string"},
-                            },
-                        },
-                        "required": [
-                            "belief_type",
-                            "claim",
-                            "source_event_ids",
+        files = sorted(set(workspace_files or []))
+        structured_files = [
+            path
+            for path in files
+            if Path(path).suffix.lower()
+            in {".json", ".toml", ".yaml", ".yml", ".xml", ".plist"}
+        ]
+        python_files = [
+            path for path in files if Path(path).suffix.lower() == ".py"
+        ]
+        test_files = [
+            path
+            for path in python_files
+            if Path(path).name.startswith("test_")
+            or "tests" in Path(path).parts
+        ]
+
+        def path_schema(options: list[str]) -> dict:
+            if options:
+                return {"type": "string", "enum": options}
+            return {"type": "string", "minLength": 1}
+
+        source_event_ids_schema = {
+            "type": "array",
+            "items": {"type": "string"},
+        }
+        belief_schema = {
+            "type": "array",
+            "maxItems": 4,
+            "items": {
+                "type": "object",
+                "properties": {
+                    "belief_type": {
+                        "type": "string",
+                        "enum": [
+                            "file_state",
+                            "test_state",
+                            "requirement_state",
+                            "task_state",
+                            "repository_state",
+                            "source_support",
                         ],
-                        "additionalProperties": False,
+                    },
+                    "claim": {"type": "string"},
+                    "source_event_ids": {
+                        "$ref": "#/$defs/source_event_ids"
                     },
                 },
+                "required": [
+                    "belief_type",
+                    "claim",
+                    "source_event_ids",
+                ],
+                "additionalProperties": False,
             },
-            "required": ["action", "beliefs"],
-            "additionalProperties": False,
+        }
+        action_fields = {
+            "read_file": (
+                {"path": path_schema(files)},
+                ["path"],
+            ),
+            "write_file": (
+                {
+                    "path": path_schema(files),
+                    "content": {"type": "string", "minLength": 1},
+                },
+                ["path", "content"],
+            ),
+            "read_structured_file": (
+                {"path": path_schema(structured_files)},
+                ["path"],
+            ),
+            "inspect_dependency": (
+                {
+                    "path": path_schema(python_files),
+                    "symbol": {"type": "string"},
+                },
+                ["path"],
+            ),
+            "search_code": (
+                {
+                    "query": {"type": "string", "minLength": 1},
+                    "path": {"type": "string"},
+                },
+                ["query"],
+            ),
+            "apply_patch": (
+                {"patch": {"type": "string", "minLength": 1}},
+                ["patch"],
+            ),
+            "run_targeted_tests": (
+                {
+                    "targets": {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": path_schema(test_files),
+                    }
+                },
+                ["targets"],
+            ),
+            "finish": (
+                {"claim": {"type": "string", "minLength": 1}},
+                ["claim"],
+            ),
+        }
+        variants = []
+        for action_name in allowed:
+            specific_properties, specific_required = action_fields.get(
+                action_name,
+                ({}, []),
+            )
+            variants.append(
+                {
+                    "type": "object",
+                    "properties": {
+                        "action": {
+                            "type": "string",
+                            "const": action_name,
+                        },
+                        **specific_properties,
+                        "source_event_ids": {
+                            "$ref": "#/$defs/source_event_ids"
+                        },
+                        "beliefs": {"$ref": "#/$defs/beliefs"},
+                    },
+                    "required": [
+                        "action",
+                        *specific_required,
+                        "beliefs",
+                    ],
+                    "additionalProperties": False,
+                }
+            )
+        return {
+            "$defs": {
+                "source_event_ids": source_event_ids_schema,
+                "beliefs": belief_schema,
+            },
+            "oneOf": variants,
         }
 
     @classmethod
@@ -3904,6 +4549,9 @@ class BenchmarkRunner:
         scenario: dict,
         evidence_ledger: list[dict],
         recent_observations: list[dict],
+        *,
+        no_progress_action_count: int = 0,
+        enforce_no_progress_guard: bool = False,
     ) -> list[str]:
         latest_observation = (
             recent_observations[-1] if recent_observations else {}
@@ -3937,16 +4585,28 @@ class BenchmarkRunner:
                 "git_status",
                 "write_file",
                 "apply_patch",
-                "run_targeted_tests",
                 "inspect_dependency",
-                "read_structured_file",
             ]
         )
+        if any(
+            Path(path).suffix.lower()
+            in {".json", ".toml", ".yaml", ".yml", ".xml", ".plist"}
+            for path in scenario["initial_files"]
+        ):
+            available.append("read_structured_file")
+        if (
+            not enforce_no_progress_guard
+            or not cls._has_fresh_successful_test(evidence_ledger)
+        ):
+            available.append("run_targeted_tests")
         if any(
             entry.get("tool_name")
             in {"run_tests", "run_full_tests", "run_targeted_tests"}
             and entry.get("status") == "failure"
             for entry in evidence_ledger
+        ) and not cls._redundant_action_reason(
+            {"action": "read_test_failure"},
+            evidence_ledger,
         ):
             available.append("read_test_failure")
         if not cls._redundant_action_reason(
@@ -3955,7 +4615,67 @@ class BenchmarkRunner:
         ):
             available.extend(["run_tests", "run_full_tests"])
         available.append("finish")
+        if latest_observation.get("status") in {
+            "rejected",
+            "rejected_redundant",
+            "tool_error",
+        }:
+            rejected_action_name = rejected_action.get("action")
+            if rejected_action_name in available:
+                available.remove(rejected_action_name)
+        mutation_seen = any(
+            entry.get("tool_name") in {"write_file", "apply_patch"}
+            and entry.get("status") == "success"
+            for entry in evidence_ledger
+        )
+        forward_progress_actions = {
+            "write_file",
+            "apply_patch",
+            "finish",
+        }
+        if mutation_seen:
+            forward_progress_actions.update(
+                {
+                    "run_targeted_tests",
+                    "run_tests",
+                    "run_full_tests",
+                    "read_test_failure",
+                }
+            )
+        if (
+            enforce_no_progress_guard
+            and cls._consecutive_action_errors(recent_observations) >= 3
+        ):
+            available = [
+                action
+                for action in available
+                if action in forward_progress_actions
+            ]
+        no_progress_limit = 3 if mutation_seen else 4
+        if (
+            enforce_no_progress_guard
+            and no_progress_action_count >= no_progress_limit
+        ):
+            available = [
+                action
+                for action in available
+                if action in forward_progress_actions
+            ]
         return available
+
+    @staticmethod
+    def _consecutive_action_errors(recent_observations: list[dict]) -> int:
+        count = 0
+        for observation in reversed(recent_observations):
+            if observation.get("status") in {
+                "rejected",
+                "rejected_redundant",
+                "tool_error",
+            }:
+                count += 1
+                continue
+            break
+        return count
 
     @staticmethod
     def _has_fresh_successful_test(evidence_ledger: list[dict]) -> bool:
@@ -4026,11 +4746,17 @@ class BenchmarkRunner:
             "read_file",
             "write_file",
             "read_structured_file",
-            "inspect_dependency",
         }:
             return f"{action['action']}:{action['path']}"
+        if action["action"] == "inspect_dependency":
+            symbol = str(action.get("symbol") or "")
+            return (
+                f"inspect_dependency:{action['path']}"
+                f":{symbol}"
+            )
         if action["action"] == "search_code":
-            return f"search_code:{action['query']}"
+            path = str(action.get("path") or ".")
+            return f"search_code:{path}:{action['query']}"
         if action["action"] == "run_targeted_tests":
             return "run_targeted_tests:" + ",".join(action["targets"])
         if action["action"] == "run_full_tests":
@@ -4629,6 +5355,290 @@ class BenchmarkRunner:
             if event.get("workspace_path"):
                 return str(event["workspace_path"])
         return None
+
+    @staticmethod
+    def _trace_journal_path_from_trace(
+        trace_events: list[dict],
+    ) -> str | None:
+        for event in trace_events:
+            if event.get("trace_journal_path"):
+                return str(event["trace_journal_path"])
+        return None
+
+    @staticmethod
+    def _run_checkpoint_path_from_trace(
+        trace_events: list[dict],
+    ) -> str | None:
+        for event in trace_events:
+            if event.get("run_checkpoint_path"):
+                return str(event["run_checkpoint_path"])
+        return None
+
+    @staticmethod
+    def _tool_run_config_payload(config: BenchmarkRunConfig) -> dict:
+        payload = asdict(config)
+        payload["resume_from"] = None
+        return payload
+
+    @classmethod
+    def _tool_run_config_fingerprint(
+        cls,
+        config: BenchmarkRunConfig,
+    ) -> str:
+        serialized = json.dumps(
+            cls._tool_run_config_payload(config),
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _serialize_tool_agent_state(state: dict) -> dict:
+        payload = dict(state)
+        model_response = payload.get("model_response")
+        if isinstance(model_response, ModelResponse):
+            payload["model_response"] = {
+                "__type__": "ModelResponse",
+                "payload": model_response.to_dict(),
+            }
+        return payload
+
+    @staticmethod
+    def _deserialize_tool_agent_state(state: dict) -> dict:
+        payload = dict(state)
+        model_response = payload.get("model_response")
+        if (
+            isinstance(model_response, dict)
+            and model_response.get("__type__") == "ModelResponse"
+        ):
+            payload["model_response"] = ModelResponse(
+                **model_response["payload"]
+            )
+        return payload
+
+    @staticmethod
+    def _checkpoint_sha256(payload: dict) -> str:
+        unsigned = {
+            key: value
+            for key, value in payload.items()
+            if key != "sha256"
+        }
+        serialized = json.dumps(
+            unsigned,
+            sort_keys=True,
+            separators=(",", ":"),
+            default=str,
+        )
+        return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+    @classmethod
+    def _load_tool_run_checkpoint(cls, path: Path) -> dict:
+        if not path.is_file():
+            raise ValueError(f"Run checkpoint does not exist: {path}")
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"Run checkpoint is not valid JSON: {path}"
+            ) from exc
+        if payload.get("schema_version") != TOOL_RUN_CHECKPOINT_SCHEMA:
+            raise ValueError("Unsupported tool-run checkpoint schema")
+        expected = str(payload.get("sha256") or "")
+        if not expected or expected != cls._checkpoint_sha256(payload):
+            raise ValueError("Tool-run checkpoint integrity check failed")
+        required = {
+            "task_id",
+            "config",
+            "config_fingerprint",
+            "workspace_path",
+            "trace_journal_path",
+            "events",
+            "state",
+            "next_node",
+        }
+        missing = sorted(required - set(payload))
+        if missing:
+            raise ValueError(
+                "Tool-run checkpoint is missing fields: "
+                + ", ".join(missing)
+            )
+        return payload
+
+    @classmethod
+    def _validate_tool_run_resume(
+        cls,
+        checkpoint: dict,
+        *,
+        task: dict,
+        config: BenchmarkRunConfig,
+    ) -> None:
+        if checkpoint["task_id"] != task["task_id"]:
+            raise ValueError(
+                "Run checkpoint task does not match the requested task"
+            )
+        if (
+            checkpoint["config_fingerprint"]
+            != cls._tool_run_config_fingerprint(config)
+        ):
+            raise ValueError(
+                "Run checkpoint configuration does not match the requested run"
+            )
+        allowed_nodes = {
+            "receive_goal",
+            "retrieve_memory",
+            "choose_action",
+            "process_action",
+            "decide_continue_or_terminate",
+            "evaluate_outcome",
+            "emit_trace",
+            "__end__",
+        }
+        if checkpoint["next_node"] not in allowed_nodes:
+            raise ValueError("Run checkpoint contains an invalid next node")
+        workspace = Path(checkpoint["workspace_path"])
+        expected_snapshot = checkpoint.get("workspace_sha256")
+        if expected_snapshot is None:
+            if workspace.exists() and any(workspace.iterdir()):
+                raise ValueError(
+                    "Run checkpoint expected an uninitialized workspace"
+                )
+            return
+        if not workspace.is_dir():
+            raise ValueError(
+                f"Run checkpoint workspace does not exist: {workspace}"
+            )
+        actual_snapshot = repository_snapshot_sha256(workspace)
+        if actual_snapshot != expected_snapshot:
+            raise ValueError(
+                "Run checkpoint workspace hash does not match; refusing "
+                "to resume from mixed repository state"
+            )
+
+    @classmethod
+    def _write_tool_run_checkpoint(
+        cls,
+        path: Path,
+        *,
+        task: dict,
+        config: BenchmarkRunConfig,
+        workspace: Path,
+        trace_journal_path: Path,
+        events: list[dict],
+        shadow_probe_events: list[dict],
+        state: dict,
+        next_node: str,
+        resume_count: int,
+        completed: bool,
+    ) -> dict:
+        workspace_snapshot = (
+            repository_snapshot_sha256(workspace)
+            if workspace.is_dir() and any(workspace.iterdir())
+            else None
+        )
+        payload = {
+            "schema_version": TOOL_RUN_CHECKPOINT_SCHEMA,
+            "task_id": task["task_id"],
+            "config": cls._tool_run_config_payload(config),
+            "config_fingerprint": cls._tool_run_config_fingerprint(config),
+            "workspace_path": str(workspace.resolve()),
+            "workspace_sha256": workspace_snapshot,
+            "trace_journal_path": str(trace_journal_path.resolve()),
+            "events": events,
+            "shadow_probe_events": shadow_probe_events,
+            "state": cls._serialize_tool_agent_state(state),
+            "next_node": next_node,
+            "resume_count": resume_count,
+            "status": "completed" if completed else "running",
+            "updated_at": utc_timestamp(),
+        }
+        payload["sha256"] = cls._checkpoint_sha256(payload)
+        cls._write_json_atomic(path, payload)
+        return payload
+
+    @staticmethod
+    def _write_json_atomic(path: Path, payload: dict) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_name(path.name + ".tmp")
+        with temporary.open("w", encoding="utf-8") as handle:
+            json.dump(
+                payload,
+                handle,
+                indent=2,
+                sort_keys=True,
+                default=str,
+            )
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        temporary.replace(path)
+
+    @classmethod
+    def _reconcile_trace_journal(
+        cls,
+        path: Path,
+        checkpoint_events: list[dict],
+    ) -> None:
+        journal_events: list[dict] = []
+        if path.is_file():
+            try:
+                journal_events = [
+                    json.loads(line)
+                    for line in path.read_text(encoding="utf-8").splitlines()
+                    if line.strip()
+                ]
+            except json.JSONDecodeError as exc:
+                raise ValueError(
+                    "Trace journal contains invalid JSON and cannot be resumed"
+                ) from exc
+        checkpoint_ids = [
+            event.get("event_id")
+            for event in checkpoint_events
+        ]
+        common_length = min(
+            len(journal_events),
+            len(checkpoint_events),
+        )
+        journal_prefix_ids = [
+            event.get("event_id")
+            for event in journal_events[:common_length]
+        ]
+        if (
+            journal_prefix_ids
+            and journal_prefix_ids != checkpoint_ids[:common_length]
+        ):
+            raise ValueError(
+                "Trace journal does not match the durable run checkpoint"
+            )
+        orphaned_events = journal_events[len(checkpoint_events) :]
+        if orphaned_events:
+            orphan_digest = hashlib.sha256(
+                json.dumps(
+                    orphaned_events,
+                    sort_keys=True,
+                    default=str,
+                ).encode("utf-8")
+            ).hexdigest()[:12]
+            orphan_path = path.with_name(
+                f"{path.name}.orphaned-{orphan_digest}"
+            )
+            cls._write_jsonl_atomic(orphan_path, orphaned_events)
+        cls._write_jsonl_atomic(path, checkpoint_events)
+
+    @staticmethod
+    def _write_jsonl_atomic(path: Path, events: list[dict]) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_name(path.name + ".tmp")
+        with temporary.open("w", encoding="utf-8") as handle:
+            for event in events:
+                handle.write(
+                    json.dumps(event, sort_keys=True, default=str) + "\n"
+                )
+            handle.flush()
+            os.fsync(handle.fileno())
+        temporary.replace(path)
+
+    def _after_tool_run_checkpoint(self, checkpoint: dict) -> None:
+        """Test hook invoked only after the checkpoint is durable."""
 
     @staticmethod
     def _tool_loop_iterations(trace_events: list[dict]) -> int:

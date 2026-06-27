@@ -413,6 +413,48 @@ def test_cli_verify_table_output_surfaces_blocked_decisions(tmp_path: Path):
     assert "1" in result.stdout
 
 
+def test_cli_resume_materializes_completed_tool_run_checkpoint(
+    tmp_path: Path,
+):
+    pytest.importorskip("langgraph")
+
+    run = BenchmarkRunner().run_task_id(
+        "coding_stale_tests_001",
+        BenchmarkRunConfig(
+            framework="langgraph_tools",
+            trace_mode="model_driven",
+            action_budget=8,
+            workspace_root=str(tmp_path / "workspaces"),
+        ),
+    )
+    checkpoint_path = run["run_metadata"]["run_checkpoint_path"]
+    output_path = tmp_path / "resumed.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/agent_memory.py",
+            "resume",
+            "--checkpoint",
+            checkpoint_path,
+            "--out",
+            str(output_path),
+            "--format",
+            "json",
+        ],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    resumed = json.loads(output_path.read_text(encoding="utf-8"))
+    assert resumed["task_id"] == run["task_id"]
+    assert resumed["trace_events"] == run["trace_events"]
+    assert resumed["interaction_metrics"] == run["interaction_metrics"]
+    assert "Resumed Benchmark Run" not in result.stderr
+
+
 def test_cli_run_score_verify_and_compare_write_artifacts(tmp_path: Path):
     run_path = tmp_path / "baseline.json"
     score_path = tmp_path / "score.md"

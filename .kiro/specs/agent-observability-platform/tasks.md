@@ -1347,9 +1347,20 @@ Acceptance bar for unfinished research tasks:
     The next valid model-authored action is recorded as a `memory_replan` tied to the exact repair
     result and repaired memory item; invalid replans leave the obligation active. Run metrics
     separately count required, completed, and invalid replans._
-  - _Verification: Focused repair and runner suites pass: 90 passed. All research tests pass:
-    158 passed, 1 skipped. Full backend suite passes: 389 passed, 1 skipped. Task 38 remains open
-    only for 38.7 real local-model recovery evidence._
+  - _Run durability: Model-driven tool runs now atomically persist a checksummed run checkpoint
+    after every graph node, including the selected model action before tool execution. The
+    `agent-memory resume` command restores the exact workspace, trace, action counters, evidence
+    ledger, and pending repair/replan state without replaying completed model calls. Resume rejects
+    changed configurations, tampered checkpoints, and workspace-hash mismatches._
+  - _Real Devstral evidence: `devstral-small-2:24b-ctx8k` completed a real durable
+    `coding_stale_tests_001` verified run with 28 model actions, four blocked false
+    finish claims, two completed repair replans, zero accepted false completions,
+    and final hidden-evaluator failure due action-budget exhaustion. This is useful
+    failure evidence but does not satisfy 38.7 recovery._
+  - _Verification: All research tests pass: 184 passed, 1 skipped. Full backend
+    database-backed integration tests require PostgreSQL/TimescaleDB outside the
+    managed sandbox; the sandbox blocks localhost DB sockets. Task 38 remains open
+    for successful 38.7 real local-model recovery evidence._
 
 - [ ] 39. Implement intervention ablations
   - [ ] 39.1 Ordinary conversational-memory baseline

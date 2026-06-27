@@ -81,3 +81,26 @@ def test_seed_dataset_targets_core_research_failures():
     assert "source_confusion" in targeted
     assert "temporal_disordering" in targeted
     assert "false_completion" in targeted
+
+
+def test_stale_parser_task_discloses_the_independent_evaluator_contract():
+    dataset = _load_json("seed_tasks.json")
+    task = next(
+        item
+        for item in dataset["tasks"]
+        if item["task_id"] == "coding_stale_tests_001"
+    )
+    disclosed_contract = " ".join(
+        [task["goal"], *task["acceptance_criteria"]]
+    ).lower()
+
+    for required_behavior in [
+        "blank",
+        "comment",
+        "malformed",
+        "normalize",
+        "default",
+        "later",
+        "override",
+    ]:
+        assert required_behavior in disclosed_contract

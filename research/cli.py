@@ -62,6 +62,19 @@ def main(argv: list[str] | None = None) -> int:
     run_parser.add_argument("--format", choices=["table", "json", "markdown"], default="table")
     run_parser.set_defaults(handler=_run_command)
 
+    resume_parser = subparsers.add_parser(
+        "resume",
+        help="Resume or materialize a durable model-driven tool run",
+    )
+    resume_parser.add_argument("--checkpoint", required=True)
+    resume_parser.add_argument("--out", required=True)
+    resume_parser.add_argument(
+        "--format",
+        choices=["table", "json", "markdown"],
+        default="table",
+    )
+    resume_parser.set_defaults(handler=_resume_command)
+
     score_parser = subparsers.add_parser("score", help="Score a saved run JSON")
     score_parser.add_argument("--run", required=True)
     score_parser.add_argument("--out")
@@ -253,6 +266,16 @@ def _run_command(args: argparse.Namespace) -> None:
         "written_paths": [str(path.resolve()) for path in written_paths],
     }
     _emit(payload, args.format, title="Benchmark Runs")
+
+
+def _resume_command(args: argparse.Namespace) -> None:
+    run = BenchmarkRunner().resume_task(Path(args.checkpoint))
+    written_paths = _write_runs([run], Path(args.out))
+    payload = {
+        "runs": [run],
+        "written_paths": [str(path.resolve()) for path in written_paths],
+    }
+    _emit(payload, args.format, title="Resumed Benchmark Run")
 
 
 def _score_command(args: argparse.Namespace) -> None:

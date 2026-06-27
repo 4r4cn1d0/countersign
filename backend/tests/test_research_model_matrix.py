@@ -244,8 +244,12 @@ def test_model_matrix_treats_memory_condition_as_a_paired_experiment_axis(
     } == {"full_history", "temporal_corruption"}
     assert (
         report["paired_statistics"]["analysis_unit"]
-        == "model-task-memory-condition-seed pair"
+        == "model-task-pressure-profile-seed pair"
     )
+    assert {
+        row["pressure_profile_id"] for row in report["tasks"]
+    } == {"full_history", "temporal_corruption"}
+    assert report["pressure_analysis"]["profile_summaries"]
 
 
 def test_model_matrix_rejects_probe_budget_too_small(tmp_path: Path):
@@ -646,12 +650,15 @@ def test_model_matrix_analysis_summarizes_artifact_rows(tmp_path: Path):
 
     report = analyze_model_matrix_manifest(Path(manifest["manifest_path"]))
 
-    assert report["schema_version"] == "agent-memory-model-matrix-analysis/v0.2"
+    assert report["schema_version"] == "agent-memory-model-matrix-analysis/v0.3"
     assert report["framework"] == "langgraph"
     assert report["successful_model_count"] == 1
     assert report["aggregate"]["baseline_task_rows"] == 1
     assert report["models"][0]["baseline_task_count"] == 1
     assert report["tasks"][0]["parse_status"] in {"json", "json_repaired", "unparsed"}
+    assert "execution_accounting" in report
+    assert "pressure_analysis" in report
+    assert report["tasks"][0]["pressure_profile_id"] == "full_history"
 
 
 def test_model_matrix_analysis_reports_langgraph_tool_reality_columns(tmp_path: Path):
