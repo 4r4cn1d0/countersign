@@ -8,9 +8,12 @@ import {
   Divider,
   Typography
 } from "@mui/material";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import ExpandMoreIconModule from "@mui/icons-material/ExpandMore";
 import type { TraceEvent } from "../types/observability";
 import { detectStructuredOutput, formatStructuredOutput, toNumber, toStringArray } from "../utils/format";
+import { unwrapMuiIcon } from "../utils/muiIcon";
+
+const ExpandMoreIcon = unwrapMuiIcon(ExpandMoreIconModule);
 
 interface ReasoningTraceViewProps {
   events: TraceEvent[];

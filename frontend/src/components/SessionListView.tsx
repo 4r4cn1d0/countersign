@@ -23,12 +23,16 @@ import {
   Tooltip,
   Typography
 } from "@mui/material";
-import SearchIcon from "@mui/icons-material/Search";
-import RefreshIcon from "@mui/icons-material/Refresh";
+import SearchIconModule from "@mui/icons-material/Search";
+import RefreshIconModule from "@mui/icons-material/Refresh";
 import type { AgentObserverApiClient } from "../api/client";
 import { apiClient } from "../api/client";
 import type { Session, SessionSearchFilters, SessionStatus } from "../types/observability";
 import { formatCurrency, formatDateTime, formatDuration, highlightParts, toNumber } from "../utils/format";
+import { unwrapMuiIcon } from "../utils/muiIcon";
+
+const SearchIcon = unwrapMuiIcon(SearchIconModule);
+const RefreshIcon = unwrapMuiIcon(RefreshIconModule);
 
 type SessionClient = Pick<AgentObserverApiClient, "listSessions" | "searchSessions">;
 

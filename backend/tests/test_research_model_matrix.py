@@ -126,6 +126,7 @@ def test_model_matrix_writes_runs_scores_verifications_and_comparisons(tmp_path:
 
 
 def test_model_matrix_runs_paired_multi_seed_trials_with_hashes(tmp_path: Path):
+    pytest.importorskip("langgraph")
     matrix_path = tmp_path / "matrix.json"
     matrix_path.write_text(
         json.dumps(
@@ -187,6 +188,7 @@ def test_model_matrix_runs_paired_multi_seed_trials_with_hashes(tmp_path: Path):
 def test_model_matrix_treats_memory_condition_as_a_paired_experiment_axis(
     tmp_path: Path,
 ):
+    pytest.importorskip("langgraph")
     matrix_path = tmp_path / "matrix.json"
     matrix_path.write_text(
         json.dumps(
@@ -358,6 +360,8 @@ def test_frozen_protocol_rejects_changed_experiment_in_same_output_dir(
 def test_runtime_failure_is_recorded_and_does_not_abort_remaining_trials(
     tmp_path: Path,
 ):
+    pytest.importorskip("langgraph")
+
     class OneFailureRunner(BenchmarkRunner):
         def run_task_id(self, task_id, config=None):
             if config.seed == 0 and config.agent_variant == "baseline":
@@ -619,6 +623,7 @@ def test_model_matrix_can_filter_to_one_configured_model(tmp_path: Path):
 
 
 def test_model_matrix_analysis_summarizes_artifact_rows(tmp_path: Path):
+    pytest.importorskip("langgraph")
     matrix_path = tmp_path / "matrix.json"
     matrix_path.write_text(
         json.dumps(

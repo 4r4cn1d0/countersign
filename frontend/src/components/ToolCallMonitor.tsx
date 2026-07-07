@@ -17,10 +17,14 @@ import {
   TextField,
   Typography
 } from "@mui/material";
-import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
-import TimerIcon from "@mui/icons-material/Timer";
+import ErrorOutlineIconModule from "@mui/icons-material/ErrorOutline";
+import TimerIconModule from "@mui/icons-material/Timer";
 import type { TraceEvent } from "../types/observability";
 import { formatDuration, toNumber } from "../utils/format";
+import { unwrapMuiIcon } from "../utils/muiIcon";
+
+const ErrorOutlineIcon = unwrapMuiIcon(ErrorOutlineIconModule);
+const TimerIcon = unwrapMuiIcon(TimerIconModule);
 
 interface ToolCallMonitorProps {
   events: TraceEvent[];

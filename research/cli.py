@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .runner import (
+    DEFAULT_MANUAL_LABELS_PATH,
     BenchmarkRunConfig,
     BenchmarkRunner,
     analyze_model_matrix_manifest,
@@ -217,7 +218,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     measurement_audit_parser.add_argument(
         "--labels",
-        default="research/benchmarks/manual_measurement_labels.json",
+        default=str(DEFAULT_MANUAL_LABELS_PATH),
     )
     measurement_audit_parser.add_argument(
         "--format",

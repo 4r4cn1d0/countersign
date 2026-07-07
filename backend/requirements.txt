@@ -17,6 +17,7 @@ boto3==1.34.34
 # Config & serialization
 PyYAML==6.0.1
 zstandard==0.22.0
+protobuf==4.25.3
 
 # Testing
 pytest==7.4.4

@@ -25,6 +25,7 @@ from .matrix_analysis import (
     write_model_matrix_analysis,
 )
 from .measurement_validation import (
+    DEFAULT_MANUAL_LABELS_PATH,
     load_manual_measurement_labels,
     validate_manual_measurements,
 )
@@ -82,6 +83,7 @@ __all__ = [
     "format_model_matrix_analysis_markdown",
     "write_model_matrix_analysis",
     "load_model_matrix",
+    "DEFAULT_MANUAL_LABELS_PATH",
     "load_manual_measurement_labels",
     "load_pressure_profiles",
     "resolve_pressure_profiles",

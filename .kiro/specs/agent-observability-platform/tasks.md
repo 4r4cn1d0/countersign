@@ -63,6 +63,36 @@ Minimum demo capabilities:
 
 ## Work Log
 
+- Date: 2026-07-07 (Session 25)
+- Author: Claude (environment audit and 38.7 recovery attempt)
+- Summary: Set up the local dev environment from scratch (Docker infra, backend venv,
+  frontend), which surfaced several real environment/test bugs: a missing `protobuf`
+  dependency breaking two backend test modules, four `test_research_model_matrix.py`
+  tests missing the `pytest.importorskip("langgraph")` guard used elsewhere in the same
+  file, a cwd-dependent hardcoded default path in the `measurement-audit` CLI that
+  diverged from `measurement_validation.py`'s own absolute-path constant, and a missing
+  `ripgrep` binary needed by the `search_code` coding tool. Fixed all four. Cleaned up
+  `runs/38-7-real-recovery/`, removing 15 dead-end/orphaned attempt directories with no
+  corresponding completed run artifact, keeping only the directories backing real
+  evidence. Attempted Task 38.7 with `qwen2.5-coder:7b-ctx16k` under
+  `memory_condition=full_history` (the least adversarial condition, not previously
+  completed) and a 60-action budget (the largest given to any model on this task).
+- Status: Full backend suite passes: 366 passed, 51 skipped. Frontend suite passes:
+  26 passed. The 38.7 attempt used its full 60-action budget, triggered two successful
+  repair/replan cycles, blocked 9 false finish proposals, and still ended in
+  `task_outcome=failed_without_accepted_finish` — the final blocker was a genuine
+  coding-capability gap (an unhandled `None` return from `parse_line` in
+  `config_loader.py`), not memory corruption alone. Task 38.7 remains open; this is the
+  sixth real-model attempt across three model families to fail to reach independently
+  verified recovery.
+- Next actions:
+  - Task 38.7 still needs either a stronger coding model, multiple seeds/retries, or a
+    reconsidered acceptance bar, since the current blocker looks more like base coding
+    capability than memory-specific failure.
+  - Consider documenting the `devstral-rerun-path-filter-budget40` run (40 actions, real
+    evidence already on disk) in this log, since it predates this session and was not
+    yet written up here.
+
 - Date: 2026-06-13 (Session 24)
 - Author: Codex (measurement validation and decision-linked beliefs)
 - Summary: Completed Tasks 35 and 36. Added a frozen manually labeled measurement fixture,
@@ -1357,10 +1387,32 @@ Acceptance bar for unfinished research tasks:
     finish claims, two completed repair replans, zero accepted false completions,
     and final hidden-evaluator failure due action-budget exhaustion. This is useful
     failure evidence but does not satisfy 38.7 recovery._
-  - _Verification: All research tests pass: 185 passed, 1 skipped. Full backend
-    database-backed integration tests require PostgreSQL/TimescaleDB outside the
-    managed sandbox; the sandbox blocks localhost DB sockets. Task 38 remains open
-    for successful 38.7 real local-model recovery evidence._
+  - _Real Qwen full-history evidence (2026-07-06/07): `qwen2.5-coder:7b-ctx16k` ran
+    `coding_stale_tests_001` verified with `memory_condition=full_history` (no
+    induced memory pressure) and a 60-action budget, the largest budget and the
+    only condition-free run attempted for this task so far. Result: 60/60 actions
+    used, 9 blocked finish proposals, 2 successful repairs with 2 completed valid
+    replans (repair-budget cap reached at 2 as designed), 18 rejected redundant
+    actions, visible tests passing, and a final hidden-validator failure
+    (`TypeError: cannot unpack non-iterable NoneType object` in `config_loader.py`
+    — `parse_line` returns `None` on an input the model never handled). Outcome:
+    `task_outcome=failed_without_accepted_finish`,
+    `termination_reason=action_budget_exhaustion`,
+    `recovery_after_block=false`. Even with the least adversarial memory condition
+    and the largest budget given to any model on this task, the blocker at the end
+    was a genuine coding-capability gap rather than memory corruption alone
+    (`failure_attribution.memory_contributed=true` but not the sole cause). This is
+    the sixth real-model attempt across three model families (devstral x2, llama,
+    qwen x3) that has failed to reach independently verified recovery. Artifact:
+    `runs/38-7-real-recovery/qwen-full-history-attempt/coding_stale_tests_001_verified.json`._
+  - _Verification: Full backend suite passes: 366 passed, 51 skipped (2026-07-07,
+    after fixing a missing `protobuf` dependency, adding missing
+    `pytest.importorskip("langgraph")` guards to 4 model-matrix tests, fixing a
+    cwd-dependent default path in the `measurement-audit` CLI, and installing
+    `ripgrep`). Frontend suite passes: 26 passed. Full backend database-backed
+    integration tests require PostgreSQL/TimescaleDB outside the managed sandbox;
+    the sandbox blocks localhost DB sockets. Task 38 remains open for successful
+    38.7 real local-model recovery evidence._
 
 - [ ] 39. Implement intervention ablations
   - [ ] 39.1 Ordinary conversational-memory baseline
