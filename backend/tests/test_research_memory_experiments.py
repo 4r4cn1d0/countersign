@@ -45,6 +45,9 @@ CODING_FIXTURE_TASK_IDS = {
     "coding_source_confusion_001",
     "coding_schema_migration_001",
     "coding_retry_policy_001",
+    "coding_easy_flag_default_001",
+    "coding_easy_greeting_format_001",
+    "coding_easy_list_dedupe_001",
 }
 
 

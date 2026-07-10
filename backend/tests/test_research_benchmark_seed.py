@@ -22,6 +22,7 @@ def test_seed_benchmark_matches_schema_contract():
 
     allowed_families = set(schema["families"])
     allowed_failure_modes = set(schema["failure_modes"])
+    allowed_tiers = set(schema["tiers"])
     required_fields = set(schema["task_fields"])
 
     seen_task_ids = set()
@@ -30,6 +31,7 @@ def test_seed_benchmark_matches_schema_contract():
         assert task["task_id"] not in seen_task_ids
         seen_task_ids.add(task["task_id"])
         assert task["family"] in allowed_families
+        assert task["tier"] in allowed_tiers
         assert set(task["failure_modes_targeted"]).issubset(allowed_failure_modes)
         assert task["open_source_constraints"]["closed_source_models_allowed"] is False
 

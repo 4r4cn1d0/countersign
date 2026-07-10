@@ -11,7 +11,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Optional, TypedDict
 from uuid import NAMESPACE_URL, uuid5
@@ -39,6 +39,7 @@ from .coding_environment import (
 )
 from .coding_scenarios import load_fixture_scenario
 from .labeling import label_high_risk_claims
+from .interventions import resolve_intervention
 from .memory_pressure import (
     build_agent_memory_view,
     validate_memory_condition,
@@ -100,6 +101,8 @@ class BenchmarkRunConfig:
     probe_interval: int = 5
     probe_max_tokens: int = 1536
     memory_repair: bool = True
+    intervention: str = "legacy"
+    verification_blocking: bool = True
     resume_from: str | None = None
 
 
@@ -121,6 +124,14 @@ class BenchmarkRunner:
 
     def run_task(self, task: dict, config: BenchmarkRunConfig | None = None) -> dict:
         run_config = config or BenchmarkRunConfig()
+        if run_config.intervention != "legacy":
+            spec = resolve_intervention(run_config.intervention)
+            run_config = replace(
+                run_config,
+                agent_variant=spec.agent_variant,
+                memory_repair=spec.memory_repair,
+                verification_blocking=spec.verification_blocking,
+            )
         stack = self._load_json(self.stack_path)
         self._validate_open_source_stack(stack, run_config)
         validate_memory_condition(run_config.memory_condition)
@@ -153,13 +164,19 @@ class BenchmarkRunner:
             {},
         )
 
+        intervention_key = (
+            f"intervention-{run_config.intervention}:"
+            if run_config.intervention != "legacy"
+            else ""
+        )
         run_key = (
             f"{task['task_id']}:{run_config.framework}:"
             f"{run_config.model_name}:{run_config.agent_variant}:"
             f"{run_config.trace_mode}:{run_config.memory_condition}:"
             f"{run_config.pressure_profile_id}:"
             f"probes-{run_config.task_state_probes}:"
-            f"repair-{run_config.memory_repair}:{run_config.seed}"
+            f"repair-{run_config.memory_repair}:"
+            f"{intervention_key}{run_config.seed}"
         )
         run_id = str(uuid5(NAMESPACE_URL, run_key))
 
@@ -197,6 +214,8 @@ class BenchmarkRunner:
                 "probe_interval": run_config.probe_interval,
                 "probe_max_tokens": run_config.probe_max_tokens,
                 "memory_repair": run_config.memory_repair,
+                "intervention": run_config.intervention,
+                "verification_blocking": run_config.verification_blocking,
                 "agent_framework_runtime": (
                     run_config.framework if run_config.framework != "react_custom" else None
                 ),
@@ -262,7 +281,7 @@ class BenchmarkRunner:
                 summarize_operational_memory(operational_memory)
             )
             run["memory_repair_summary"] = {
-                "schema_version": "agent-memory-repair-summary/v0.2",
+                "schema_version": "agent-memory-repair-summary/v0.3",
                 "enabled": run_config.memory_repair,
                 "detection_count": run["interaction_metrics"][
                     "memory_corruption_detections"
@@ -278,6 +297,12 @@ class BenchmarkRunner:
                 ],
                 "successful_recovery": run["interaction_metrics"][
                     "memory_repair_recovery"
+                ],
+                "contained_recovery": run["interaction_metrics"][
+                    "contained_recovery"
+                ],
+                "recovery_level": run["interaction_metrics"][
+                    "recovery_level"
                 ],
                 "attempts_by_type": run["interaction_metrics"][
                     "memory_repair_attempts_by_type"
@@ -1320,47 +1345,10 @@ class BenchmarkRunner:
                         events,
                         proposal_event_id,
                     )
-                    decision = "allow" if proposal["allow"] else "block"
-                    proposal_event["proposal_status"] = (
-                        "accepted" if proposal["allow"] else "blocked"
-                    )
-                    proposal_event["status"] = proposal_event["proposal_status"]
-                    decision_event_id = add(
-                        "verification_decision",
-                        graph_node="process_action",
-                        content=(
-                            "Accepted model-authored finish proposal."
-                            if proposal["allow"]
-                            else "Blocked model-authored finish proposal; gather fresh evidence."
-                        ),
-                        decision=decision,
-                        claim_event_id=proposal_event_id,
-                        claim_types=proposal["claim_types"],
-                        reasons=proposal["reasons"],
-                        recommended_actions=proposal["recommended_actions"],
-                        independent_evaluator_status=proposal[
-                            "independent_evaluation"
-                        ].get("status"),
-                        independent_visible_test_status=proposal[
-                            "independent_evaluation"
-                        ].get("visible_test_status"),
-                        independent_hidden_validation_status=proposal[
-                            "independent_evaluation"
-                        ].get("hidden_validation_status"),
-                        source_type="verification_policy",
-                        source_event_ids=[proposal_event_id],
-                    )
-                    if proposal["allow"]:
-                        update.update(
-                            {
-                                "last_event_id": decision_event_id,
-                                "accepted_finish_event_id": proposal_event_id,
-                                "termination_reason": "accepted_finish",
-                                "terminated": True,
-                            }
-                        )
-                    else:
-                        repair_succeeded = False
+                    allow = proposal["allow"]
+                    gate_override = False
+                    repair_plan = None
+                    if not allow:
                         repair_plan = plan_memory_repair(
                             proposal["reasons"],
                             ledger,
@@ -1377,6 +1365,92 @@ class BenchmarkRunner:
                             ),
                             repair_budget=EVALUATOR_REPAIR_BUDGET,
                         )
+                        if not config.verification_blocking and (
+                            not repair_plan["repairable"]
+                            or not repair_plan["action"]
+                            or repair_plan["budget_exhausted"]
+                        ):
+                            allow = True
+                            gate_override = True
+                    decision = "allow" if allow else "block"
+                    proposal_event["proposal_status"] = (
+                        "accepted" if allow else "blocked"
+                    )
+                    proposal_event["status"] = proposal_event["proposal_status"]
+                    if gate_override:
+                        decision_content = (
+                            "Accepted unverified finish proposal; the "
+                            "non-blocking gate records detections without "
+                            "a terminal veto."
+                        )
+                    elif allow:
+                        decision_content = (
+                            "Accepted model-authored finish proposal."
+                        )
+                    else:
+                        decision_content = (
+                            "Blocked model-authored finish proposal; gather fresh evidence."
+                        )
+                    decision_event_id = add(
+                        "verification_decision",
+                        graph_node="process_action",
+                        content=decision_content,
+                        decision=decision,
+                        gate_mode=(
+                            "blocking"
+                            if config.verification_blocking
+                            else "non_blocking"
+                        ),
+                        claim_event_id=proposal_event_id,
+                        claim_types=proposal["claim_types"],
+                        reasons=proposal["reasons"],
+                        recommended_actions=proposal["recommended_actions"],
+                        independent_evaluator_status=proposal[
+                            "independent_evaluation"
+                        ].get("status"),
+                        independent_visible_test_status=proposal[
+                            "independent_evaluation"
+                        ].get("visible_test_status"),
+                        independent_hidden_validation_status=proposal[
+                            "independent_evaluation"
+                        ].get("hidden_validation_status"),
+                        source_type="verification_policy",
+                        source_event_ids=[proposal_event_id],
+                    )
+                    if gate_override and repair_plan is not None:
+                        add(
+                            "memory_corruption_detection",
+                            graph_node="process_action",
+                            content=(
+                                "Detected an unsafe completion belief; the "
+                                "non-blocking gate recorded it and allowed "
+                                "the proposal through."
+                            ),
+                            detections=repair_plan["detections"],
+                            target_memory_ids=repair_plan[
+                                "target_memory_ids"
+                            ],
+                            repair_type=repair_plan["repair_type"],
+                            repairable=repair_plan["repairable"],
+                            repair_attempt=repair_plan["repair_attempt"],
+                            repair_budget=repair_plan["repair_budget"],
+                            budget_exhausted=repair_plan[
+                                "budget_exhausted"
+                            ],
+                            source_type="verification_policy",
+                            source_event_ids=[decision_event_id],
+                        )
+                    if allow:
+                        update.update(
+                            {
+                                "last_event_id": decision_event_id,
+                                "accepted_finish_event_id": proposal_event_id,
+                                "termination_reason": "accepted_finish",
+                                "terminated": True,
+                            }
+                        )
+                    else:
+                        repair_succeeded = False
                         detection_event_id = add(
                             "memory_corruption_detection",
                             graph_node="process_action",
@@ -1627,6 +1701,35 @@ class BenchmarkRunner:
                     }
                 )
                 return update
+
+            if config.agent_variant == "verified":
+                unsafe_reason = self._unsafe_mutation_reason(action, ledger)
+                if unsafe_reason:
+                    gate_event_id = add(
+                        "action_verification_decision",
+                        graph_node="process_action",
+                        content=unsafe_reason,
+                        decision="block",
+                        rejected_action=action,
+                        claim_types=["file_changed"],
+                        status="blocked_unsafe_action",
+                        workspace_path=str(workspace.resolve()),
+                        source_type="verification_policy",
+                        source_event_ids=[state["current_model_event_id"]],
+                    )
+                    observations.append(
+                        self._observation_from_event(events[-1])
+                    )
+                    update.update(
+                        {
+                            "last_event_id": gate_event_id,
+                            "recent_observations": observations[-6:],
+                            "no_progress_action_count": (
+                                no_progress_count + 1
+                            ),
+                        }
+                    )
+                    return update
 
             step = self._step_from_autonomous_action(action)
             workspace_revision = int(state.get("workspace_revision", 0))
@@ -2532,6 +2635,32 @@ class BenchmarkRunner:
                 "termination_reason",
                 "unknown",
             )
+        memory_repair_recovery = bool(
+            successful_repairs
+            and replanned_after_repair
+            and accepted_after_repair
+            and not accepted_false
+            and evaluation.get("status") == "success"
+        )
+        detected_corruption = bool(corruption_detections or blocked_false)
+        attempted_recovery = bool(
+            detected_corruption and (repair_plans or post_block_tools)
+        )
+        contained_recovery = bool(
+            attempted_recovery
+            and successful_repairs
+            and replanned_after_repair
+            and not accepted_false
+        )
+        recovery_level = 0
+        if detected_corruption:
+            recovery_level = 1
+        if attempted_recovery:
+            recovery_level = 2
+        if contained_recovery:
+            recovery_level = 3
+        if contained_recovery and memory_repair_recovery:
+            recovery_level = 4
         return {
             "finish_proposals": len(proposals),
             "false_finish_proposals": len(false_proposals),
@@ -2555,13 +2684,11 @@ class BenchmarkRunner:
             "memory_replans_required": len(required_replans),
             "memory_replans_completed": len(completed_replans),
             "memory_replans_invalid": len(invalid_replans),
-            "memory_repair_recovery": bool(
-                successful_repairs
-                and replanned_after_repair
-                and accepted_after_repair
-                and not accepted_false
-                and evaluation.get("status") == "success"
-            ),
+            "memory_repair_recovery": memory_repair_recovery,
+            "detected_corruption": detected_corruption,
+            "attempted_recovery": attempted_recovery,
+            "contained_recovery": contained_recovery,
+            "recovery_level": recovery_level,
             "recovery_after_block": bool(
                 block_sequences
                 and post_block_tools
@@ -2618,6 +2745,16 @@ class BenchmarkRunner:
                     and event.get("status") == "rejected_redundant"
                 ]
             ),
+            "prevented_unsafe_actions": len(
+                [
+                    event
+                    for event in events
+                    if event.get("event_type")
+                    == "action_verification_decision"
+                    and event.get("decision") == "block"
+                ]
+            ),
+            "prevented_unsafe_claims": len(blocked_proposals),
             "action_compliance_rate": BenchmarkRunner._action_compliance_rate(
                 events
             ),
@@ -4192,6 +4329,47 @@ class BenchmarkRunner:
         )
 
     @staticmethod
+    def _unsafe_mutation_reason(
+        action: dict,
+        evidence_ledger: list[dict],
+    ) -> str | None:
+        """Gate destructive file mutations whose memory basis is corrupted.
+
+        A mutation is unsafe when the newest operational-memory entry for the
+        target path is stale (invalidated by a later dependent change) or
+        contradicted by later evidence: the agent would replace current file
+        state based on a belief known to be wrong. A fresh read clears the
+        gate.
+        """
+
+        if action.get("action") not in {"write_file", "apply_patch"}:
+            return None
+        path = str(action.get("path", ""))
+        if not path:
+            return None
+        entries = [
+            entry
+            for entry in evidence_ledger
+            if entry.get("path") == path
+        ]
+        if not entries:
+            return None
+        latest = entries[-1]
+        if latest.get("support_status") == "contradicted":
+            return (
+                f"Blocked unsafe mutation of {path}: the newest memory of "
+                "this file is contradicted by later evidence. Read the "
+                "current file before replacing it."
+            )
+        if latest.get("stale"):
+            return (
+                f"Blocked unsafe mutation of {path}: the newest memory of "
+                "this file is stale. Read the current file before "
+                "replacing it."
+            )
+        return None
+
+    @staticmethod
     def _redundant_action_reason(
         action: dict,
         evidence_ledger: list[dict],
@@ -4933,6 +5111,29 @@ class BenchmarkRunner:
                 for event in evidence_events
             ):
                 coding_reasons.append("missing implementation-change evidence")
+            requirement_updates = [
+                event
+                for event in trace_events
+                if event.get("event_type") == "user_requirement_update"
+            ]
+            if requirement_updates:
+                last_update_sequence = max(
+                    event.get("sequence_number", 0)
+                    for event in requirement_updates
+                )
+                fresh_tests_after_update = any(
+                    event.get("tool_name")
+                    in {"run_tests", "run_full_tests", "run_targeted_tests"}
+                    and event.get("status") == "success"
+                    and event.get("sequence_number", 0)
+                    > last_update_sequence
+                    for event in trace_events
+                )
+                if not fresh_tests_after_update:
+                    coding_reasons.append(
+                        "unresolved requirement update newer than the "
+                        "latest successful test evidence"
+                    )
             proposal_event = events_by_id.get(proposal_event_id, {})
             workspace_path = proposal_event.get("workspace_path")
             if workspace_path:

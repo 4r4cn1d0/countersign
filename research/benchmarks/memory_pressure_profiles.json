@@ -75,6 +75,15 @@
       "induced_corruption": true
     },
     {
+      "profile_id": "lossy_low",
+      "condition": "lossy_compaction",
+      "severity": "low",
+      "severity_ordinal": 1,
+      "activation_action_count": 12,
+      "visible_evidence_window": 12,
+      "induced_corruption": true
+    },
+    {
       "profile_id": "lossy_medium",
       "condition": "lossy_compaction",
       "severity": "medium",
@@ -84,12 +93,39 @@
       "induced_corruption": true
     },
     {
+      "profile_id": "lossy_high",
+      "condition": "lossy_compaction",
+      "severity": "high",
+      "severity_ordinal": 3,
+      "activation_action_count": 4,
+      "visible_evidence_window": 4,
+      "induced_corruption": true
+    },
+    {
+      "profile_id": "distractor_low",
+      "condition": "distractor_pressure",
+      "severity": "low",
+      "severity_ordinal": 1,
+      "activation_action_count": 12,
+      "visible_evidence_window": 12,
+      "induced_corruption": true
+    },
+    {
       "profile_id": "distractor_medium",
       "condition": "distractor_pressure",
       "severity": "medium",
       "severity_ordinal": 2,
       "activation_action_count": 8,
       "visible_evidence_window": 8,
+      "induced_corruption": true
+    },
+    {
+      "profile_id": "distractor_high",
+      "condition": "distractor_pressure",
+      "severity": "high",
+      "severity_ordinal": 3,
+      "activation_action_count": 4,
+      "visible_evidence_window": 4,
       "induced_corruption": true
     },
     {

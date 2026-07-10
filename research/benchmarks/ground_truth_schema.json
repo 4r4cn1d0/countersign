@@ -13,7 +13,8 @@
     "ground_truth_checkpoints",
     "high_risk_claims",
     "success_criteria",
-    "failure_modes_targeted"
+    "failure_modes_targeted",
+    "tier"
   ],
   "families": [
     "coding",
@@ -54,5 +55,9 @@
     "file_changed",
     "source_supports_claim",
     "no_errors_present"
+  ],
+  "tiers": [
+    "easy",
+    "medium"
   ]
 }

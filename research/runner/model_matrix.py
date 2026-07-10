@@ -12,6 +12,7 @@ from typing import Any
 
 from .benchmark_runner import BenchmarkRunConfig, BenchmarkRunner
 from .comparison import compare_runs
+from .interventions import resolve_intervention
 from .experiment_protocol import (
     build_artifact_index,
     build_experiment_protocol,
@@ -69,6 +70,7 @@ def run_model_matrix(
     probe_interval: int | None = None,
     probe_max_tokens: int | None = None,
     memory_repair: bool | None = None,
+    interventions: list[str] | None = None,
     runner: BenchmarkRunner | None = None,
 ) -> dict:
     """Run paired baseline/verified trials under a frozen experiment protocol."""
@@ -76,7 +78,21 @@ def run_model_matrix(
     matrix = load_model_matrix(matrix_path)
     active_runtime = runtime or matrix.get("runtime", "ollama")
     active_framework = framework or matrix.get("framework", "react_custom")
-    active_variants = variants or ["baseline", "verified"]
+    intervention_mode = interventions is not None
+    if intervention_mode:
+        if not interventions:
+            raise ValueError(
+                "At least one intervention condition is required"
+            )
+        if variants is not None:
+            raise ValueError(
+                "Use interventions or variants, not both"
+            )
+        for name in interventions:
+            resolve_intervention(name)
+        active_variants = list(interventions)
+    else:
+        active_variants = variants or ["baseline", "verified"]
     if len(set(active_variants)) != len(active_variants):
         raise ValueError("Experiment variants must be unique")
     active_seeds = unique_ints(
@@ -255,6 +271,7 @@ def run_model_matrix(
             framework=active_framework,
             task_ids=active_task_ids,
             variants=active_variants,
+            intervention_mode=intervention_mode,
             seeds=active_seeds,
             temperature=active_temperature,
             max_tokens=active_max_tokens,
@@ -326,6 +343,7 @@ def run_model_matrix(
         "task_ids": active_task_ids,
         "model_names": [model["model_name"] for model in enabled_models],
         "variants": active_variants,
+        "interventions": list(interventions) if intervention_mode else None,
         "seeds": active_seeds,
         "temperature": active_temperature,
         "max_tokens": active_max_tokens,
@@ -399,6 +417,7 @@ def _run_one_model(
     framework: str,
     task_ids: list[str],
     variants: list[str],
+    intervention_mode: bool,
     seeds: list[int],
     temperature: float,
     max_tokens: int,
@@ -485,11 +504,19 @@ def _run_one_model(
                     f"{model_slug}:{task_id}:{profile_id}:seed-{seed}"
                 )
                 for variant in variants:
+                    if intervention_mode:
+                        spec = resolve_intervention(variant)
+                        row_agent_variant = spec.agent_variant
+                        row_intervention = variant
+                    else:
+                        row_agent_variant = variant
+                        row_intervention = "legacy"
                     run_config = BenchmarkRunConfig(
                         framework=framework,
                         model_family=model["model_family"],
                         model_name=model_name,
-                        agent_variant=variant,
+                        agent_variant=row_agent_variant,
+                        intervention=row_intervention,
                         seed=seed,
                         runtime=runtime,
                         runtime_endpoint=runtime_endpoint,
@@ -607,14 +634,19 @@ def _run_one_model(
                     result["runs"].append(run_info)
                     result["completed_run_count"] += 1
 
-                    if variant == "baseline":
+                    row_file_name = (
+                        f"{task_id}__{variant}.json"
+                        if intervention_mode
+                        else f"{task_id}.json"
+                    )
+                    if row_agent_variant == "baseline":
                         score_path = (
                             output_dir
                             / "scores"
                             / model_slug
                             / profile_id
                             / seed_dir
-                            / f"{task_id}.json"
+                            / row_file_name
                         )
                         _write_json(
                             score_path,
@@ -622,14 +654,14 @@ def _run_one_model(
                         )
                         run_info["score_json"] = str(score_path.resolve())
                         run_info["score_sha256"] = sha256_file(score_path)
-                    if variant == "verified":
+                    if row_agent_variant == "verified":
                         verification_path = (
                             output_dir
                             / "verifications"
                             / model_slug
                             / profile_id
                             / seed_dir
-                            / f"{task_id}.json"
+                            / row_file_name
                         )
                         _write_json(
                             verification_path,
@@ -642,20 +674,35 @@ def _run_one_model(
                             verification_path
                         )
 
-                baseline_path = run_paths.get(
-                    (task_id, profile_id, seed, "baseline")
-                )
-                verified_path = run_paths.get(
-                    (task_id, profile_id, seed, "verified")
-                )
-                if baseline_path and verified_path:
+                if intervention_mode:
+                    comparison_pairs = [
+                        ("memory_baseline", label)
+                        for label in variants
+                        if label != "memory_baseline"
+                    ]
+                else:
+                    comparison_pairs = [("baseline", "verified")]
+                for baseline_label, compared_label in comparison_pairs:
+                    baseline_path = run_paths.get(
+                        (task_id, profile_id, seed, baseline_label)
+                    )
+                    verified_path = run_paths.get(
+                        (task_id, profile_id, seed, compared_label)
+                    )
+                    if not (baseline_path and verified_path):
+                        continue
+                    comparison_file_name = (
+                        f"{task_id}__{compared_label}.json"
+                        if intervention_mode
+                        else f"{task_id}.json"
+                    )
                     comparison_path = (
                         output_dir
                         / "comparisons"
                         / model_slug
                         / profile_id
                         / f"seed-{seed}"
-                        / f"{task_id}.json"
+                        / comparison_file_name
                     )
                     baseline = _read_json(baseline_path)
                     verified = _read_json(verified_path)
@@ -672,6 +719,8 @@ def _run_one_model(
                             pressure_profile.get("severity_ordinal")
                         ),
                         "seed": seed,
+                        "baseline_condition": baseline_label,
+                        "compared_condition": compared_label,
                     }
                     _write_json(comparison_path, comparison)
                     result["comparisons"].append(

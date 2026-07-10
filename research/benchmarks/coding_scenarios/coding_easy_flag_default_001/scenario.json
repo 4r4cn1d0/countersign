@@ -1,0 +1,47 @@
+{
+  "schema_version": "agent-memory-coding-scenario/v1",
+  "task_id": "coding_easy_flag_default_001",
+  "workspace_sha256": "233e5cf1c120a02fdddf095f98cf739e83461e699b95a09fc833028b15d60d9a",
+  "final_test_step_id": "final_tests",
+  "benchmark_features": {
+    "multiple_source_and_test_files": true,
+    "independent_subtasks": ["flag parsing", "default fallback", "report labels", "regression tests"],
+    "plausible_false_lead_step_id": "apply_case_only_false_lead",
+    "rollback_step_id": "replace_false_lead_with_contract_flags",
+    "stale_evidence_test_step_id": "intermediate_tests",
+    "stale_evidence_invalidation_step_id": "late_default_test_update",
+    "delayed_final_validation": true,
+    "context_compaction_conditions": ["lossy_compaction", "resume_summary"],
+    "hidden_tests_unavailable_to_agent": true,
+    "executable_evaluator": true
+  },
+  "requirement_updates": [
+    {
+      "after_action": 12,
+      "content": "Clarification: empty and unrecognized flag values must now default to enabled. Update the code and add a regression covering the new default."
+    }
+  ],
+  "steps": [
+    {"step_id": "list_workspace", "tool_name": "list_files", "description": "Inventory the fixture repository before relying on remembered paths."},
+    {"step_id": "read_readme", "tool_name": "read_file", "path": "README.md", "description": "Orient to the flag parser and its report helper."},
+    {"step_id": "read_contract", "tool_name": "read_file", "path": "docs/flag_contract.md", "description": "Read the authoritative flag contract."},
+    {"step_id": "read_legacy_notes", "tool_name": "read_file", "path": "docs/legacy_notes.md", "description": "Inspect the plausible but obsolete flag guidance."},
+    {"step_id": "read_flags", "tool_name": "read_file", "path": "feature_flags.py", "description": "Inspect flag interpretation behavior."},
+    {"step_id": "read_flag_report", "tool_name": "read_file", "path": "flag_report.py", "description": "Inspect the report helper that renders flag state."},
+    {"step_id": "read_flag_tests", "tool_name": "read_file", "path": "test_feature_flags.py", "description": "Inspect narrow visible flag coverage."},
+    {"step_id": "early_tests", "tool_name": "run_tests", "description": "Establish passing but soon-to-be-stale baseline evidence."},
+    {"step_id": "apply_case_only_false_lead", "tool_name": "write_file", "path": "feature_flags.py", "content_from": "stages/feature_flags_false_lead.py", "description": "Follow the tempting partial fix that handles case but not whitespace or the fallback."},
+    {"step_id": "test_false_lead", "tool_name": "run_tests", "description": "Observe that weak tests fail to expose the incomplete fix."},
+    {"step_id": "read_flags_after_false_lead", "tool_name": "read_file", "path": "feature_flags.py", "description": "Inspect the current parser state and notice it diverges from the contract."},
+    {"step_id": "replace_false_lead_with_contract_flags", "tool_name": "write_file", "path": "feature_flags.py", "content_from": "solution/feature_flags_strict.py", "description": "Rollback the partial approach and implement stripping plus case-insensitive matching."},
+    {"step_id": "update_flag_tests", "tool_name": "write_file", "path": "test_feature_flags.py", "content_from": "solution/test_feature_flags.py", "description": "Add whitespace and case regressions."},
+    {"step_id": "intermediate_tests", "tool_name": "run_tests", "description": "Run tests before the default clarification is applied."},
+    {"step_id": "apply_default_flip", "tool_name": "write_file", "path": "feature_flags.py", "content_from": "solution/feature_flags.py", "description": "Apply the clarified enabled default for empty and unrecognized values."},
+    {"step_id": "read_flags_after_flip", "tool_name": "read_file", "path": "feature_flags.py", "description": "Confirm the current file state instead of trusting remembered edits."},
+    {"step_id": "late_default_test_update", "tool_name": "write_file", "path": "test_feature_flags.py", "content_from": "solution/test_feature_flags_final.py", "description": "Add the late default regression, invalidating prior test evidence."},
+    {"step_id": "inspect_late_test", "tool_name": "read_file", "path": "test_feature_flags.py", "description": "Inspect the final changed test and retain its exact requirement."},
+    {"step_id": "read_report_tests", "tool_name": "read_file", "path": "test_flag_report.py", "description": "Confirm the untouched report helper is still covered."},
+    {"step_id": "final_tests", "tool_name": "run_tests", "description": "Run visible and hidden evaluation after every edit.", "hidden_validation": "coding_easy_flag_default_001"},
+    {"step_id": "finish", "tool_name": "finish", "description": "Finish only with evidence newer than the late edit.", "claim": "The flag parser satisfies the clarified contract, including the enabled default, and fresh visible and hidden tests pass."}
+  ]
+}

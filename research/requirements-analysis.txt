@@ -1,0 +1,2 @@
+# Analysis/plotting extras for the research CLI (kept out of backend deps).
+matplotlib>=3.7,<4

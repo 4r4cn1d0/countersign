@@ -321,6 +321,10 @@ def test_langgraph_tool_agent_runs_real_coding_tool_loop(tmp_path: Path):
         "memory_replans_completed": 0,
         "memory_replans_invalid": 0,
         "memory_repair_recovery": False,
+        "detected_corruption": False,
+        "attempted_recovery": False,
+        "contained_recovery": False,
+        "recovery_level": 0,
         "recovery_after_block": False,
         "termination_reason": "accepted_finish",
         "evaluator_success": True,
@@ -332,6 +336,8 @@ def test_langgraph_tool_agent_runs_real_coding_tool_loop(tmp_path: Path):
         "invalid_model_action_count": 0,
         "unavailable_model_action_count": 0,
         "rejected_redundant_action_count": 0,
+        "prevented_unsafe_actions": 0,
+        "prevented_unsafe_claims": 0,
         "action_compliance_rate": 1.0,
         "protocol_completion_status": "accepted_finish",
         "task_outcome": "finished_and_passed",
@@ -408,7 +414,13 @@ def test_langgraph_tool_verified_variant_blocks_stale_test_claim(tmp_path: Path)
     assert run["interaction_metrics"]["memory_repair_attempts"] == 1
     assert run["interaction_metrics"]["memory_repair_successes"] == 1
     assert run["interaction_metrics"]["memory_repair_recovery"] is True
+    assert run["interaction_metrics"]["detected_corruption"] is True
+    assert run["interaction_metrics"]["attempted_recovery"] is True
+    assert run["interaction_metrics"]["contained_recovery"] is True
+    assert run["interaction_metrics"]["recovery_level"] == 4
     assert run["memory_repair_summary"]["successful_recovery"] is True
+    assert run["memory_repair_summary"]["contained_recovery"] is True
+    assert run["memory_repair_summary"]["recovery_level"] == 4
     stale_test_items = [
         item
         for item in run["operational_memory"]
@@ -2283,3 +2295,135 @@ def test_labeling_does_not_mark_verification_needs_as_success_claims():
     ]
 
     assert label_high_risk_claims(events, high_risk_claims) == []
+
+
+def test_graded_recovery_levels_are_ordered_and_monotonic():
+    def metrics(events, claims=()):
+        return BenchmarkRunner._interaction_metrics(
+            {"trace_events": list(events), "memory_claims": list(claims)}
+        )
+
+    evaluation_success = {
+        "event_type": "evaluation_result",
+        "sequence_number": 90,
+        "status": "success",
+    }
+    evaluation_failure = {
+        "event_type": "evaluation_result",
+        "sequence_number": 90,
+        "status": "failure",
+    }
+    termination = {
+        "event_type": "agent_termination",
+        "sequence_number": 95,
+        "termination_reason": "action_budget_exhaustion",
+    }
+    blocked_finish = {
+        "event_type": "completion_claim",
+        "tool_name": "finish",
+        "event_id": "finish-blocked",
+        "proposal_status": "blocked",
+        "sequence_number": 10,
+    }
+    stale_claim = {
+        "event_id": "finish-blocked",
+        "claim_type": "task_complete",
+        "stale": True,
+        "lost_provenance": False,
+        "support_status": "supported",
+    }
+    block_decision = {
+        "event_type": "verification_decision",
+        "decision": "block",
+        "claim_event_id": "finish-blocked",
+        "sequence_number": 10,
+    }
+    post_block_tool = {"event_type": "tool_call", "sequence_number": 20}
+    repair_plan = {
+        "event_type": "memory_repair_plan",
+        "repair_type": "stale_evidence",
+        "sequence_number": 30,
+    }
+    repair_result = {
+        "event_type": "memory_repair_result",
+        "status": "repaired",
+        "repair_type": "stale_evidence",
+        "replan_required": True,
+        "sequence_number": 31,
+    }
+    replan = {
+        "event_type": "memory_replan",
+        "status": "completed",
+        "sequence_number": 32,
+    }
+    accepted_finish = {
+        "event_type": "completion_claim",
+        "tool_name": "finish",
+        "event_id": "finish-accepted",
+        "proposal_status": "accepted",
+        "sequence_number": 40,
+    }
+    supported_claim = {
+        "event_id": "finish-accepted",
+        "claim_type": "task_complete",
+        "stale": False,
+        "lost_provenance": False,
+        "support_status": "supported",
+    }
+
+    observed = [
+        metrics([accepted_finish, evaluation_success], [supported_claim]),
+        metrics(
+            [blocked_finish, block_decision, termination, evaluation_failure],
+            [stale_claim],
+        ),
+        metrics(
+            [
+                blocked_finish,
+                block_decision,
+                post_block_tool,
+                termination,
+                evaluation_failure,
+            ],
+            [stale_claim],
+        ),
+        metrics(
+            [
+                blocked_finish,
+                block_decision,
+                post_block_tool,
+                repair_plan,
+                repair_result,
+                replan,
+                termination,
+                evaluation_failure,
+            ],
+            [stale_claim],
+        ),
+        metrics(
+            [
+                blocked_finish,
+                block_decision,
+                post_block_tool,
+                repair_plan,
+                repair_result,
+                replan,
+                accepted_finish,
+                evaluation_success,
+            ],
+            [stale_claim, supported_claim],
+        ),
+    ]
+
+    assert [run["recovery_level"] for run in observed] == [0, 1, 2, 3, 4]
+    for run in observed:
+        level = run["recovery_level"]
+        assert run["detected_corruption"] is (level >= 1)
+        assert run["attempted_recovery"] is (level >= 2)
+        assert run["contained_recovery"] is (level >= 3)
+        assert run["memory_repair_recovery"] is (level >= 4)
+
+    contained_only = observed[3]
+    assert contained_only["contained_recovery"] is True
+    assert contained_only["memory_repair_recovery"] is False
+    assert contained_only["evaluator_success"] is False

@@ -23,6 +23,17 @@ from .runner import (
     verify_run,
 )
 
+SEED_TASKS_PATH = Path(__file__).resolve().parent / "benchmarks" / "seed_tasks.json"
+
+
+def _task_ids_for_tier(tier: str) -> list[str]:
+    dataset = json.loads(SEED_TASKS_PATH.read_text(encoding="utf-8"))
+    return sorted(
+        task["task_id"]
+        for task in dataset["tasks"]
+        if task.get("tier") == tier and task.get("family") == "coding"
+    )
+
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="agent-memory")
@@ -34,6 +45,18 @@ def main(argv: list[str] | None = None) -> int:
     run_parser.add_argument("--model-family", default="qwen")
     run_parser.add_argument("--model", default="qwen2.5-coder:7b")
     run_parser.add_argument("--variant", default="baseline")
+    run_parser.add_argument(
+        "--intervention",
+        default="legacy",
+        choices=[
+            "legacy",
+            "memory_baseline",
+            "verification_only",
+            "repair_only",
+            "verification_and_repair",
+        ],
+        help="Intervention condition; overrides --variant and --memory-repair.",
+    )
     run_parser.add_argument("--runtime", default="deterministic")
     run_parser.add_argument("--runtime-endpoint")
     run_parser.add_argument("--prompt-template", default="default_react_memory_v0")
@@ -136,6 +159,11 @@ def main(argv: list[str] | None = None) -> int:
     matrix_parser.add_argument("--runtime-endpoint")
     matrix_parser.add_argument("--task", action="append", dest="tasks")
     matrix_parser.add_argument(
+        "--tier",
+        choices=["easy", "medium"],
+        help="Run all coding tasks in this tier (combines with --task).",
+    )
+    matrix_parser.add_argument(
         "--model",
         action="append",
         dest="models",
@@ -148,6 +176,17 @@ def main(argv: list[str] | None = None) -> int:
         help="Enable or disable runtime reasoning mode during action generation.",
     )
     matrix_parser.add_argument("--variant", action="append", dest="variants")
+    matrix_parser.add_argument(
+        "--interventions",
+        nargs="+",
+        choices=[
+            "memory_baseline",
+            "verification_only",
+            "repair_only",
+            "verification_and_repair",
+        ],
+        help="Intervention conditions to cross instead of variants.",
+    )
     matrix_parser.add_argument("--pull-missing", action="store_true")
     matrix_parser.add_argument(
         "--seed",
@@ -186,6 +225,54 @@ def main(argv: list[str] | None = None) -> int:
     matrix_parser.add_argument("--format", choices=["table", "json", "markdown"], default="table")
     matrix_parser.set_defaults(handler=_matrix_command)
 
+    pressure_parser = subparsers.add_parser(
+        "pressure-study",
+        help=(
+            "Run a paired dose-response memory-pressure study: identical "
+            "model/task/seed tuples under a control profile and graded "
+            "pressure severities."
+        ),
+    )
+    pressure_parser.add_argument("--out", required=True)
+    pressure_parser.add_argument(
+        "--matrix",
+        default="research/agents/model_matrix.json",
+    )
+    pressure_parser.add_argument("--agent", default="langgraph_tools")
+    pressure_parser.add_argument("--runtime", default=None)
+    pressure_parser.add_argument("--runtime-endpoint")
+    pressure_parser.add_argument("--task", action="append", dest="tasks")
+    pressure_parser.add_argument("--tier", choices=["easy", "medium"])
+    pressure_parser.add_argument("--model", action="append", dest="models")
+    pressure_parser.add_argument(
+        "--seed",
+        action="append",
+        type=int,
+        dest="seeds",
+    )
+    pressure_parser.add_argument(
+        "--profile",
+        action="append",
+        dest="profiles",
+        help=(
+            "Pressure profile IDs to pair (default: control_full_history, "
+            "lossy_low, lossy_medium, lossy_high)."
+        ),
+    )
+    pressure_parser.add_argument("--action-budget", type=int)
+    pressure_parser.add_argument("--max-tokens", type=int)
+    pressure_parser.add_argument(
+        "--task-state-probes",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+    )
+    pressure_parser.add_argument(
+        "--format",
+        choices=["table", "json", "markdown"],
+        default="table",
+    )
+    pressure_parser.set_defaults(handler=_pressure_study_command)
+
     matrix_list_parser = subparsers.add_parser("matrix-list", help="Show configured model matrix")
     matrix_list_parser.add_argument("--matrix", default="research/agents/model_matrix.json")
     matrix_list_parser.add_argument("--format", choices=["table", "json", "markdown"], default="table")
@@ -211,6 +298,29 @@ def main(argv: list[str] | None = None) -> int:
         default="table",
     )
     matrix_audit_parser.set_defaults(handler=_matrix_audit_command)
+
+    plot_parser = subparsers.add_parser(
+        "plot",
+        help="Render scientific figures from a model-matrix manifest",
+    )
+    plot_parser.add_argument("--manifest", required=True)
+    plot_parser.add_argument(
+        "--out",
+        default="research/reports/figures",
+    )
+    plot_parser.add_argument(
+        "--figure",
+        action="append",
+        dest="figures",
+        help="Figure name to render. Repeat for a subset; omit for all.",
+    )
+    plot_parser.add_argument("--dpi", type=int, default=150)
+    plot_parser.add_argument(
+        "--format",
+        choices=["table", "json", "markdown"],
+        default="table",
+    )
+    plot_parser.set_defaults(handler=_plot_command)
 
     measurement_audit_parser = subparsers.add_parser(
         "measurement-audit",
@@ -259,6 +369,7 @@ def _run_command(args: argparse.Namespace) -> None:
         probe_interval=args.probe_interval,
         probe_max_tokens=args.probe_max_tokens,
         memory_repair=args.memory_repair,
+        intervention=args.intervention,
     )
     runs = [runner.run_task_id(args.task, config)] if args.task else runner.run_all(config)
     written_paths = _write_runs(runs, Path(args.out))
@@ -337,13 +448,18 @@ def _bundle_command(args: argparse.Namespace) -> None:
 
 
 def _matrix_command(args: argparse.Namespace) -> None:
+    task_ids = args.tasks
+    if getattr(args, "tier", None):
+        task_ids = sorted(
+            set(task_ids or []) | set(_task_ids_for_tier(args.tier))
+        )
     manifest = run_model_matrix(
         Path(args.out),
         matrix_path=Path(args.matrix),
         runtime=args.runtime,
         runtime_endpoint=args.runtime_endpoint,
         framework=args.agent,
-        task_ids=args.tasks,
+        task_ids=task_ids,
         model_names=args.models,
         variants=args.variants,
         seeds=args.seeds,
@@ -365,10 +481,63 @@ def _matrix_command(args: argparse.Namespace) -> None:
         probe_interval=args.probe_interval,
         probe_max_tokens=args.probe_max_tokens,
         memory_repair=args.memory_repair,
+        interventions=args.interventions,
     )
     _emit(manifest, args.format, title="Model Matrix")
     if args.fail_under_minimum and not manifest["meets_minimum_successful_models"]:
         raise SystemExit(2)
+
+
+DEFAULT_PRESSURE_STUDY_PROFILES = [
+    "control_full_history",
+    "lossy_low",
+    "lossy_medium",
+    "lossy_high",
+]
+
+
+def _pressure_study_command(args: argparse.Namespace) -> None:
+    task_ids = args.tasks
+    if getattr(args, "tier", None):
+        task_ids = sorted(
+            set(task_ids or []) | set(_task_ids_for_tier(args.tier))
+        )
+    profiles = args.profiles or list(DEFAULT_PRESSURE_STUDY_PROFILES)
+    manifest = run_model_matrix(
+        Path(args.out),
+        matrix_path=Path(args.matrix),
+        runtime=args.runtime,
+        runtime_endpoint=args.runtime_endpoint,
+        framework=args.agent,
+        task_ids=task_ids,
+        model_names=args.models,
+        seeds=args.seeds,
+        max_tokens=args.max_tokens,
+        action_budget=args.action_budget,
+        pressure_profile_ids=profiles,
+        task_state_probes=args.task_state_probes,
+    )
+    report = analyze_model_matrix_manifest(Path(manifest["manifest_path"]))
+    report_path = Path(args.out) / "pressure_study_analysis.json"
+    report_path.write_text(
+        json.dumps(report, indent=2, default=str),
+        encoding="utf-8",
+    )
+    manifest["pressure_study_analysis_path"] = str(report_path.resolve())
+    manifest["dose_response"] = report["dose_response"]
+    _emit(manifest, args.format, title="Pressure Study")
+
+
+def _plot_command(args: argparse.Namespace) -> None:
+    from .plots import generate_figures
+
+    result = generate_figures(
+        Path(args.manifest),
+        Path(args.out),
+        figures=args.figures,
+        dpi=args.dpi,
+    )
+    _emit(result, args.format, title="Figures")
 
 
 def _matrix_list_command(args: argparse.Namespace) -> None:

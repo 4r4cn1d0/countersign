@@ -1,0 +1,47 @@
+{
+  "schema_version": "agent-memory-coding-scenario/v1",
+  "task_id": "coding_easy_greeting_format_001",
+  "workspace_sha256": "bf95de10aa3fc7877dcf91283e4c1102aa297d05ff13c2db23d2ed21763d66a5",
+  "final_test_step_id": "final_tests",
+  "benchmark_features": {
+    "multiple_source_and_test_files": true,
+    "independent_subtasks": ["name normalization", "guest fallback", "greeting format", "regression tests"],
+    "plausible_false_lead_step_id": "apply_notes_false_lead",
+    "rollback_step_id": "replace_false_lead_with_guest_fallback",
+    "stale_evidence_test_step_id": "intermediate_tests",
+    "stale_evidence_invalidation_step_id": "late_guest_test_update",
+    "delayed_final_validation": true,
+    "context_compaction_conditions": ["lossy_compaction", "resume_summary"],
+    "hidden_tests_unavailable_to_agent": true,
+    "executable_evaluator": true
+  },
+  "requirement_updates": [
+    {
+      "after_action": 12,
+      "content": "Clarification: names must be stripped of surrounding whitespace, and whitespace-only names use the guest fallback exactly like empty names. The claim in docs/NOTES.md is obsolete."
+    }
+  ],
+  "steps": [
+    {"step_id": "list_workspace", "tool_name": "list_files", "description": "Inventory the fixture repository before relying on remembered paths."},
+    {"step_id": "read_readme", "tool_name": "read_file", "path": "README.md", "description": "Orient to the greeting formatter and name helper."},
+    {"step_id": "read_contract", "tool_name": "read_file", "path": "docs/greeting_contract.md", "description": "Read the authoritative greeting contract."},
+    {"step_id": "read_stale_notes", "tool_name": "read_file", "path": "docs/NOTES.md", "description": "Inspect the plausible but obsolete working notes."},
+    {"step_id": "read_greeting", "tool_name": "read_file", "path": "greeting.py", "description": "Inspect greeting formatting behavior."},
+    {"step_id": "read_names", "tool_name": "read_file", "path": "names.py", "description": "Inspect the name normalization helper."},
+    {"step_id": "read_greeting_tests", "tool_name": "read_file", "path": "test_greeting.py", "description": "Inspect narrow visible greeting coverage."},
+    {"step_id": "early_tests", "tool_name": "run_tests", "description": "Establish passing but soon-to-be-stale baseline evidence."},
+    {"step_id": "apply_notes_false_lead", "tool_name": "write_file", "path": "greeting.py", "content_from": "stages/greeting_false_lead.py", "description": "Follow the obsolete notes and render blank names as 'Hello!'."},
+    {"step_id": "test_false_lead", "tool_name": "run_tests", "description": "Observe that weak tests fail to expose the wrong fallback."},
+    {"step_id": "read_greeting_after_false_lead", "tool_name": "read_file", "path": "greeting.py", "description": "Inspect the current formatter state and notice it contradicts the contract."},
+    {"step_id": "replace_false_lead_with_guest_fallback", "tool_name": "write_file", "path": "greeting.py", "content_from": "solution/greeting_guest_only.py", "description": "Rollback the notes-driven fallback and implement the exact guest fallback for empty names."},
+    {"step_id": "update_greeting_tests", "tool_name": "write_file", "path": "test_greeting.py", "content_from": "solution/test_greeting.py", "description": "Add the empty-name guest fallback regression."},
+    {"step_id": "intermediate_tests", "tool_name": "run_tests", "description": "Run tests before the whitespace clarification is applied."},
+    {"step_id": "apply_whitespace_normalization", "tool_name": "write_file", "path": "greeting.py", "content_from": "solution/greeting.py", "description": "Apply the clarified stripping and whitespace-only guest fallback."},
+    {"step_id": "read_greeting_after_fix", "tool_name": "read_file", "path": "greeting.py", "description": "Confirm the current file state instead of trusting remembered edits."},
+    {"step_id": "late_guest_test_update", "tool_name": "write_file", "path": "test_greeting.py", "content_from": "solution/test_greeting_final.py", "description": "Add the late stripping and whitespace-only regressions, invalidating prior test evidence."},
+    {"step_id": "inspect_late_test", "tool_name": "read_file", "path": "test_greeting.py", "description": "Inspect the final changed test and retain its exact requirement."},
+    {"step_id": "read_names_tests", "tool_name": "read_file", "path": "test_names.py", "description": "Confirm the untouched name helper is still covered."},
+    {"step_id": "final_tests", "tool_name": "run_tests", "description": "Run visible and hidden evaluation after every edit.", "hidden_validation": "coding_easy_greeting_format_001"},
+    {"step_id": "finish", "tool_name": "finish", "description": "Finish only with evidence newer than the late edit.", "claim": "The greeting formatter satisfies the clarified contract, including the guest fallback for empty and whitespace-only names, and fresh visible and hidden tests pass."}
+  ]
+}

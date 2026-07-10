@@ -29,6 +29,11 @@ from .measurement_validation import (
     load_manual_measurement_labels,
     validate_manual_measurements,
 )
+from .interventions import (
+    INTERVENTION_CONDITIONS,
+    InterventionSpec,
+    resolve_intervention,
+)
 from .memory_pressure import (
     load_pressure_profiles,
     resolve_pressure_profiles,
@@ -50,8 +55,11 @@ from .experiment_protocol import (
 )
 from .statistics import (
     build_paired_statistics,
+    cohens_h,
+    cohens_kappa,
     exact_mcnemar,
     paired_bootstrap_mean_difference,
+    survival_curve,
     wilson_interval,
 )
 from .verification import (
@@ -85,6 +93,9 @@ __all__ = [
     "load_model_matrix",
     "DEFAULT_MANUAL_LABELS_PATH",
     "load_manual_measurement_labels",
+    "INTERVENTION_CONDITIONS",
+    "InterventionSpec",
+    "resolve_intervention",
     "load_pressure_profiles",
     "resolve_pressure_profiles",
     "validate_manual_measurements",
@@ -108,7 +119,10 @@ __all__ = [
     "build_experiment_protocol",
     "sha256_file",
     "build_paired_statistics",
+    "cohens_h",
+    "cohens_kappa",
     "exact_mcnemar",
     "paired_bootstrap_mean_difference",
+    "survival_curve",
     "wilson_interval",
 ]

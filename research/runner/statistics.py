@@ -111,6 +111,118 @@ def paired_bootstrap_mean_difference(
     }
 
 
+def cohens_h(p1: float | None, p2: float | None) -> float | None:
+    """Return Cohen's h effect size between two proportions."""
+
+    if p1 is None or p2 is None:
+        return None
+    p1 = min(1.0, max(0.0, float(p1)))
+    p2 = min(1.0, max(0.0, float(p2)))
+    return round(
+        2 * math.asin(math.sqrt(p1)) - 2 * math.asin(math.sqrt(p2)),
+        6,
+    )
+
+
+def survival_curve(
+    durations: Iterable[float],
+    event_observed: Iterable[bool],
+) -> dict:
+    """Kaplan-Meier survival estimate with right-censoring.
+
+    ``durations`` holds the time of the event (for example the sequence
+    number of the first corrupted belief) or the last observation time for
+    censored subjects; ``event_observed`` marks whether the event occurred.
+    """
+
+    pairs = sorted(
+        zip(
+            [float(value) for value in durations],
+            [bool(value) for value in event_observed],
+        ),
+        key=lambda pair: pair[0],
+    )
+    if not pairs:
+        return {
+            "schema_version": "agent-memory-survival-curve/v0.1",
+            "subjects": 0,
+            "events": 0,
+            "points": [],
+            "median_time": None,
+        }
+    total = len(pairs)
+    event_times = sorted(
+        {time for time, observed in pairs if observed}
+    )
+    survival = 1.0
+    points = []
+    median_time = None
+    for time in event_times:
+        at_risk = sum(1 for value, _ in pairs if value >= time)
+        events = sum(
+            1 for value, observed in pairs if observed and value == time
+        )
+        if at_risk <= 0:
+            continue
+        survival *= 1 - events / at_risk
+        points.append(
+            {
+                "time": time,
+                "at_risk": at_risk,
+                "events": events,
+                "survival": round(survival, 6),
+            }
+        )
+        if median_time is None and survival <= 0.5:
+            median_time = time
+    return {
+        "schema_version": "agent-memory-survival-curve/v0.1",
+        "subjects": total,
+        "events": sum(1 for _, observed in pairs if observed),
+        "points": points,
+        "median_time": median_time,
+    }
+
+
+def cohens_kappa(
+    rater_a: Iterable[object],
+    rater_b: Iterable[object],
+) -> dict:
+    """Return Cohen's kappa for two raters over categorical labels."""
+
+    labels_a = list(rater_a)
+    labels_b = list(rater_b)
+    if len(labels_a) != len(labels_b):
+        raise ValueError("Rater label lists must have equal lengths")
+    total = len(labels_a)
+    if total == 0:
+        return {
+            "items": 0,
+            "observed_agreement": None,
+            "expected_agreement": None,
+            "kappa": None,
+        }
+    observed = sum(
+        1 for a, b in zip(labels_a, labels_b) if a == b
+    ) / total
+    categories = set(labels_a) | set(labels_b)
+    expected = sum(
+        (labels_a.count(category) / total)
+        * (labels_b.count(category) / total)
+        for category in categories
+    )
+    if expected >= 1.0:
+        kappa = 1.0 if observed >= 1.0 else 0.0
+    else:
+        kappa = (observed - expected) / (1 - expected)
+    return {
+        "items": total,
+        "observed_agreement": round(observed, 6),
+        "expected_agreement": round(expected, 6),
+        "kappa": round(kappa, 6),
+    }
+
+
 def build_paired_statistics(rows: list[dict]) -> dict:
     """Apply the frozen analysis plan and preserve an explicit exclusion ledger."""
 
@@ -171,6 +283,14 @@ def build_paired_statistics(rows: list[dict]) -> dict:
                 row.get("verified_memory_repair_recovery", False)
             ),
         ),
+        "contained_memory_recovery": (
+            lambda row: bool(
+                row.get("baseline_contained_recovery", False)
+            ),
+            lambda row: bool(
+                row.get("verified_contained_recovery", False)
+            ),
+        ),
     }
     binary_results = {}
     for name, (baseline_getter, verified_getter) in binary_metrics.items():
@@ -191,6 +311,14 @@ def build_paired_statistics(rows: list[dict]) -> dict:
                 else None
             ),
             "mcnemar": exact_mcnemar(baseline_values, verified_values),
+            "cohens_h_verified_minus_baseline": (
+                cohens_h(
+                    sum(verified_values) / len(eligible),
+                    sum(baseline_values) / len(eligible),
+                )
+                if eligible
+                else None
+            ),
         }
 
     continuous_results = {

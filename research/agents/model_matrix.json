@@ -8,6 +8,7 @@
       "Run one model at a time on local Ollama.",
       "Prefer 3B-12B quantized models for routine sweeps.",
       "Run Devstral Small 2 24B alone; its roughly 15 GB quantized footprint leaves limited but workable headroom on 24 GB unified memory.",
+      "Run Qwen2.5 Coder 32B alone and only as a capability-ceiling probe; its roughly 19 GB quantized footprint is tight on 24 GB unified memory.",
       "Run Gemma 4 12B MLX as a single-model check when thermal throttling or memory pressure is a concern.",
       "Do not count skipped or deterministic-fallback runs as real-runtime evidence."
     ]
@@ -39,6 +40,26 @@
       "role": "coding and tool-use baseline",
       "pull_command": "ollama pull qwen2.5-coder:7b",
       "enabled": true
+    },
+    {
+      "model_family": "qwen",
+      "model_name": "qwen2.5-coder:14b",
+      "display_name": "Qwen2.5 Coder 14B",
+      "approx_size_gb": 9.0,
+      "license_note": "Apache-2.0 family; code-specialized open-weight model.",
+      "role": "mid-tier coding model and primary recovery candidate",
+      "pull_command": "ollama pull qwen2.5-coder:14b",
+      "enabled": true
+    },
+    {
+      "model_family": "qwen",
+      "model_name": "qwen2.5-coder:32b",
+      "display_name": "Qwen2.5 Coder 32B",
+      "approx_size_gb": 19.0,
+      "license_note": "Apache-2.0 family; code-specialized open-weight model.",
+      "role": "capability-ceiling probe; single-model runs only on 24 GB unified memory",
+      "pull_command": "ollama pull qwen2.5-coder:32b",
+      "enabled": false
     },
     {
       "model_family": "llama",

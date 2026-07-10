@@ -69,8 +69,124 @@ def analyze_model_matrix_manifest(manifest_path: Path) -> dict:
             task_rows,
         ),
         "pressure_analysis": _pressure_analysis(task_rows),
+        "dose_response": dose_response_curves(task_rows),
         "limitations": manifest.get("limitations", []),
     }
+
+
+def dose_response_curves(task_rows: list[dict]) -> dict:
+    """Aggregate accuracy and failure dose-response data by severity.
+
+    Groups paired task rows by pressure severity ordinal and reports
+    per-action-index mean probe accuracy, accepted-false-finish rates,
+    and the distribution of first-corrupted-belief sequence numbers.
+    """
+
+    groups: dict[int, list[dict]] = defaultdict(list)
+    for row in task_rows:
+        ordinal = int(row.get("pressure_severity_ordinal") or 0)
+        groups[ordinal].append(row)
+
+    severities = []
+    for ordinal in sorted(groups):
+        rows = groups[ordinal]
+        row_count = len(rows)
+        accuracy_by_action: dict[int, list[float]] = defaultdict(list)
+        for row in rows:
+            for point in row.get("baseline_probe_trajectory") or []:
+                action = int(point.get("action_count") or 0)
+                accuracy_by_action[action].append(
+                    float(point.get("overall_accuracy") or 0.0)
+                )
+        first_corrupted = sorted(
+            row["baseline_first_stale_claim_sequence"]
+            for row in rows
+            if row.get("baseline_first_stale_claim_sequence") is not None
+        )
+        severities.append(
+            {
+                "pressure_severity_ordinal": ordinal,
+                "pressure_severity": rows[0].get(
+                    "pressure_severity",
+                    "unspecified",
+                ),
+                "row_count": row_count,
+                "baseline_accepted_false_finish_rate": round(
+                    sum(
+                        1
+                        for row in rows
+                        if int(
+                            row.get("baseline_accepted_false_finishes")
+                            or 0
+                        )
+                        > 0
+                    )
+                    / row_count,
+                    4,
+                ),
+                "verified_accepted_false_finish_rate": round(
+                    sum(
+                        1
+                        for row in rows
+                        if int(
+                            row.get("verified_accepted_false_finishes")
+                            or 0
+                        )
+                        > 0
+                    )
+                    / row_count,
+                    4,
+                ),
+                "verified_contained_recovery_rate": round(
+                    sum(
+                        1
+                        for row in rows
+                        if row.get("verified_contained_recovery")
+                    )
+                    / row_count,
+                    4,
+                ),
+                "mean_probe_accuracy_by_action": [
+                    {
+                        "action_count": action,
+                        "mean_overall_accuracy": round(
+                            mean(values),
+                            4,
+                        ),
+                        "sample_count": len(values),
+                    }
+                    for action, values in sorted(
+                        accuracy_by_action.items()
+                    )
+                ],
+                "first_corrupted_belief_sequences": first_corrupted,
+            }
+        )
+    return {
+        "schema_version": "agent-memory-dose-response/v0.1",
+        "severities": severities,
+    }
+
+
+def _first_corrupted_claim_sequence(run: dict | None) -> int | None:
+    """Sequence number of the earliest stale/contradicted/unsupported claim."""
+
+    if not run:
+        return None
+    events_by_id = {
+        event.get("event_id"): event
+        for event in run.get("trace_events", [])
+    }
+    sequences = [
+        events_by_id.get(claim.get("event_id"), {}).get("sequence_number")
+        for claim in run.get("memory_claims", [])
+        if claim.get("stale")
+        or claim.get("support_status") in {"contradicted", "unsupported"}
+    ]
+    numeric = [
+        sequence for sequence in sequences if isinstance(sequence, int)
+    ]
+    return min(numeric) if numeric else None
 
 
 def write_model_matrix_analysis(
@@ -141,12 +257,12 @@ def format_model_matrix_analysis_markdown(report: dict) -> str:
         "",
         "## Model Summary",
         "",
-        "| Model | Status | Pairs | Eligible | Baseline Accepted False | Blocked False | Repair Successes | Recovered Tasks | Verified Accepted False | Avg Extra Actions |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| Model | Status | Pairs | Eligible | Baseline Accepted False | Blocked False | Repair Successes | Contained Recoveries | Recovered Tasks | Verified Accepted False | Avg Extra Actions |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for model in report["models"]:
         lines.append(
-            "| `{model}` | `{status}` | {pairs} | {eligible} | {baseline_false} | {blocked_false} | {repair_successes} | {recoveries} | {verified_false} | {actions:.2f} |".format(
+            "| `{model}` | `{status}` | {pairs} | {eligible} | {baseline_false} | {blocked_false} | {repair_successes} | {contained} | {recoveries} | {verified_false} | {actions:.2f} |".format(
                 model=model["model_name"],
                 status=model["status"],
                 pairs=model["pair_count"],
@@ -160,6 +276,10 @@ def format_model_matrix_analysis_markdown(report: dict) -> str:
                 repair_successes=model[
                     "verified_memory_repair_success_count"
                 ],
+                contained=model.get(
+                    "verified_contained_recovery_count",
+                    0,
+                ),
                 recoveries=model[
                     "verified_memory_repair_recovery_count"
                 ],
@@ -175,13 +295,13 @@ def format_model_matrix_analysis_markdown(report: dict) -> str:
             "",
             "## Coding-Agent Intervention Matrix",
             "",
-            "| Model | Task | Pressure Profile | Severity | Seed | Eligible | Baseline Outcome | Verified Outcome | Baseline Memory Failure | Baseline Accepted False | Blocked False | Repair Attempts | Repair Recovery | Verified Accepted False | Baseline Structured Memory | Verified Structured Memory | Extra Actions |",
-            "|---|---|---|---|---:|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+            "| Model | Task | Pressure Profile | Severity | Seed | Eligible | Baseline Outcome | Verified Outcome | Baseline Memory Failure | Baseline Accepted False | Blocked False | Repair Attempts | Contained Recovery | Recovery Level | Repair Recovery | Verified Accepted False | Baseline Structured Memory | Verified Structured Memory | Extra Actions |",
+            "|---|---|---|---|---:|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
         ]
     )
     for row in report["tasks"]:
         lines.append(
-            "| `{model}` | `{task}` | `{profile}` | `{severity}` | {seed} | {eligible} | `{baseline_outcome}` | `{verified_outcome}` | {memory_failure} | {baseline_false} | {blocked_false} | {repair_attempts} | {repair_recovery} | {verified_false} | {baseline_structured} | {verified_structured} | {actions} |".format(
+            "| `{model}` | `{task}` | `{profile}` | `{severity}` | {seed} | {eligible} | `{baseline_outcome}` | `{verified_outcome}` | {memory_failure} | {baseline_false} | {blocked_false} | {repair_attempts} | {contained_recovery} | {recovery_level} | {repair_recovery} | {verified_false} | {baseline_structured} | {verified_structured} | {actions} |".format(
                 model=row["model_name"],
                 task=row["task_id"],
                 profile=row["pressure_profile_id"],
@@ -196,6 +316,11 @@ def format_model_matrix_analysis_markdown(report: dict) -> str:
                 baseline_false=row["baseline_accepted_false_finishes"],
                 blocked_false=row["verified_blocked_false_finishes"],
                 repair_attempts=row["verified_memory_repair_attempts"],
+                contained_recovery=row.get(
+                    "verified_contained_recovery",
+                    False,
+                ),
+                recovery_level=row.get("verified_recovery_level", 0),
                 repair_recovery=row["verified_memory_repair_recovery"],
                 verified_false=row["verified_accepted_false_finishes"],
                 baseline_structured=row[
@@ -271,6 +396,25 @@ def format_model_matrix_analysis_markdown(report: dict) -> str:
         "- Natural versus induced-associated counts: "
         f"`{report['pressure_analysis']['natural_vs_induced_corruption_counts']}`"
     )
+    for entry in report.get("dose_response", {}).get("severities", []):
+        lines.append(
+            "- Severity `{ordinal}` (`{severity}`): "
+            "baseline accepted-false rate `{baseline_rate}`, "
+            "contained-recovery rate `{contained_rate}`, "
+            "per-action accuracy points `{points}`, "
+            "first corrupted-belief sequences `{sequences}`.".format(
+                ordinal=entry["pressure_severity_ordinal"],
+                severity=entry["pressure_severity"],
+                baseline_rate=entry[
+                    "baseline_accepted_false_finish_rate"
+                ],
+                contained_rate=entry[
+                    "verified_contained_recovery_rate"
+                ],
+                points=len(entry["mean_probe_accuracy_by_action"]),
+                sequences=entry["first_corrupted_belief_sequences"],
+            )
+        )
 
     lines.extend(["", "## Aggregate", ""])
     for key, value in report["aggregate"].items():
@@ -507,6 +651,25 @@ def _task_rows_for_model(
                         "memory_repair_recovery",
                         False,
                     )
+                ),
+                "baseline_contained_recovery": bool(
+                    baseline_interaction.get("contained_recovery", False)
+                ),
+                "verified_contained_recovery": bool(
+                    verified_interaction.get("contained_recovery", False)
+                ),
+                "verified_recovery_level": int(
+                    verified_interaction.get("recovery_level", 0)
+                ),
+                "baseline_probe_trajectory": baseline_probe.get(
+                    "trajectory",
+                    [],
+                ),
+                "baseline_first_stale_claim_sequence": (
+                    _first_corrupted_claim_sequence(baseline)
+                ),
+                "verified_first_stale_claim_sequence": (
+                    _first_corrupted_claim_sequence(verified)
                 ),
                 "baseline_evaluator_success": (
                     baseline_final.get("status") == "success"
@@ -899,6 +1062,9 @@ def _model_summary(model: dict, rows: list[dict]) -> dict:
         "verified_recovery_count": sum(
             1 for row in rows if row["verified_recovery_after_block"]
         ),
+        "verified_contained_recovery_count": sum(
+            1 for row in rows if row.get("verified_contained_recovery")
+        ),
         "verified_memory_repair_recovery_count": sum(
             1 for row in rows if row["verified_memory_repair_recovery"]
         ),
@@ -1045,6 +1211,11 @@ def _aggregate_summary(
             1
             for row in task_rows
             if row["verified_memory_repair_recovery"]
+        ),
+        "verified_contained_recovery_rows": sum(
+            1
+            for row in task_rows
+            if row.get("verified_contained_recovery")
         ),
         "verified_memory_repair_attempts": sum(
             row["verified_memory_repair_attempts"]

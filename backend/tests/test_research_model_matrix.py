@@ -254,6 +254,169 @@ def test_model_matrix_treats_memory_condition_as_a_paired_experiment_axis(
     assert report["pressure_analysis"]["profile_summaries"]
 
 
+def test_pressure_study_produces_dose_response_curves(tmp_path: Path):
+    pytest.importorskip("langgraph")
+    matrix_path = tmp_path / "matrix.json"
+    matrix_path.write_text(
+        json.dumps(
+            {
+                "runtime": "deterministic",
+                "minimum_successful_models": 1,
+                "models": [
+                    {
+                        "model_family": "qwen",
+                        "model_name": "qwen2.5-coder:7b",
+                        "enabled": True,
+                    }
+                ],
+            }
+        )
+    )
+
+    manifest = run_model_matrix(
+        tmp_path / "out",
+        matrix_path=matrix_path,
+        framework="langgraph_tools",
+        task_ids=["coding_easy_flag_default_001"],
+        variants=["baseline", "verified"],
+        seeds=[0],
+        pressure_profile_ids=[
+            "control_full_history",
+            "lossy_low",
+            "lossy_medium",
+            "lossy_high",
+        ],
+        task_state_probes=True,
+        probe_interval=4,
+        probe_max_tokens=640,
+        minimum_successful_models=1,
+        trace_mode="model_driven",
+    )
+
+    assert manifest["planned_run_count"] == 8
+    assert manifest["completed_run_count"] == 8
+
+    report = analyze_model_matrix_manifest(Path(manifest["manifest_path"]))
+    dose_response = report["dose_response"]
+    assert dose_response["schema_version"] == (
+        "agent-memory-dose-response/v0.1"
+    )
+    severities = dose_response["severities"]
+    assert [
+        entry["pressure_severity_ordinal"] for entry in severities
+    ] == [0, 1, 2, 3]
+    for entry in severities:
+        assert entry["row_count"] == 1
+        assert 0.0 <= entry["baseline_accepted_false_finish_rate"] <= 1.0
+        assert 0.0 <= entry["verified_contained_recovery_rate"] <= 1.0
+        # Deterministic adapters cannot answer task-state probes, so the
+        # per-action accuracy curve is empty here; real-model runs fill it.
+        assert entry["mean_probe_accuracy_by_action"] == []
+
+
+def test_cohens_h_effect_size():
+    from research.runner.statistics import cohens_h
+
+    assert cohens_h(0.5, 0.5) == 0.0
+    assert cohens_h(None, 0.5) is None
+    # Known value: h(0.75, 0.50) = 2*asin(sqrt(.75)) - 2*asin(sqrt(.5))
+    assert cohens_h(0.75, 0.5) == pytest.approx(0.5236, abs=1e-4)
+    assert cohens_h(0.5, 0.75) == pytest.approx(-0.5236, abs=1e-4)
+
+
+def test_survival_curve_kaplan_meier_with_censoring():
+    from research.runner.statistics import survival_curve
+
+    curve = survival_curve(
+        [4, 6, 6, 10, 12],
+        [True, True, True, False, True],
+    )
+    assert curve["subjects"] == 5
+    assert curve["events"] == 4
+    points = {point["time"]: point for point in curve["points"]}
+    # t=4: 5 at risk, 1 event -> S = 0.8
+    assert points[4]["survival"] == pytest.approx(0.8)
+    # t=6: 4 at risk, 2 events -> S = 0.8 * 0.5 = 0.4
+    assert points[6]["survival"] == pytest.approx(0.4)
+    # t=10 censored; t=12: 1 at risk, 1 event -> S = 0
+    assert points[12]["survival"] == pytest.approx(0.0)
+    assert curve["median_time"] == 6
+
+    empty = survival_curve([], [])
+    assert empty["subjects"] == 0
+    assert empty["median_time"] is None
+
+
+def test_cohens_kappa_agreement():
+    from research.runner.statistics import cohens_kappa
+
+    perfect = cohens_kappa(["a", "b", "a"], ["a", "b", "a"])
+    assert perfect["kappa"] == 1.0
+
+    result = cohens_kappa(
+        ["yes", "yes", "no", "no"],
+        ["yes", "no", "no", "no"],
+    )
+    assert result["items"] == 4
+    assert result["observed_agreement"] == 0.75
+    assert 0.0 < result["kappa"] < 1.0
+
+    with pytest.raises(ValueError):
+        cohens_kappa(["a"], ["a", "b"])
+
+
+def test_dose_response_curves_aggregates_probe_trajectories():
+    from research.runner.matrix_analysis import dose_response_curves
+
+    def row(ordinal, accuracy, first_stale, false_finish):
+        return {
+            "pressure_severity_ordinal": ordinal,
+            "pressure_severity": ["control", "low", "medium", "high"][
+                ordinal
+            ],
+            "baseline_accepted_false_finishes": false_finish,
+            "verified_accepted_false_finishes": 0,
+            "verified_contained_recovery": ordinal >= 2,
+            "baseline_probe_trajectory": [
+                {"action_count": 4, "overall_accuracy": accuracy},
+                {"action_count": 8, "overall_accuracy": accuracy - 0.1},
+            ],
+            "baseline_first_stale_claim_sequence": first_stale,
+        }
+
+    curves = dose_response_curves(
+        [
+            row(0, 0.9, None, 0),
+            row(0, 0.8, None, 0),
+            row(2, 0.6, 14, 1),
+            row(2, 0.5, 10, 1),
+        ]
+    )
+
+    severities = {
+        entry["pressure_severity_ordinal"]: entry
+        for entry in curves["severities"]
+    }
+    control = severities[0]
+    medium = severities[2]
+    assert control["baseline_accepted_false_finish_rate"] == 0.0
+    assert medium["baseline_accepted_false_finish_rate"] == 1.0
+    assert medium["verified_contained_recovery_rate"] == 1.0
+    assert control["first_corrupted_belief_sequences"] == []
+    assert medium["first_corrupted_belief_sequences"] == [10, 14]
+    control_points = {
+        point["action_count"]: point
+        for point in control["mean_probe_accuracy_by_action"]
+    }
+    assert control_points[4]["mean_overall_accuracy"] == pytest.approx(
+        0.85
+    )
+    assert control_points[4]["sample_count"] == 2
+    assert control_points[8]["mean_overall_accuracy"] == pytest.approx(
+        0.75
+    )
+
+
 def test_model_matrix_rejects_probe_budget_too_small(tmp_path: Path):
     matrix_path = tmp_path / "matrix.json"
     matrix_path.write_text(
@@ -661,6 +824,10 @@ def test_model_matrix_analysis_summarizes_artifact_rows(tmp_path: Path):
     assert report["aggregate"]["baseline_task_rows"] == 1
     assert report["models"][0]["baseline_task_count"] == 1
     assert report["tasks"][0]["parse_status"] in {"json", "json_repaired", "unparsed"}
+    assert "verified_contained_recovery" in report["tasks"][0]
+    assert report["tasks"][0]["verified_recovery_level"] in range(5)
+    assert "verified_contained_recovery_count" in report["models"][0]
+    assert "verified_contained_recovery_rows" in report["aggregate"]
     assert "execution_accounting" in report
     assert "pressure_analysis" in report
     assert report["tasks"][0]["pressure_profile_id"] == "full_history"
