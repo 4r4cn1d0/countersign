@@ -34,6 +34,12 @@ from .interventions import (
     InterventionSpec,
     resolve_intervention,
 )
+from .human_validation import (
+    build_validation_sample,
+    compute_validation_agreement,
+    derive_auto_labels,
+    write_validation_sample,
+)
 from .memory_pressure import (
     load_pressure_profiles,
     resolve_pressure_profiles,
@@ -96,6 +102,10 @@ __all__ = [
     "INTERVENTION_CONDITIONS",
     "InterventionSpec",
     "resolve_intervention",
+    "build_validation_sample",
+    "compute_validation_agreement",
+    "derive_auto_labels",
+    "write_validation_sample",
     "load_pressure_profiles",
     "resolve_pressure_profiles",
     "validate_manual_measurements",

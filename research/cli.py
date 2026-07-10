@@ -322,6 +322,65 @@ def main(argv: list[str] | None = None) -> int:
     )
     plot_parser.set_defaults(handler=_plot_command)
 
+    validation_sample_parser = subparsers.add_parser(
+        "validation-sample",
+        help=(
+            "Draw a frozen-seed stratified sample of trajectories for human "
+            "validation labeling (task 43)."
+        ),
+    )
+    validation_sample_parser.add_argument("--manifest", required=True)
+    validation_sample_parser.add_argument(
+        "--out",
+        default="research/benchmarks/human_validation",
+    )
+    validation_sample_parser.add_argument(
+        "--fraction",
+        type=float,
+        default=0.15,
+    )
+    validation_sample_parser.add_argument(
+        "--overlap-fraction",
+        type=float,
+        default=0.25,
+    )
+    validation_sample_parser.add_argument(
+        "--seed",
+        type=int,
+        default=20260707,
+    )
+    validation_sample_parser.add_argument(
+        "--format",
+        choices=["table", "json", "markdown"],
+        default="table",
+    )
+    validation_sample_parser.set_defaults(
+        handler=_validation_sample_command
+    )
+
+    validation_agreement_parser = subparsers.add_parser(
+        "validation-agreement",
+        help=(
+            "Report auto-vs-human and inter-rater agreement from filled "
+            "labeling CSVs (task 43)."
+        ),
+    )
+    validation_agreement_parser.add_argument(
+        "--sample-manifest",
+        required=True,
+    )
+    validation_agreement_parser.add_argument("--rater1", required=True)
+    validation_agreement_parser.add_argument("--rater2")
+    validation_agreement_parser.add_argument("--out")
+    validation_agreement_parser.add_argument(
+        "--format",
+        choices=["table", "json", "markdown"],
+        default="table",
+    )
+    validation_agreement_parser.set_defaults(
+        handler=_validation_agreement_command
+    )
+
     measurement_audit_parser = subparsers.add_parser(
         "measurement-audit",
         help="Validate automatic metrics against frozen manual labels",
@@ -538,6 +597,35 @@ def _plot_command(args: argparse.Namespace) -> None:
         dpi=args.dpi,
     )
     _emit(result, args.format, title="Figures")
+
+
+def _validation_sample_command(args: argparse.Namespace) -> None:
+    from .runner import write_validation_sample
+
+    result = write_validation_sample(
+        Path(args.manifest),
+        Path(args.out),
+        fraction=args.fraction,
+        seed=args.seed,
+        overlap_fraction=args.overlap_fraction,
+    )
+    _emit(result, args.format, title="Human Validation Sample")
+
+
+def _validation_agreement_command(args: argparse.Namespace) -> None:
+    from .runner import compute_validation_agreement
+
+    report = compute_validation_agreement(
+        Path(args.sample_manifest),
+        Path(args.rater1),
+        Path(args.rater2) if args.rater2 else None,
+    )
+    if args.out:
+        Path(args.out).write_text(
+            json.dumps(report, indent=2, default=str),
+            encoding="utf-8",
+        )
+    _emit(report, args.format, title="Human Validation Agreement")
 
 
 def _matrix_list_command(args: argparse.Namespace) -> None:
