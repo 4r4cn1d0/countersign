@@ -9,6 +9,7 @@ from typing import Any
 
 from .runner import (
     DEFAULT_MANUAL_LABELS_PATH,
+    INTERVENTION_CONDITIONS,
     BenchmarkRunConfig,
     BenchmarkRunner,
     analyze_model_matrix_manifest,
@@ -48,13 +49,7 @@ def main(argv: list[str] | None = None) -> int:
     run_parser.add_argument(
         "--intervention",
         default="legacy",
-        choices=[
-            "legacy",
-            "memory_baseline",
-            "verification_only",
-            "repair_only",
-            "verification_and_repair",
-        ],
+        choices=["legacy", *INTERVENTION_CONDITIONS],
         help="Intervention condition; overrides --variant and --memory-repair.",
     )
     run_parser.add_argument("--runtime", default="deterministic")
@@ -179,12 +174,7 @@ def main(argv: list[str] | None = None) -> int:
     matrix_parser.add_argument(
         "--interventions",
         nargs="+",
-        choices=[
-            "memory_baseline",
-            "verification_only",
-            "repair_only",
-            "verification_and_repair",
-        ],
+        choices=list(INTERVENTION_CONDITIONS),
         help="Intervention conditions to cross instead of variants.",
     )
     matrix_parser.add_argument("--pull-missing", action="store_true")
