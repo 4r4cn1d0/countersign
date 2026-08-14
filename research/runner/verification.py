@@ -157,12 +157,13 @@ def retrieval_consistency_score(
         score += 0.2
     if not claim.get("stale", False):
         score += 0.25
+    # No independent confidence term: `claim["confidence"]` is derived purely
+    # from `support_status` (see claims.py:_claim_confidence), so scoring it
+    # separately here would double-count the same signal under two names.
     if claim.get("support_status") not in {"unsupported", "contradicted"}:
-        score += 0.2
+        score += 0.25
     if not claim.get("lost_provenance", False):
         score += 0.1
-    if claim.get("confidence", 0.0) >= active_policy.min_confidence:
-        score += 0.05
 
     return round(min(score, 1.0), 4)
 
@@ -206,8 +207,6 @@ def _verification_reasons(
         reasons.append("stale evidence")
     if claim.get("support_status") in {"unsupported", "contradicted"}:
         reasons.append(f"{claim['support_status']} claim")
-    if claim.get("confidence", 0.0) < policy.min_confidence:
-        reasons.append("low confidence")
     if required_sources and not required_sources.issubset(observed_sources):
         reasons.append("missing required source type")
     if consistency_score < policy.min_consistency_score:

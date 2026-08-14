@@ -12,6 +12,11 @@ a terminal veto: when a detection is non-repairable or the bounded repair
 budget is exhausted, the proposal is accepted as-is and recorded as an
 unverified acceptance. This isolates the effect of repair without a hard
 verification veto.
+
+``observe_only`` runs the same finish-proposal verifier as ``verification_only``
+and records its decision on every proposal, but never blocks and never
+triggers repair. It measures the verifier's precision/recall in situ,
+without any behavioral feedback loop back to the agent.
 """
 
 from __future__ import annotations
@@ -21,6 +26,7 @@ from dataclasses import dataclass
 
 INTERVENTION_CONDITIONS = (
     "memory_baseline",
+    "observe_only",
     "verification_only",
     "repair_only",
     "verification_and_repair",
@@ -39,6 +45,12 @@ _SPECS = {
     "memory_baseline": InterventionSpec(
         intervention="memory_baseline",
         agent_variant="baseline",
+        memory_repair=False,
+        verification_blocking=False,
+    ),
+    "observe_only": InterventionSpec(
+        intervention="observe_only",
+        agent_variant="verified",
         memory_repair=False,
         verification_blocking=False,
     ),

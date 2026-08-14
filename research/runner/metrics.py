@@ -66,7 +66,11 @@ def build_memory_health_report(run: dict, task: dict | None = None) -> dict:
         ),
         "exploratory_metrics": {
             "semantic_drift_score": semantic_drift_score,
-            "goal_fidelity": _round_score(1.0 - semantic_drift_score),
+            "goal_fidelity": (
+                _round_score(1.0 - semantic_drift_score)
+                if semantic_drift_score is not None
+                else None
+            ),
             "method": "lexical_jaccard",
             "confirmatory": False,
         },
@@ -245,23 +249,31 @@ def compute_structured_memory_metrics(
             decision_summary.get("decision_belief_coverage")
             if decision_summary.get("decision_count")
             else None,
+            # None (not 1.0) when there is no belief/citation evidence to
+            # score — an unparsed or claim-free run must not read as a
+            # perfectly healthy one. See the `components` filter below and
+            # the `structured_memory_score_na` flag on the returned dict.
             1.0 - (unsupported_count / belief_count)
             if belief_count
-            else 1.0,
+            else None,
             1.0 - (contradicted_used / cited_count)
             if cited_count
-            else 1.0,
+            else None,
             1.0 - (stale_used / cited_count)
             if cited_count
-            else 1.0,
+            else None,
         ]
         if value is not None
     ]
+    structured_memory_score = (
+        _round_score(mean(components)) if components else None
+    )
     return {
         "schema_version": "agent-structured-memory-metrics/v0.2",
         "confirmatory": True,
         "lexical_or_embedding_similarity_included": False,
-        "structured_memory_score": _round_score(mean(components)),
+        "structured_memory_score": structured_memory_score,
+        "structured_memory_score_na": structured_memory_score is None,
         "requirement_recall": requirement_recall,
         "objective_fidelity": objective_fidelity,
         "subtask_state_accuracy": subtask_accuracy,
@@ -327,13 +339,18 @@ def compute_structured_memory_metrics(
     }
 
 
-def compute_semantic_drift_score(run: dict, task: dict | None = None) -> float:
-    """Score drift between the original goal and the latest agent summary/claim."""
+def compute_semantic_drift_score(run: dict, task: dict | None = None) -> float | None:
+    """Score drift between the original goal and the latest agent summary/claim.
+
+    Returns None (not 0.0) when there is no parsed agent text to compare
+    against the goal — e.g. an unparsed model response. A missing
+    measurement must not be scored as "zero drift."
+    """
 
     goal_text = _original_goal_text(run, task)
     current_text = _latest_agent_state_text(run)
     if not goal_text or not current_text:
-        return 0.0
+        return None
 
     alignment = _jaccard_similarity(goal_text, current_text)
 

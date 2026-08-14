@@ -21,6 +21,7 @@ from research.runner.model_matrix import run_model_matrix
 def test_resolve_intervention_specs():
     assert INTERVENTION_CONDITIONS == (
         "memory_baseline",
+        "observe_only",
         "verification_only",
         "repair_only",
         "verification_and_repair",
@@ -30,6 +31,11 @@ def test_resolve_intervention_specs():
     assert baseline.agent_variant == "baseline"
     assert baseline.memory_repair is False
     assert baseline.verification_blocking is False
+
+    observe_only = resolve_intervention("observe_only")
+    assert observe_only.agent_variant == "verified"
+    assert observe_only.memory_repair is False
+    assert observe_only.verification_blocking is False
 
     verify_only = resolve_intervention("verification_only")
     assert verify_only.agent_variant == "verified"
@@ -254,10 +260,10 @@ def test_matrix_interventions_axis_produces_distinct_paired_runs(
 
     assert manifest["interventions"] == list(INTERVENTION_CONDITIONS)
     assert manifest["variants"] == list(INTERVENTION_CONDITIONS)
-    assert manifest["planned_run_count"] == 4
-    assert manifest["completed_run_count"] == 4
+    assert manifest["planned_run_count"] == 5
+    assert manifest["completed_run_count"] == 5
     # Each non-baseline condition pairs against memory_baseline.
-    assert manifest["completed_pair_count"] == 3
+    assert manifest["completed_pair_count"] == 4
 
     model = manifest["models"][0]
     run_ids = set()
@@ -268,7 +274,7 @@ def test_matrix_interventions_axis_produces_distinct_paired_runs(
         interventions_seen.add(
             payload["run_metadata"]["intervention"]
         )
-    assert len(run_ids) == 4
+    assert len(run_ids) == 5
     assert interventions_seen == set(INTERVENTION_CONDITIONS)
 
     with pytest.raises(ValueError):

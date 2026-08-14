@@ -1,5 +1,12 @@
 # Agent Memory Model Matrix Analysis
 
+> **Deprecated — do not cite as empirical evidence.** Same issues as
+> `langgraph_5model_alltasks_comparison_20260604.md` (historical
+> `model_driven` demand-characteristic prompt; unparsed rows scored as
+> perfectly healthy). The `qwen2.5-coder:7b` row here is especially stark:
+> its single task was `unparsed`, yet is recorded as `Avg Health 1.0000` /
+> `Avg Drift 0.0000`. Kept for provenance only.
+
 - Manifest: `/private/tmp/agent-memory-langgraph-5model-real-agents-m4air/model_matrix_manifest.json`
 - Framework: `langgraph`
 - Runtime: `ollama`

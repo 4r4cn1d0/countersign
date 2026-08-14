@@ -91,6 +91,33 @@ def test_metric_scores_handle_unsupported_and_stale_completion_claims():
     assert compute_temporal_accuracy(claims) == 0.6667
 
 
+def test_unparsed_run_is_excluded_not_scored_as_perfectly_healthy():
+    """An unparsed model response must report NA, not a perfect score.
+
+    Historically, a missing-claims run silently contributed
+    memory_health=1.0/drift=0.0 to aggregates (see
+    langgraph_5model_alltasks_comparison_20260604.md) — a missing
+    measurement must never read as a healthy one.
+    """
+    run = {
+        "run_id": "unparsed-run",
+        "task_id": "some-task",
+        "trace_events": [],
+        "memory_claims": [],
+    }
+
+    structured = compute_structured_memory_metrics(run, [])
+    assert structured["structured_memory_score"] is None
+    assert structured["structured_memory_score_na"] is True
+
+    assert compute_semantic_drift_score(run) is None
+
+    report = build_memory_health_report(run)
+    assert report["metrics"]["memory_health_score"] is None
+    assert report["exploratory_metrics"]["semantic_drift_score"] is None
+    assert report["exploratory_metrics"]["goal_fidelity"] is None
+
+
 def test_memory_health_report_surfaces_contradicted_claims():
     run = {
         "run_id": "contradicted-run",

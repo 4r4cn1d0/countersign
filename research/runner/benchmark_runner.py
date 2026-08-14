@@ -502,6 +502,11 @@ class BenchmarkRunner:
         task: dict,
         config: BenchmarkRunConfig,
     ):
+        """Historical five-model React-memory study entry point (framework="langgraph").
+
+        Not used by the current coding benchmark suite — see
+        `_run_langgraph_tool_agent` (framework="langgraph_tools") for that.
+        """
         if config.trace_mode != "model_driven":
             raise ValueError("LangGraph runs currently require trace_mode=model_driven")
         try:
@@ -1366,7 +1371,8 @@ class BenchmarkRunner:
                             repair_budget=EVALUATOR_REPAIR_BUDGET,
                         )
                         if not config.verification_blocking and (
-                            not repair_plan["repairable"]
+                            not config.memory_repair
+                            or not repair_plan["repairable"]
                             or not repair_plan["action"]
                             or repair_plan["budget_exhausted"]
                         ):
@@ -2075,6 +2081,17 @@ class BenchmarkRunner:
         return final_state["model_response"], events
 
     def _model_prompt(self, task: dict, config: BenchmarkRunConfig) -> str:
+        """Prompt for the historical five-model React-memory study only.
+
+        Sent to the model by `_run_langgraph_agent` (framework="langgraph").
+        `_run_langgraph_tool_agent` (the current coding-suite entry point,
+        framework="langgraph_tools") also calls this to populate an unused
+        `initial_state["prompt"]` field, but never sends its output to the
+        model — the coding tool-loop's actual per-turn prompt is built by
+        `_tool_action_prompt` instead. Do not reuse this prompt (which names
+        the study and injects `high_risk_claims`/`drift_inducers` directly)
+        for new experiments; it is a known source of demand characteristics.
+        """
         if config.trace_mode == "model_driven":
             if config.prompt_template == "memory_pressure_v0":
                 return self._memory_pressure_prompt(task, config)
@@ -2120,6 +2137,7 @@ class BenchmarkRunner:
         )
 
     def _memory_pressure_prompt(self, task: dict, config: BenchmarkRunConfig) -> str:
+        """Historical five-model study prompt variant — see `_model_prompt`."""
         required_subtasks = json.dumps(
             task["required_subtasks"],
             indent=2,
@@ -3798,7 +3816,13 @@ class BenchmarkRunner:
             timeout=30,
         )
 
-    def _evaluate_coding_workspace(self, workspace: Path, task_id: str) -> dict:
+    def _run_visible_tests(self, workspace: Path) -> dict:
+        """Run only the project's own visible test suite.
+
+        Deployment-realistic online signal: unlike hidden/ground-truth
+        validation, this does not require access to information the agent
+        could not otherwise obtain. Safe to call before episode termination.
+        """
         visible = subprocess.run(
             [sys.executable, "-m", "unittest", "discover", "-s", "."],
             cwd=workspace,
@@ -3807,24 +3831,43 @@ class BenchmarkRunner:
             text=True,
             timeout=30,
         )
-        hidden = self._run_hidden_validation(workspace, task_id)
         visible_output = (visible.stdout + visible.stderr).strip()
-        hidden_output = (hidden.stdout + hidden.stderr).strip()
         visible_test_count = self._unittest_test_count(visible_output)
         visible_success = visible.returncode == 0 and visible_test_count > 0
-        returncode = (0 if visible_success else (visible.returncode or 1)) or hidden.returncode
         return {
-            "status": "success" if returncode == 0 else "failure",
-            "returncode": returncode,
+            "status": "success" if visible_success else "failure",
+            "returncode": visible.returncode,
             "visible_test_status": (
                 "success" if visible_success else "failure"
             ),
             "visible_test_count": visible_test_count,
+            "hidden_validation_status": "not_run",
+            "content": f"Visible tests:\n{visible_output}".strip(),
+        }
+
+    def _evaluate_coding_workspace(self, workspace: Path, task_id: str) -> dict:
+        """Ground-truth evaluation combining visible tests and hidden validation.
+
+        Must only be called after episode termination for both baseline and
+        verified agents — never as part of an online finish gate, since the
+        hidden validation result is not information the agent could
+        legitimately have at deployment time.
+        """
+        visible = self._run_visible_tests(workspace)
+        hidden = self._run_hidden_validation(workspace, task_id)
+        hidden_output = (hidden.stdout + hidden.stderr).strip()
+        visible_success = visible["visible_test_status"] == "success"
+        returncode = (0 if visible_success else (visible["returncode"] or 1)) or hidden.returncode
+        return {
+            "status": "success" if returncode == 0 else "failure",
+            "returncode": returncode,
+            "visible_test_status": visible["visible_test_status"],
+            "visible_test_count": visible["visible_test_count"],
             "hidden_validation_status": (
                 "success" if hidden.returncode == 0 else "failure"
             ),
             "content": (
-                f"Visible tests:\n{visible_output}\n\n"
+                f"{visible['content']}\n\n"
                 f"Hidden validation:\n{hidden_output}"
             ).strip(),
         }
@@ -4185,7 +4228,17 @@ class BenchmarkRunner:
             scenario,
             evidence_ledger,
         )
-        readiness_guidance = self._completion_readiness_guidance(evidence_ledger)
+        # Freshness/staleness coaching is the exact signal the online verifier
+        # checks for (see _evaluate_finish_proposal). Giving it to the baseline
+        # agent for free would make "baseline" already partly verification-aware,
+        # confounding the comparison. The citation/schema instructions below stay
+        # identical across variants because post-hoc claim scoring (source_event_ids,
+        # lost_provenance) depends on them for both conditions equally.
+        readiness_guidance = (
+            self._completion_readiness_guidance(evidence_ledger)
+            if config.agent_variant == "verified"
+            else ""
+        )
         available = available_actions or [
             *CODING_TOOL_ACTIONS,
         ]
@@ -5137,14 +5190,12 @@ class BenchmarkRunner:
             proposal_event = events_by_id.get(proposal_event_id, {})
             workspace_path = proposal_event.get("workspace_path")
             if workspace_path:
-                independent_evaluation = self._evaluate_coding_workspace(
+                # Visible tests only: a deployment-realistic online signal.
+                # Hidden/ground-truth validation is never run before
+                # termination (see _run_visible_tests docstring).
+                independent_evaluation = self._run_visible_tests(
                     Path(str(workspace_path)),
-                    task["task_id"],
                 )
-                if independent_evaluation["status"] != "success":
-                    coding_reasons.append(
-                        "independent task evaluator failed"
-                    )
         task_complete_present = any(
             claim["claim_type"] == "task_complete" for claim in claims
         )
@@ -5184,11 +5235,6 @@ class BenchmarkRunner:
                 | (
                     {"make and cite the required implementation change"}
                     if "missing implementation-change evidence" in coding_reasons
-                    else set()
-                )
-                | (
-                    {"re-inspect acceptance criteria and repair evaluator failures"}
-                    if "independent task evaluator failed" in coding_reasons
                     else set()
                 )
             ),

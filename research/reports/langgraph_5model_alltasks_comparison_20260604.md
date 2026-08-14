@@ -1,5 +1,18 @@
 # Agent Memory Model Matrix Analysis
 
+> **Deprecated — do not cite as empirical evidence.** This report was generated
+> with `trace_mode=model_driven` and the historical `_model_prompt`/
+> `_memory_pressure_prompt` (see `research/runner/benchmark_runner.py`), which
+> names the study and injects the scoring rubric (`high_risk_claims`,
+> `drift_inducers`) directly into the model's prompt — a known source of
+> demand characteristics. It also predates the fix where unparsed model
+> responses (2 of 15 rows here, see `parse_status_counts`) contributed
+> `memory_health=1.0000`/`drift=0.0000` to the averages below instead of being
+> excluded as missing measurements — the `avg_memory_health_score: 0.7211`
+> and `avg_semantic_drift_score: 0.6544` figures are inflated by that bug.
+> Superseded by the fixture-backed coding benchmark suite
+> (`research/benchmarks/coding_scenarios/`). Kept for provenance only.
+
 - Manifest: `/private/tmp/agent-memory-langgraph-5model-alltasks-m4air/model_matrix_manifest.json`
 - Framework: `langgraph`
 - Runtime: `ollama`

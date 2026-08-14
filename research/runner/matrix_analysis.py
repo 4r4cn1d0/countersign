@@ -972,12 +972,11 @@ def _task_rows_for_model(
                 "tool_action_status_counts": _tool_action_status_counts(
                     baseline
                 ),
-                "memory_health_score": float(
-                    metrics.get("memory_health_score", 0.0)
-                ),
-                "semantic_drift_score": float(
-                    exploratory.get("semantic_drift_score", 0.0)
-                ),
+                # None (not a forced float default) when the underlying run had
+                # no parseable claims/text to score — an unparsed model response
+                # must not be counted as a perfectly healthy/zero-drift one.
+                "memory_health_score": metrics.get("memory_health_score"),
+                "semantic_drift_score": exploratory.get("semantic_drift_score"),
                 "false_completion_rate": float(
                     metrics.get("false_completion_rate", 0.0)
                 ),
@@ -1096,7 +1095,12 @@ def _model_summary(model: dict, rows: list[dict]) -> dict:
             row["verification_event_count"] for row in rows
         ),
         "avg_memory_health_score": _mean(
-            row["memory_health_score"] for row in rows
+            row["memory_health_score"]
+            for row in rows
+            if row["memory_health_score"] is not None
+        ),
+        "memory_health_score_excluded_count": sum(
+            1 for row in rows if row["memory_health_score"] is None
         ),
         "avg_baseline_structured_memory_score": _mean(
             row["baseline_structured_memory_score"]
@@ -1137,7 +1141,12 @@ def _model_summary(model: dict, rows: list[dict]) -> dict:
             for row in rows
         ),
         "avg_semantic_drift_score": _mean(
-            row["semantic_drift_score"] for row in rows
+            row["semantic_drift_score"]
+            for row in rows
+            if row["semantic_drift_score"] is not None
+        ),
+        "semantic_drift_score_excluded_count": sum(
+            1 for row in rows if row["semantic_drift_score"] is None
         ),
         "avg_false_completion_rate": _mean(
             row["false_completion_rate"] for row in rows
@@ -1238,7 +1247,12 @@ def _aggregate_summary(
             row["extra_trace_events"] for row in task_rows
         ),
         "avg_memory_health_score": _mean(
-            row["memory_health_score"] for row in task_rows
+            row["memory_health_score"]
+            for row in task_rows
+            if row["memory_health_score"] is not None
+        ),
+        "memory_health_score_excluded_count": sum(
+            1 for row in task_rows if row["memory_health_score"] is None
         ),
         "avg_baseline_structured_memory_score": _mean(
             row["baseline_structured_memory_score"]
@@ -1283,7 +1297,12 @@ def _aggregate_summary(
             for row in task_rows
         ),
         "avg_semantic_drift_score": _mean(
-            row["semantic_drift_score"] for row in task_rows
+            row["semantic_drift_score"]
+            for row in task_rows
+            if row["semantic_drift_score"] is not None
+        ),
+        "semantic_drift_score_excluded_count": sum(
+            1 for row in task_rows if row["semantic_drift_score"] is None
         ),
         "blocked_actions_by_model": dict(sorted(blocked_by_model.items())),
     }

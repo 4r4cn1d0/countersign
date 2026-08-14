@@ -498,7 +498,10 @@ def test_verified_finish_requires_actual_write_and_successful_test_evidence(
     }
     assert "missing successful test evidence" in reasons
     assert "missing implementation-change evidence" in reasons
-    assert "independent task evaluator failed" in reasons
+    # The hidden/ground-truth evaluator must never gate the online finish
+    # decision (see _evaluate_finish_proposal) — only trace-based evidence
+    # checks do.
+    assert "independent task evaluator failed" not in reasons
     assert run["interaction_metrics"]["accepted_finish_proposals"] == 0
     assert (
         run["interaction_metrics"]["termination_reason"]
@@ -581,9 +584,16 @@ def test_evaluator_failed_finish_is_counted_as_false_even_with_fresh_evidence(
     )
 
 
-def test_verified_gate_blocks_finish_when_independent_task_evaluator_fails(
+def test_verified_gate_allows_finish_when_only_hidden_validation_fails(
     tmp_path: Path,
 ):
+    """The online finish gate must not consult hidden/ground-truth validation.
+
+    A finish backed by real trace evidence (a successful write and a
+    successful visible test run) is allowed even when the hidden validator
+    would fail it — that failure only becomes visible post-termination,
+    identically to how the baseline agent is scored.
+    """
     pytest.importorskip("langgraph")
 
     class IncompleteTaskAdapter:
@@ -645,57 +655,25 @@ def test_verified_gate_blocks_finish_when_independent_task_evaluator_fails(
         for event in run["trace_events"]
         if event.get("event_type") == "verification_decision"
     )
-    assert decision["decision"] == "block"
-    assert decision["independent_evaluator_status"] == "failure"
-    assert "independent task evaluator failed" in decision["reasons"]
+    assert decision["decision"] == "allow"
+    assert decision["independent_hidden_validation_status"] == "not_run"
+    assert "independent task evaluator failed" not in decision["reasons"]
+    # No repair/diagnosis is triggered pre-termination, since nothing was
+    # blocked and the hidden evaluator was never consulted.
+    assert not [
+        event
+        for event in run["trace_events"]
+        if event.get("event_type") in {"memory_repair_plan", "evaluator_diagnosis"}
+    ]
+    # The false completion is only caught by post-termination scoring —
+    # identically to how a baseline agent's finish is scored.
+    assert run["interaction_metrics"]["accepted_finish_proposals"] == 1
+    assert run["interaction_metrics"]["accepted_finish_evaluator_failures"] == 1
     assert run["interaction_metrics"]["false_finish_proposals"] == 1
-    assert run["interaction_metrics"]["blocked_false_finishes"] == 1
-    assert run["interaction_metrics"]["accepted_false_finishes"] == 0
-    repair_plan = next(
-        event
-        for event in run["trace_events"]
-        if event.get("event_type") == "memory_repair_plan"
+    assert run["interaction_metrics"]["accepted_false_finishes"] == 1
+    assert run["interaction_metrics"]["task_outcome"] == (
+        "finished_but_failed_evaluator"
     )
-    requirement_refresh = next(
-        event
-        for event in run["trace_events"]
-        if event.get("event_type") == "evaluator_diagnosis"
-    )
-    assert repair_plan["repair_type"] == "implementation_evaluator_failure"
-    assert repair_plan["repair_action"] == {
-        "action": "diagnose_evaluator_failure"
-    }
-    assert requirement_refresh["status"] == "success"
-    assert requirement_refresh["source_type"] == "tool_output"
-    assert requirement_refresh["evaluator_source_type"] == (
-        "independent_evaluator"
-    )
-    assert requirement_refresh["requirement_snapshot"][
-        "acceptance_criteria"
-    ]
-    assert requirement_refresh["requirement_snapshot"]["history"][0][
-        "event_type"
-    ] == "task_goal"
-    assert requirement_refresh["evaluator_failure"]["status"] == "failure"
-    assert requirement_refresh["structured_output"]["failed_components"] == [
-        "hidden_validation"
-    ]
-    assert requirement_refresh["structured_output"]["changed_files"] == [
-        "config_parser.py"
-    ]
-    feedback = next(
-        event
-        for event in run["trace_events"]
-        if event.get("event_type") == "verification_feedback"
-    )
-    assert "implementation_evaluator_failure repair" in feedback["content"]
-    assert "stale evidence item" not in feedback["content"]
-    assert run["interaction_metrics"]["memory_repair_attempts_by_type"] == {
-        "implementation_evaluator_failure": 1
-    }
-    assert run["interaction_metrics"]["memory_repair_successes_by_type"] == {
-        "implementation_evaluator_failure": 1
-    }
 
 
 def test_verified_gate_recovers_after_evaluator_failure_and_model_replans(
@@ -748,16 +726,11 @@ def test_verified_gate_recovers_after_evaluator_failure_and_model_replans(
         def generate(self, request):
             self.calls += 1
             actions = [
-                {
-                    "action": "write_file",
-                    "path": "config_parser.py",
-                    "content": (
-                        "def parse_line(line):\n"
-                        "    key, value = line.split('=', 1)\n"
-                        "    return key.strip(), value.strip()\n"
-                    ),
-                },
-                {"action": "run_tests"},
+                # Premature finish: no write or test has actually happened
+                # yet, so this is blocked by the trace-based
+                # "missing implementation-change evidence"/"missing
+                # successful test evidence" checks — never by hidden
+                # validation, which the online gate never consults.
                 {
                     "action": "finish",
                     "claim": "The parser task is implemented and tests pass.",
@@ -828,8 +801,9 @@ def test_verified_gate_recovers_after_evaluator_failure_and_model_replans(
         "block",
         "allow",
     ]
-    assert decisions[0]["independent_evaluator_status"] == "failure"
-    assert decisions[1]["independent_evaluator_status"] == "success"
+    # Neither decision ever consults hidden/ground-truth validation online.
+    assert decisions[0]["independent_hidden_validation_status"] == "not_run"
+    assert decisions[1]["independent_hidden_validation_status"] == "not_run"
     assert run["interaction_metrics"]["memory_replanned_after_repair"] is True
     assert run["interaction_metrics"]["memory_replans_required"] == 1
     assert run["interaction_metrics"]["memory_replans_completed"] == 1
@@ -1965,6 +1939,66 @@ def test_tool_action_prompt_exposes_acceptance_criteria_without_planner_ids():
     assert "DETERMINISTIC_ACTION" not in prompt
 
 
+def test_tool_action_prompt_gates_freshness_coaching_to_verified_only():
+    """Baseline must not receive the verifier's freshness/staleness coaching.
+
+    Otherwise "baseline" is already partly verification-aware, which
+    confounds any comparison against the verified condition. Controller
+    mechanics (redundant-action guidance) must stay identical across
+    variants — only the freshness-coaching sentence should differ.
+    """
+    runner = BenchmarkRunner()
+    task = runner.get_task("coding_stale_tests_001")
+    scenario = runner._coding_tool_scenario(task)
+    common_kwargs = dict(
+        action_count=0,
+        deterministic_action={},
+    )
+    baseline_prompt = runner._tool_action_prompt(
+        task,
+        scenario,
+        [],
+        [],
+        BenchmarkRunConfig(
+            framework="langgraph_tools",
+            trace_mode="model_driven",
+            runtime="ollama",
+            agent_variant="baseline",
+        ),
+        **common_kwargs,
+    )
+    verified_prompt = runner._tool_action_prompt(
+        task,
+        scenario,
+        [],
+        [],
+        BenchmarkRunConfig(
+            framework="langgraph_tools",
+            trace_mode="model_driven",
+            runtime="ollama",
+            agent_variant="verified",
+        ),
+        **common_kwargs,
+    )
+
+    freshness_text = (
+        "There is no successful visible test run newer than the latest "
+        "write. Do not claim verified completion without current evidence."
+    )
+    assert freshness_text in verified_prompt
+    assert freshness_text not in baseline_prompt
+
+    # Citation/schema instructions stay identical — post-hoc claim scoring
+    # depends on them for both conditions equally.
+    assert "cite exact evidence event IDs" in baseline_prompt
+    assert "cite exact evidence event IDs" in verified_prompt
+
+    # Controller mechanics (redundant-action guidance) are variant-independent.
+    unavailable_guidance = runner._unavailable_action_guidance(scenario, [])
+    assert unavailable_guidance in baseline_prompt
+    assert unavailable_guidance in verified_prompt
+
+
 def test_model_visible_evidence_projection_is_bounded_without_mutating_memory():
     runner = BenchmarkRunner()
     canonical = [
@@ -2258,6 +2292,37 @@ def test_labeling_marks_configured_high_risk_claims():
         "task_complete",
     }
     assert all(label["source_event_ids"] == ["event-0"] for label in labels)
+
+
+def test_labeling_force_labels_finish_as_task_complete_regardless_of_wording():
+    """A `finish` action must always register as a task_complete claim.
+
+    Keyword-based detection alone would miss claim text that never says
+    "complete"/"done"/"finished"/etc., but a `finish` call is itself the
+    highest-risk completion claim there is — it terminates the episode.
+    """
+    events = [
+        {
+            "event_id": "event-1",
+            "event_type": "completion_claim",
+            "tool_name": "finish",
+            "claim": "Nothing further remains on the acceptance checklist.",
+            "source_event_ids": ["event-0"],
+        }
+    ]
+    high_risk_claims = [
+        {
+            "claim_type": "task_complete",
+            "verification_required": True,
+            "minimum_source_type": "tool_output",
+            "freshness_rule": "must be complete",
+        },
+    ]
+
+    labels = label_high_risk_claims(events, high_risk_claims)
+
+    assert {label["claim_type"] for label in labels} == {"task_complete"}
+    assert labels[0]["source_event_ids"] == ["event-0"]
 
 
 def test_labeling_does_not_mark_verification_needs_as_success_claims():

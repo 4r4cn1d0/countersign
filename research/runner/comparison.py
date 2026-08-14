@@ -19,24 +19,31 @@ def compare_runs(baseline_run: dict, verified_run: dict) -> dict:
 
     baseline_metrics = baseline_report["metrics"]
     verified_metrics = verified_raw_report["metrics"]
-    metric_deltas = {
-        metric: round(verified_metrics.get(metric, 0.0) - baseline_metrics.get(metric, 0.0), 4)
-        for metric in sorted(set(baseline_metrics) | set(verified_metrics))
-    }
+    metric_deltas = {}
+    for metric in sorted(set(baseline_metrics) | set(verified_metrics)):
+        verified_value = verified_metrics.get(metric)
+        baseline_value = baseline_metrics.get(metric)
+        metric_deltas[metric] = (
+            round(verified_value - baseline_value, 4)
+            if verified_value is not None and baseline_value is not None
+            else None
+        )
     baseline_exploratory = baseline_report.get("exploratory_metrics", {})
     verified_exploratory = verified_raw_report.get(
         "exploratory_metrics",
         {},
     )
-    exploratory_metric_deltas = {
-        metric: round(
-            float(verified_exploratory.get(metric, 0.0))
-            - float(baseline_exploratory.get(metric, 0.0)),
-            4,
+    exploratory_metric_deltas = {}
+    for metric in ["semantic_drift_score", "goal_fidelity"]:
+        if metric not in baseline_exploratory and metric not in verified_exploratory:
+            continue
+        verified_value = verified_exploratory.get(metric)
+        baseline_value = baseline_exploratory.get(metric)
+        exploratory_metric_deltas[metric] = (
+            round(float(verified_value) - float(baseline_value), 4)
+            if verified_value is not None and baseline_value is not None
+            else None
         )
-        for metric in ["semantic_drift_score", "goal_fidelity"]
-        if metric in baseline_exploratory or metric in verified_exploratory
-    }
     metric_deltas.update(exploratory_metric_deltas)
     baseline_interaction = baseline_run.get("interaction_metrics")
     verified_interaction = verified_run.get("interaction_metrics")
