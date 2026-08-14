@@ -507,5 +507,10 @@ def _round_score(value: float) -> float:
     return round(max(0.0, min(1.0, value)), 4)
 
 
-def _rate(count: int, total: int) -> float:
-    return _round_score(count / total) if total else 0.0
+def _rate(count: int, total: int) -> float | None:
+    """None (not 0.0) when there's nothing to compute a rate over.
+
+    "No measurable beliefs" must not read as "zero bad beliefs" — a rate
+    with an empty denominator is a missing measurement, not a good score.
+    """
+    return _round_score(count / total) if total else None

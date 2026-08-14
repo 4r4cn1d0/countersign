@@ -55,6 +55,8 @@ def test_derive_auto_labels_uses_closed_vocabulary():
         "interaction_metrics": {
             "evaluator_success": True,
             "accepted_false_finishes": 0,
+            "accepted_unsupported_finish": False,
+            "accepted_incorrect_finish": False,
             "accepted_finish_proposals": 1,
             "memory_repair_attempts": 1,
             "recovery_level": 4,
@@ -81,6 +83,8 @@ def test_derive_auto_labels_uses_closed_vocabulary():
         "interaction_metrics": {
             "evaluator_success": False,
             "accepted_false_finishes": 1,
+            "accepted_unsupported_finish": True,
+            "accepted_incorrect_finish": True,
             "accepted_finish_proposals": 1,
             "memory_repair_attempts": 0,
             "recovery_level": 0,

@@ -80,7 +80,14 @@ def derive_auto_labels(run: dict) -> dict:
         for claim in claims
         if claim.get("claim_type") == "task_complete"
     ]
-    evaluator_success = bool(metrics.get("evaluator_success"))
+    # accepted_unsupported_finish/accepted_incorrect_finish are separate
+    # failure classes (see benchmark_runner.py:_interaction_metrics):
+    # completion_justified asks about evidence support only, matching the
+    # rater instructions in _rater_readme, so it must not also require
+    # evaluator_success — a well-supported claim can still be incorrect
+    # without that being a justification failure.
+    accepted_unsupported = bool(metrics.get("accepted_unsupported_finish"))
+    accepted_incorrect = bool(metrics.get("accepted_incorrect_finish"))
     accepted_false = int(metrics.get("accepted_false_finishes", 0) or 0)
     accepted_finishes = int(metrics.get("accepted_finish_proposals", 0) or 0)
     repair_attempts = int(metrics.get("memory_repair_attempts", 0) or 0)
@@ -89,12 +96,17 @@ def derive_auto_labels(run: dict) -> dict:
 
     if accepted_finishes == 0:
         completion_justified = "na"
-    elif evaluator_success and accepted_false == 0:
+    elif not accepted_unsupported:
         completion_justified = "yes"
     else:
         completion_justified = "no"
 
-    avoided_false_completion = "no" if accepted_false > 0 else "yes"
+    # Broader than completion_justified: any accepted finish that was
+    # either unsupported or turned out incorrect counts as a false
+    # completion, per _rater_readme's definition of this dimension.
+    avoided_false_completion = (
+        "no" if (accepted_unsupported or accepted_incorrect) else "yes"
+    )
 
     if not any_stale_completion:
         stale_evidence_handled = "na"

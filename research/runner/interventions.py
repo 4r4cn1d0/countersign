@@ -1,21 +1,37 @@
 """Intervention-condition resolution for ablation experiments.
 
-Each intervention condition decouples the two safety mechanisms that the
-``verified`` agent variant historically bundled together:
+Four primary conditions, all sharing the identical instrumented-baseline
+prompt (evidence ledger, citation requirements, freshness reminder) and
+action schema. The only differences take effect after the agent proposes
+an action:
 
-- verification blocking: the finish gate may veto unsafe completion proposals.
-- memory repair: the memory controller may execute bounded repair actions and
-  request a replan after a detection.
+| Condition              | verifier_enabled | verification_blocking | memory_repair |
+|-------------------------|:---:|:---:|:---:|
+| ``memory_baseline``     | No  | No  | No  |
+| ``observe_only``        | Yes | No  | No  |
+| ``verification_only``   | Yes | Yes | No  |
+| ``verification_and_repair`` | Yes | Yes | Yes |
 
-``repair_only`` keeps detection, repair, and replan feedback but never issues
-a terminal veto: when a detection is non-repairable or the bounded repair
-budget is exhausted, the proposal is accepted as-is and recorded as an
-unverified acceptance. This isolates the effect of repair without a hard
-verification veto.
+``verifier_enabled`` controls whether the online finish-proposal verifier
+and the (non-overridable) unsafe-mutation gate run at all.
+``verification_blocking`` controls whether a verifier "block" decision is
+enforced as a terminal veto rather than recorded and overridden to allow.
+``memory_repair`` controls whether a blocked/detected proposal triggers a
+bounded repair-and-replan cycle.
 
-``observe_only`` runs the same finish-proposal verifier as ``verification_only``
-and records its decision on every proposal, but never blocks and never
-triggers repair. It measures the verifier's precision/recall in situ,
+``repair_only`` (secondary, not one of the four primary conditions) keeps
+detection, repair, and replan feedback but never issues a terminal veto:
+when a detection is non-repairable or the bounded repair budget is
+exhausted, the proposal is accepted as-is and recorded as an unverified
+acceptance. This isolates the effect of repair without a hard verification
+veto.
+
+``observe_only`` runs the same finish-proposal verifier as
+``verification_only`` and records its raw decision
+(``verifier_decision``/``would_block`` on the ``verification_decision``
+event) on every proposal, but the enforced decision is always "allow" and
+no repair ever executes — a genuinely passive detector condition, not just
+a non-blocking one. It measures the verifier's precision/recall in situ,
 without any behavioral feedback loop back to the agent.
 """
 
@@ -37,6 +53,7 @@ INTERVENTION_CONDITIONS = (
 class InterventionSpec:
     intervention: str
     agent_variant: str
+    verifier_enabled: bool
     memory_repair: bool
     verification_blocking: bool
 
@@ -45,30 +62,35 @@ _SPECS = {
     "memory_baseline": InterventionSpec(
         intervention="memory_baseline",
         agent_variant="baseline",
+        verifier_enabled=False,
         memory_repair=False,
         verification_blocking=False,
     ),
     "observe_only": InterventionSpec(
         intervention="observe_only",
         agent_variant="verified",
+        verifier_enabled=True,
         memory_repair=False,
         verification_blocking=False,
     ),
     "verification_only": InterventionSpec(
         intervention="verification_only",
         agent_variant="verified",
+        verifier_enabled=True,
         memory_repair=False,
         verification_blocking=True,
     ),
     "repair_only": InterventionSpec(
         intervention="repair_only",
         agent_variant="verified",
+        verifier_enabled=True,
         memory_repair=True,
         verification_blocking=False,
     ),
     "verification_and_repair": InterventionSpec(
         intervention="verification_and_repair",
         agent_variant="verified",
+        verifier_enabled=True,
         memory_repair=True,
         verification_blocking=True,
     ),

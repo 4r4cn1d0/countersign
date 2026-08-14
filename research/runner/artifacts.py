@@ -46,8 +46,12 @@ def generate_artifact_bundle(
     commands = []
 
     for task in dataset["tasks"]:
-        baseline_config = _replace_dataclass(run_config, agent_variant="baseline")
-        verified_config = _replace_dataclass(run_config, agent_variant="verified")
+        baseline_config = _replace_dataclass(
+            run_config, agent_variant="baseline", verifier_enabled=False
+        )
+        verified_config = _replace_dataclass(
+            run_config, agent_variant="verified", verifier_enabled=True
+        )
         baseline_run = active_runner.run_task(task, baseline_config)
         verified_run = active_runner.run_task(task, verified_config)
 

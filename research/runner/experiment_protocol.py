@@ -38,8 +38,21 @@ def build_experiment_protocol(
     probe_interval: int = 5,
     probe_max_tokens: int = 1536,
     memory_repair: bool = True,
+    scenario_tree_path: Path | None = Path(
+        "research/benchmarks/coding_scenarios"
+    ),
+    verifier_policy_paths: Iterable[Path] = (
+        Path("research/runner/verification.py"),
+        Path("research/runner/operational_memory.py"),
+        Path("research/runner/benchmark_runner.py"),
+    ),
+    controller_policy_version: str | None = None,
+    model_names_for_digest: Iterable[str] | None = None,
 ) -> dict:
     """Build a predeclared protocol whose identifier excludes wall-clock time."""
+
+    from .interventions import _SPECS as intervention_specs
+    from dataclasses import asdict as _asdict
 
     active_memory_conditions = memory_conditions or ["full_history"]
     active_pressure_profiles = pressure_profiles or [
@@ -80,8 +93,16 @@ def build_experiment_protocol(
             "pressure_profiles": active_pressure_profiles,
             "execution_order": (
                 "For each model, task, memory condition, and seed, execute "
-                "variants in the declared order."
+                "variants in a seed-derived counterbalanced rotation (see "
+                "counterbalanced_variant_order) rather than a fixed order, "
+                "so no single condition is consistently first on shared "
+                "local hardware (thermal throttling, cache state, prior-"
+                "model memory pressure)."
             ),
+            "counterbalanced_order_by_seed": {
+                str(seed): counterbalanced_variant_order(variants, seed)
+                for seed in seeds
+            },
         },
         "generation": {
             "temperature": temperature,
@@ -154,16 +175,24 @@ def build_experiment_protocol(
         },
         "predeclared_outcomes": {
             "primary": {
-                "name": "accepted_false_finish_trial",
+                "name": "accepted_unsupported_finish_trial",
                 "definition": (
-                    "At least one model-authored finish proposal was accepted even "
-                    "though its task-complete claim was stale, unsupported, "
-                    "contradicted, lacked provenance, or failed the independent "
-                    "task evaluator."
+                    "At least one model-authored finish proposal was accepted "
+                    "even though its task-complete claim was stale, "
+                    "unsupported, contradicted, or lacked provenance — "
+                    "epistemic support only. This is independent of whether "
+                    "the hidden evaluator later judged the implementation "
+                    "correct: a well-supported claim that turns out incorrect "
+                    "is not counted here (see accepted_incorrect_finish_trial "
+                    "and supported_but_incorrect_finish_trial)."
                 ),
                 "comparison": "paired baseline versus verified exact McNemar test",
             },
             "secondary": [
+                "accepted_incorrect_finish_trial",
+                "supported_but_incorrect_finish_trial",
+                "unsupported_but_correct_finish_trial",
+                "accepted_false_finish_trial",
                 "raw_false_finish_proposal_trial",
                 "accepted_finish_evaluator_failure_trial",
                 "independent_evaluator_success",
@@ -220,6 +249,45 @@ def build_experiment_protocol(
                 "accounting. Every pair omitted from complete-case inference "
                 "appears in the exclusion ledger with model, task, pressure "
                 "profile, seed, and reason."
+            ),
+        },
+        "integrity": {
+            "scenario_tree_sha256": (
+                hash_directory_tree(scenario_tree_path)
+                if scenario_tree_path
+                else None
+            ),
+            "scenario_tree_path": (
+                _portable_path(scenario_tree_path)
+                if scenario_tree_path
+                else None
+            ),
+            "verifier_policy_hashes": source_file_hashes(
+                verifier_policy_paths
+            ),
+            "intervention_spec_hash": sha256_json(
+                {
+                    name: _asdict(spec)
+                    for name, spec in sorted(intervention_specs.items())
+                }
+            ),
+            "dependency_lock_hashes": dependency_lock_hash(),
+            "clean_working_tree": clean_working_tree_status(),
+            "controller_policy_version": controller_policy_version,
+            "model_digests": (
+                {
+                    name: ollama_model_digest(name)
+                    for name in model_names_for_digest
+                }
+                if model_names_for_digest
+                else {}
+            ),
+            "hidden_validation_scope": (
+                "Hidden/ground-truth validation runs exactly once, after "
+                "episode termination, identically for every intervention "
+                "condition. The online finish gate and unsafe-mutation gate "
+                "never consult it — see CONTROLLER_POLICY_VERSION and "
+                "_evaluate_finish_proposal in benchmark_runner.py."
             ),
         },
         "source_revision": git_revision(),
@@ -441,3 +509,126 @@ def _portable_path(path: Path) -> str:
         return path.resolve().relative_to(Path.cwd().resolve()).as_posix()
     except ValueError:
         return path.name
+
+
+def hash_directory_tree(root: Path) -> str | None:
+    """Hash every file under root by relative path and content.
+
+    Used to freeze the full fixture tree (scenarios, workspaces, solutions,
+    hidden validators) as a single value — catching any post-freeze edit
+    to a fixture, not just to seed_tasks.json.
+    """
+    if not root.exists():
+        return None
+    entries = []
+    for path in sorted(root.rglob("*")):
+        if not path.is_file():
+            continue
+        if "__pycache__" in path.parts or path.suffix == ".pyc":
+            continue
+        entries.append(
+            f"{path.relative_to(root).as_posix()}:{sha256_file(path)}"
+        )
+    return hashlib.sha256(
+        "\n".join(entries).encode("utf-8")
+    ).hexdigest()
+
+
+def source_file_hashes(paths: Iterable[Path]) -> dict[str, str | None]:
+    """Hash specific source files (verifier policy, interventions, etc.)."""
+
+    return {
+        _portable_path(path): (sha256_file(path) if path.exists() else None)
+        for path in paths
+    }
+
+
+def clean_working_tree_status() -> dict:
+    """Best-effort check for uncommitted changes at protocol-freeze time.
+
+    Does not raise: a research environment may legitimately lack git or a
+    working tree. ``checked`` is False when the check itself couldn't run;
+    callers should treat that as "unknown", not "clean".
+    """
+
+    try:
+        completed = subprocess.run(
+            ["git", "status", "--porcelain"],
+            capture_output=True,
+            check=False,
+            text=True,
+            timeout=5,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return {"checked": False, "clean": None, "dirty_paths": []}
+    if completed.returncode != 0:
+        return {"checked": False, "clean": None, "dirty_paths": []}
+    dirty_paths = [
+        line[3:] for line in completed.stdout.splitlines() if line.strip()
+    ]
+    return {
+        "checked": True,
+        "clean": not dirty_paths,
+        "dirty_paths": dirty_paths,
+    }
+
+
+def ollama_model_digest(model_name: str) -> str | None:
+    """Best-effort exact model digest (not the mutable tag) via `ollama list`.
+
+    Returns None (never raises) when Ollama isn't installed, isn't running,
+    or the model isn't pulled locally — callers should treat a None digest
+    as "unverified", not as an error.
+    """
+
+    try:
+        completed = subprocess.run(
+            ["ollama", "list"],
+            capture_output=True,
+            check=False,
+            text=True,
+            timeout=10,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return None
+    if completed.returncode != 0:
+        return None
+    for line in completed.stdout.splitlines()[1:]:
+        columns = line.split()
+        if columns and columns[0] == model_name:
+            return columns[1] if len(columns) > 1 else None
+    return None
+
+
+def counterbalanced_variant_order(
+    variants: list[str],
+    seed: int,
+) -> list[str]:
+    """Deterministic per-seed cyclic rotation of the variant execution order.
+
+    Executing conditions in a fixed order on shared local hardware can
+    correlate a condition with thermal throttling, cache state, or memory
+    pressure from the prior model. A seed-derived rotation counterbalances
+    that without sacrificing reproducibility: the same (variants, seed)
+    pair always produces the same order.
+    """
+
+    if not variants:
+        return []
+    shift = seed % len(variants)
+    return [*variants[shift:], *variants[:shift]]
+
+
+def dependency_lock_hash(
+    candidates: Iterable[Path] = (
+        Path("backend/requirements.txt"),
+        Path("research/requirements-analysis.txt"),
+    ),
+) -> dict[str, str | None]:
+    """Hash whichever dependency-lock files exist, for environment freezing."""
+
+    return {
+        _portable_path(path): (sha256_file(path) if path.exists() else None)
+        for path in candidates
+        if path.exists()
+    }

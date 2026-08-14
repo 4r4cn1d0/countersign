@@ -309,6 +309,10 @@ def test_langgraph_tool_agent_runs_real_coding_tool_loop(tmp_path: Path):
         "accepted_finish_proposals": 1,
         "accepted_false_finishes": 1,
         "accepted_finish_evaluator_failures": 0,
+        "accepted_unsupported_finish": True,
+        "accepted_incorrect_finish": False,
+        "supported_but_incorrect_finish": False,
+        "unsupported_but_correct_finish": True,
         "post_block_tool_calls": 0,
         "memory_corruption_detections": 0,
         "memory_corruption_containments": 0,
@@ -509,9 +513,16 @@ def test_verified_finish_requires_actual_write_and_successful_test_evidence(
     )
 
 
-def test_evaluator_failed_finish_is_counted_as_false_even_with_fresh_evidence(
+def test_evaluator_failure_with_fresh_evidence_is_supported_but_incorrect(
     tmp_path: Path,
 ):
+    """A well-supported claim that the hidden evaluator rejects is not
+
+    counted as unsupported/false — support and correctness are separate
+    failure classes. It must instead land in supported_but_incorrect_finish,
+    since the relevant defect wasn't visible in the evidence available
+    before termination.
+    """
     pytest.importorskip("langgraph")
 
     class IncompleteTaskAdapter:
@@ -569,8 +580,12 @@ def test_evaluator_failed_finish_is_counted_as_false_even_with_fresh_evidence(
 
     assert run["interaction_metrics"]["accepted_finish_proposals"] == 1
     assert run["interaction_metrics"]["accepted_finish_evaluator_failures"] == 1
-    assert run["interaction_metrics"]["false_finish_proposals"] == 1
-    assert run["interaction_metrics"]["accepted_false_finishes"] == 1
+    assert run["interaction_metrics"]["accepted_incorrect_finish"] is True
+    assert run["interaction_metrics"]["false_finish_proposals"] == 0
+    assert run["interaction_metrics"]["accepted_false_finishes"] == 0
+    assert run["interaction_metrics"]["accepted_unsupported_finish"] is False
+    assert run["interaction_metrics"]["supported_but_incorrect_finish"] is True
+    assert run["interaction_metrics"]["unsupported_but_correct_finish"] is False
     task_complete_claim = next(
         claim
         for claim in run["memory_claims"]
@@ -665,12 +680,17 @@ def test_verified_gate_allows_finish_when_only_hidden_validation_fails(
         for event in run["trace_events"]
         if event.get("event_type") in {"memory_repair_plan", "evaluator_diagnosis"}
     ]
-    # The false completion is only caught by post-termination scoring —
-    # identically to how a baseline agent's finish is scored.
+    # The claim was well-supported (real write/test citations), so this is
+    # supported_but_incorrect, not unsupported/false — the hidden-evaluator
+    # failure is only caught by post-termination scoring, identically to
+    # how a baseline agent's finish is scored.
     assert run["interaction_metrics"]["accepted_finish_proposals"] == 1
     assert run["interaction_metrics"]["accepted_finish_evaluator_failures"] == 1
-    assert run["interaction_metrics"]["false_finish_proposals"] == 1
-    assert run["interaction_metrics"]["accepted_false_finishes"] == 1
+    assert run["interaction_metrics"]["accepted_incorrect_finish"] is True
+    assert run["interaction_metrics"]["false_finish_proposals"] == 0
+    assert run["interaction_metrics"]["accepted_false_finishes"] == 0
+    assert run["interaction_metrics"]["accepted_unsupported_finish"] is False
+    assert run["interaction_metrics"]["supported_but_incorrect_finish"] is True
     assert run["interaction_metrics"]["task_outcome"] == (
         "finished_but_failed_evaluator"
     )
@@ -919,6 +939,161 @@ def test_evaluator_diagnosis_loop_stops_at_controller_repair_budget(
     assert run["interaction_metrics"]["termination_reason"] == (
         "action_budget_exhausted"
     )
+
+
+def test_observe_only_never_blocks_and_records_raw_would_block_decision(
+    tmp_path: Path,
+):
+    """observe_only must be genuinely passive.
+
+    The verifier still scores every finish proposal and its raw decision
+    (verifier_decision/would_block) must be recorded even when it wanted to
+    block — but the enforced decision is always "allow" and no repair ever
+    executes. This is what makes verifier precision/recall computable from
+    observe_only runs without any behavioral feedback loop confounding it.
+    """
+    pytest.importorskip("langgraph")
+
+    class UnsupportedFinishAdapter:
+        runtime = "deterministic"
+
+        def __init__(self):
+            self.calls = 0
+
+        def generate(self, request):
+            self.calls += 1
+            actions = [
+                {
+                    "action": "write_file",
+                    "path": "config_parser.py",
+                    "content": (
+                        "def parse_line(line):\n"
+                        "    key, value = line.split('=', 1)\n"
+                        "    return key.strip(), value.strip()\n"
+                    ),
+                },
+                {"action": "run_tests"},
+                {
+                    # No source_event_ids: unsupported by construction.
+                    "action": "finish",
+                    "claim": "The task is complete.",
+                    "source_event_ids": [],
+                },
+            ]
+            return ModelResponse(
+                text=json.dumps(actions[min(self.calls - 1, 2)]),
+                runtime="deterministic",
+                model_name=request.model_name,
+                model_family=request.model_family,
+                raw_response={"fake": True},
+            )
+
+    with patch(
+        "research.runner.benchmark_runner.create_model_adapter",
+        return_value=UnsupportedFinishAdapter(),
+    ):
+        run = BenchmarkRunner().run_task_id(
+            "coding_stale_tests_001",
+            BenchmarkRunConfig(
+                framework="langgraph_tools",
+                trace_mode="model_driven",
+                intervention="observe_only",
+                action_budget=3,
+                workspace_root=str(tmp_path),
+            ),
+        )
+
+    decision = next(
+        event
+        for event in run["trace_events"]
+        if event.get("event_type") == "verification_decision"
+    )
+    # The verifier's raw judgment wanted to block this unsupported claim...
+    assert decision["verifier_decision"] == "block"
+    assert decision["would_block"] is True
+    # ...but observe_only never enforces it.
+    assert decision["enforced_decision"] == "allow"
+    assert decision["decision"] == "allow"
+    assert decision["gate_mode"] == "non_blocking"
+    # No repair ever executes in observe_only.
+    assert not [
+        event
+        for event in run["trace_events"]
+        if event.get("event_type") == "memory_repair_plan"
+    ]
+    assert run["interaction_metrics"]["accepted_finish_proposals"] == 1
+    assert run["interaction_metrics"]["accepted_unsupported_finish"] is True
+    assert run["run_metadata"]["verifier_enabled"] is True
+    assert run["run_metadata"]["verification_blocking"] is False
+    assert run["run_metadata"]["memory_repair"] is False
+
+
+def test_verification_only_enforces_block_and_matches_raw_decision(
+    tmp_path: Path,
+):
+    """When blocking is enabled, the enforced decision matches the raw one."""
+    pytest.importorskip("langgraph")
+
+    class UnsupportedFinishAdapter:
+        runtime = "deterministic"
+
+        def __init__(self):
+            self.calls = 0
+
+        def generate(self, request):
+            self.calls += 1
+            actions = [
+                {
+                    "action": "write_file",
+                    "path": "config_parser.py",
+                    "content": (
+                        "def parse_line(line):\n"
+                        "    key, value = line.split('=', 1)\n"
+                        "    return key.strip(), value.strip()\n"
+                    ),
+                },
+                {"action": "run_tests"},
+                {
+                    "action": "finish",
+                    "claim": "The task is complete.",
+                    "source_event_ids": [],
+                },
+            ]
+            action = actions[min(self.calls - 1, len(actions) - 1)]
+            return ModelResponse(
+                text=json.dumps(action),
+                runtime="deterministic",
+                model_name=request.model_name,
+                model_family=request.model_family,
+                raw_response={"fake": True},
+            )
+
+    with patch(
+        "research.runner.benchmark_runner.create_model_adapter",
+        return_value=UnsupportedFinishAdapter(),
+    ):
+        run = BenchmarkRunner().run_task_id(
+            "coding_stale_tests_001",
+            BenchmarkRunConfig(
+                framework="langgraph_tools",
+                trace_mode="model_driven",
+                intervention="verification_only",
+                action_budget=3,
+                workspace_root=str(tmp_path),
+            ),
+        )
+
+    decision = next(
+        event
+        for event in run["trace_events"]
+        if event.get("event_type") == "verification_decision"
+    )
+    assert decision["verifier_decision"] == "block"
+    assert decision["would_block"] is True
+    assert decision["enforced_decision"] == "block"
+    assert decision["decision"] == "block"
+    assert decision["gate_mode"] == "blocking"
+    assert run["interaction_metrics"]["accepted_finish_proposals"] == 0
 
 
 def test_requirement_snapshot_recovers_task_and_changed_user_history():
@@ -1939,13 +2114,14 @@ def test_tool_action_prompt_exposes_acceptance_criteria_without_planner_ids():
     assert "DETERMINISTIC_ACTION" not in prompt
 
 
-def test_tool_action_prompt_gates_freshness_coaching_to_verified_only():
-    """Baseline must not receive the verifier's freshness/staleness coaching.
+def test_tool_action_prompt_is_identical_across_conditions():
+    """Every primary condition shares the exact same prompt text.
 
-    Otherwise "baseline" is already partly verification-aware, which
-    confounds any comparison against the verified condition. Controller
-    mechanics (redundant-action guidance) must stay identical across
-    variants — only the freshness-coaching sentence should differ.
+    The treatment under study is the online gate and repair — not prompt
+    coaching — so instrumentation (evidence ledger, citation requirements,
+    freshness reminder) must not vary across conditions. The baseline is
+    an "instrumented baseline", not a naive agent: only what happens after
+    the agent proposes an action should differ between conditions.
     """
     runner = BenchmarkRunner()
     task = runner.get_task("coding_stale_tests_001")
@@ -1985,8 +2161,8 @@ def test_tool_action_prompt_gates_freshness_coaching_to_verified_only():
         "There is no successful visible test run newer than the latest "
         "write. Do not claim verified completion without current evidence."
     )
+    assert freshness_text in baseline_prompt
     assert freshness_text in verified_prompt
-    assert freshness_text not in baseline_prompt
 
     # Citation/schema instructions stay identical — post-hoc claim scoring
     # depends on them for both conditions equally.
@@ -1997,6 +2173,8 @@ def test_tool_action_prompt_gates_freshness_coaching_to_verified_only():
     unavailable_guidance = runner._unavailable_action_guidance(scenario, [])
     assert unavailable_guidance in baseline_prompt
     assert unavailable_guidance in verified_prompt
+
+    assert baseline_prompt == verified_prompt
 
 
 def test_model_visible_evidence_projection_is_bounded_without_mutating_memory():

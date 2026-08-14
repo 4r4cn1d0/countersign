@@ -598,6 +598,26 @@ def _task_rows_for_model(
                         0,
                     )
                 ),
+                "baseline_accepted_unsupported_finish": bool(
+                    baseline_interaction.get(
+                        "accepted_unsupported_finish", False
+                    )
+                ),
+                "baseline_accepted_incorrect_finish": bool(
+                    baseline_interaction.get(
+                        "accepted_incorrect_finish", False
+                    )
+                ),
+                "baseline_supported_but_incorrect_finish": bool(
+                    baseline_interaction.get(
+                        "supported_but_incorrect_finish", False
+                    )
+                ),
+                "baseline_unsupported_but_correct_finish": bool(
+                    baseline_interaction.get(
+                        "unsupported_but_correct_finish", False
+                    )
+                ),
                 "verified_false_finish_proposals": int(
                     verified_interaction.get("false_finish_proposals", 0)
                 ),
@@ -611,6 +631,26 @@ def _task_rows_for_model(
                     verified_interaction.get(
                         "accepted_finish_evaluator_failures",
                         0,
+                    )
+                ),
+                "verified_accepted_unsupported_finish": bool(
+                    verified_interaction.get(
+                        "accepted_unsupported_finish", False
+                    )
+                ),
+                "verified_accepted_incorrect_finish": bool(
+                    verified_interaction.get(
+                        "accepted_incorrect_finish", False
+                    )
+                ),
+                "verified_supported_but_incorrect_finish": bool(
+                    verified_interaction.get(
+                        "supported_but_incorrect_finish", False
+                    )
+                ),
+                "verified_unsupported_but_correct_finish": bool(
+                    verified_interaction.get(
+                        "unsupported_but_correct_finish", False
                     )
                 ),
                 "verified_recovery_after_block": bool(
@@ -790,17 +830,13 @@ def _task_rows_for_model(
                         "temporal_ordering_accuracy"
                     )
                 ),
-                "baseline_stale_decision_use_rate": float(
-                    baseline_headline.get(
-                        "stale_decision_use_rate",
-                        0.0,
-                    )
+                # None (not a forced float default) when the underlying rate
+                # had an empty denominator — see metrics.py:_rate.
+                "baseline_stale_decision_use_rate": baseline_headline.get(
+                    "stale_decision_use_rate"
                 ),
-                "verified_stale_decision_use_rate": float(
-                    verified_headline.get(
-                        "stale_decision_use_rate",
-                        0.0,
-                    )
+                "verified_stale_decision_use_rate": verified_headline.get(
+                    "stale_decision_use_rate"
                 ),
                 "baseline_decision_belief_coverage": float(
                     baseline_headline.get(
@@ -814,40 +850,30 @@ def _task_rows_for_model(
                         0.0,
                     )
                 ),
-                "baseline_unsupported_tool_decision_use_rate": float(
+                "baseline_unsupported_tool_decision_use_rate": (
                     baseline_headline.get(
-                        "unsupported_tool_decision_use_rate",
-                        0.0,
+                        "unsupported_tool_decision_use_rate"
                     )
                 ),
-                "verified_unsupported_tool_decision_use_rate": float(
+                "verified_unsupported_tool_decision_use_rate": (
                     verified_headline.get(
-                        "unsupported_tool_decision_use_rate",
-                        0.0,
+                        "unsupported_tool_decision_use_rate"
                     )
                 ),
-                "baseline_stale_tool_decision_use_rate": float(
+                "baseline_stale_tool_decision_use_rate": (
+                    baseline_headline.get("stale_tool_decision_use_rate")
+                ),
+                "verified_stale_tool_decision_use_rate": (
+                    verified_headline.get("stale_tool_decision_use_rate")
+                ),
+                "baseline_contradicted_tool_decision_use_rate": (
                     baseline_headline.get(
-                        "stale_tool_decision_use_rate",
-                        0.0,
+                        "contradicted_tool_decision_use_rate"
                     )
                 ),
-                "verified_stale_tool_decision_use_rate": float(
+                "verified_contradicted_tool_decision_use_rate": (
                     verified_headline.get(
-                        "stale_tool_decision_use_rate",
-                        0.0,
-                    )
-                ),
-                "baseline_contradicted_tool_decision_use_rate": float(
-                    baseline_headline.get(
-                        "contradicted_tool_decision_use_rate",
-                        0.0,
-                    )
-                ),
-                "verified_contradicted_tool_decision_use_rate": float(
-                    verified_headline.get(
-                        "contradicted_tool_decision_use_rate",
-                        0.0,
+                        "contradicted_tool_decision_use_rate"
                     )
                 ),
                 "verified_probe_evidence_attribution_accuracy": (
@@ -1121,24 +1147,32 @@ def _model_summary(model: dict, rows: list[dict]) -> dict:
         "avg_baseline_unsupported_tool_decision_use_rate": _mean(
             row["baseline_unsupported_tool_decision_use_rate"]
             for row in rows
+            if row["baseline_unsupported_tool_decision_use_rate"] is not None
         ),
         "avg_verified_unsupported_tool_decision_use_rate": _mean(
             row["verified_unsupported_tool_decision_use_rate"]
             for row in rows
+            if row["verified_unsupported_tool_decision_use_rate"] is not None
         ),
         "avg_baseline_stale_tool_decision_use_rate": _mean(
-            row["baseline_stale_tool_decision_use_rate"] for row in rows
+            row["baseline_stale_tool_decision_use_rate"]
+            for row in rows
+            if row["baseline_stale_tool_decision_use_rate"] is not None
         ),
         "avg_verified_stale_tool_decision_use_rate": _mean(
-            row["verified_stale_tool_decision_use_rate"] for row in rows
+            row["verified_stale_tool_decision_use_rate"]
+            for row in rows
+            if row["verified_stale_tool_decision_use_rate"] is not None
         ),
         "avg_baseline_contradicted_tool_decision_use_rate": _mean(
             row["baseline_contradicted_tool_decision_use_rate"]
             for row in rows
+            if row["baseline_contradicted_tool_decision_use_rate"] is not None
         ),
         "avg_verified_contradicted_tool_decision_use_rate": _mean(
             row["verified_contradicted_tool_decision_use_rate"]
             for row in rows
+            if row["verified_contradicted_tool_decision_use_rate"] is not None
         ),
         "avg_semantic_drift_score": _mean(
             row["semantic_drift_score"]
@@ -1275,26 +1309,32 @@ def _aggregate_summary(
         "avg_baseline_unsupported_tool_decision_use_rate": _mean(
             row["baseline_unsupported_tool_decision_use_rate"]
             for row in task_rows
+            if row["baseline_unsupported_tool_decision_use_rate"] is not None
         ),
         "avg_verified_unsupported_tool_decision_use_rate": _mean(
             row["verified_unsupported_tool_decision_use_rate"]
             for row in task_rows
+            if row["verified_unsupported_tool_decision_use_rate"] is not None
         ),
         "avg_baseline_stale_tool_decision_use_rate": _mean(
             row["baseline_stale_tool_decision_use_rate"]
             for row in task_rows
+            if row["baseline_stale_tool_decision_use_rate"] is not None
         ),
         "avg_verified_stale_tool_decision_use_rate": _mean(
             row["verified_stale_tool_decision_use_rate"]
             for row in task_rows
+            if row["verified_stale_tool_decision_use_rate"] is not None
         ),
         "avg_baseline_contradicted_tool_decision_use_rate": _mean(
             row["baseline_contradicted_tool_decision_use_rate"]
             for row in task_rows
+            if row["baseline_contradicted_tool_decision_use_rate"] is not None
         ),
         "avg_verified_contradicted_tool_decision_use_rate": _mean(
             row["verified_contradicted_tool_decision_use_rate"]
             for row in task_rows
+            if row["verified_contradicted_tool_decision_use_rate"] is not None
         ),
         "avg_semantic_drift_score": _mean(
             row["semantic_drift_score"]

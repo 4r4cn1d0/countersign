@@ -8,6 +8,7 @@ venv/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.hypothesis/
 
 # Node (when frontend is added)
 node_modules/

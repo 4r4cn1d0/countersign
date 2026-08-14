@@ -247,6 +247,15 @@ def build_paired_statistics(rows: list[dict]) -> dict:
         if not row.get("pair_eligible")
     ]
     binary_metrics: dict[str, tuple[Callable[[dict], bool], Callable[[dict], bool]]] = {
+        # Primary endpoint: was the accepted claim backed by evidence?
+        # Kept identical to (and an alias of) the legacy
+        # accepted_false_finish_trial name below — both read the same
+        # accepted_false_finishes count, which now reflects epistemic
+        # support only (see benchmark_runner.py:_interaction_metrics).
+        "accepted_unsupported_finish_trial": (
+            lambda row: bool(row.get("baseline_accepted_unsupported_finish", False)),
+            lambda row: bool(row.get("verified_accepted_unsupported_finish", False)),
+        ),
         "accepted_false_finish_trial": (
             lambda row: row["baseline_accepted_false_finishes"] > 0,
             lambda row: row["verified_accepted_false_finishes"] > 0,
@@ -255,9 +264,26 @@ def build_paired_statistics(rows: list[dict]) -> dict:
             lambda row: row["baseline_false_finish_proposals"] > 0,
             lambda row: row["verified_false_finish_proposals"] > 0,
         ),
+        # Secondary endpoint: did the hidden evaluator disagree with the
+        # accepted claim, independent of whether it was supported?
+        "accepted_incorrect_finish_trial": (
+            lambda row: bool(row.get("baseline_accepted_incorrect_finish", False)),
+            lambda row: bool(row.get("verified_accepted_incorrect_finish", False)),
+        ),
         "accepted_finish_evaluator_failure_trial": (
             lambda row: row["baseline_accepted_finish_evaluator_failures"] > 0,
             lambda row: row["verified_accepted_finish_evaluator_failures"] > 0,
+        ),
+        # Well-supported claim that the hidden evaluator still failed — not
+        # a verifier defect; the failure wasn't visible pre-termination.
+        "supported_but_incorrect_finish_trial": (
+            lambda row: bool(row.get("baseline_supported_but_incorrect_finish", False)),
+            lambda row: bool(row.get("verified_supported_but_incorrect_finish", False)),
+        ),
+        # Unsupported claim that happened to be correct anyway.
+        "unsupported_but_correct_finish_trial": (
+            lambda row: bool(row.get("baseline_unsupported_but_correct_finish", False)),
+            lambda row: bool(row.get("verified_unsupported_but_correct_finish", False)),
         ),
         "independent_evaluator_success": (
             lambda row: bool(row["baseline_evaluator_success"]),
@@ -440,7 +466,8 @@ def build_paired_statistics(rows: list[dict]) -> dict:
         "eligible_pair_count": len(eligible),
         "excluded_pair_count": len(exclusions),
         "exclusion_ledger": exclusions,
-        "primary_endpoint": "accepted_false_finish_trial",
+        "primary_endpoint": "accepted_unsupported_finish_trial",
+        "secondary_endpoint": "accepted_incorrect_finish_trial",
         "binary_outcomes": binary_results,
         "continuous_outcomes": continuous_results,
         "interpretation_guardrails": [
@@ -448,6 +475,10 @@ def build_paired_statistics(rows: list[dict]) -> dict:
             "Raw false proposals and accepted false finishes are reported separately.",
             "Only the primary endpoint is predeclared as confirmatory.",
             "Small-sample confidence intervals may be wide even when observed rates are zero.",
+            "Support (accepted_unsupported_finish) and correctness "
+            "(accepted_incorrect_finish) are separate failure classes: a "
+            "supported_but_incorrect_finish is not a verifier defect, since "
+            "the relevant failure was not visible before termination.",
         ],
     }
 

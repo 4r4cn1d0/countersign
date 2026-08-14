@@ -616,6 +616,98 @@ def test_protocol_identifier_is_stable_but_changes_with_generation_settings(
     assert first["protocol_id"] != changed_thinking["protocol_id"]
 
 
+def test_protocol_integrity_section_hashes_fixtures_and_policy(
+    tmp_path: Path,
+):
+    runner = BenchmarkRunner()
+    matrix_path = tmp_path / "matrix.json"
+    matrix_path.write_text('{"models":[]}')
+    model = {"model_family": "qwen", "model_name": "qwen2.5-coder:7b"}
+    task = runner.get_task("coding_stale_tests_001")
+    protocol = build_experiment_protocol(
+        matrix_path=matrix_path,
+        benchmark_path=runner.benchmark_path,
+        selected_models=[model],
+        selected_tasks=[task],
+        runtime="deterministic",
+        framework="langgraph_tools",
+        variants=["memory_baseline", "observe_only", "verification_only"],
+        seeds=[0, 1, 2],
+        temperature=0.0,
+        max_tokens=256,
+        action_budget=20,
+        trace_mode="model_driven",
+        prompt_template="default_react_memory_v0",
+        constrained_actions=True,
+        thinking=False,
+        controller_policy_version="test-policy-v1",
+        model_names_for_digest=["qwen2.5-coder:7b"],
+    )
+
+    integrity = protocol["integrity"]
+    assert integrity["scenario_tree_sha256"] is not None
+    assert integrity["verifier_policy_hashes"]
+    assert all(
+        value is not None
+        for value in integrity["verifier_policy_hashes"].values()
+    )
+    assert integrity["intervention_spec_hash"]
+    assert integrity["controller_policy_version"] == "test-policy-v1"
+    # Absent/unreachable Ollama must yield None per model, not raise.
+    assert set(integrity["model_digests"]) == {"qwen2.5-coder:7b"}
+    assert integrity["hidden_validation_scope"]
+
+    # Counterbalanced order is a deterministic per-seed rotation of the
+    # exact variant list, not the fixed declared order.
+    order = protocol["design"]["counterbalanced_order_by_seed"]
+    variants = ["memory_baseline", "observe_only", "verification_only"]
+    assert order["0"] == variants
+    assert order["1"] == [*variants[1:], *variants[:1]]
+    assert order["2"] == [*variants[2:], *variants[:2]]
+    for rotated in order.values():
+        assert sorted(rotated) == sorted(variants)
+
+    assert protocol["predeclared_outcomes"]["primary"]["name"] == (
+        "accepted_unsupported_finish_trial"
+    )
+    assert "accepted_incorrect_finish_trial" in (
+        protocol["predeclared_outcomes"]["secondary"]
+    )
+
+    # Changing the intervention-spec content changes the protocol identity.
+    from research.runner.interventions import _SPECS
+    from dataclasses import replace as dc_replace
+
+    original = _SPECS["observe_only"]
+    try:
+        _SPECS["observe_only"] = dc_replace(
+            original, verification_blocking=True
+        )
+        mutated_protocol = build_experiment_protocol(
+            matrix_path=matrix_path,
+            benchmark_path=runner.benchmark_path,
+            selected_models=[model],
+            selected_tasks=[task],
+            runtime="deterministic",
+            framework="langgraph_tools",
+            variants=["memory_baseline", "observe_only", "verification_only"],
+            seeds=[0, 1, 2],
+            temperature=0.0,
+            max_tokens=256,
+            action_budget=20,
+            trace_mode="model_driven",
+            prompt_template="default_react_memory_v0",
+            constrained_actions=True,
+            thinking=False,
+        )
+    finally:
+        _SPECS["observe_only"] = original
+    assert (
+        mutated_protocol["integrity"]["intervention_spec_hash"]
+        != integrity["intervention_spec_hash"]
+    )
+
+
 def test_predeclared_statistics_report_zero_rate_uncertainty_and_exact_pairing():
     interval = wilson_interval(0, 5)
     paired = exact_mcnemar(
@@ -882,9 +974,17 @@ def test_model_matrix_analysis_reports_langgraph_tool_reality_columns(tmp_path: 
     assert row["tool_action_parse_status_counts"] == {"json": 20}
     assert 0.0 <= row["baseline_decision_belief_coverage"] <= 1.0
     assert 0.0 <= row["verified_decision_belief_coverage"] <= 1.0
-    assert 0.0 <= row["baseline_unsupported_tool_decision_use_rate"] <= 1.0
-    assert 0.0 <= row["verified_stale_tool_decision_use_rate"] <= 1.0
-    assert 0.0 <= row["verified_contradicted_tool_decision_use_rate"] <= 1.0
+    # None (not a forced 0.0) when there were no tool-decision beliefs to
+    # compute a rate over — see metrics.py:_rate.
+    baseline_unsupported_rate = row["baseline_unsupported_tool_decision_use_rate"]
+    assert baseline_unsupported_rate is None or 0.0 <= baseline_unsupported_rate <= 1.0
+    verified_stale_rate = row["verified_stale_tool_decision_use_rate"]
+    assert verified_stale_rate is None or 0.0 <= verified_stale_rate <= 1.0
+    verified_contradicted_rate = row["verified_contradicted_tool_decision_use_rate"]
+    assert (
+        verified_contradicted_rate is None
+        or 0.0 <= verified_contradicted_rate <= 1.0
+    )
     assert model["verified_recovery_count"] == 1
     assert model["baseline_evaluator_success_count"] == 1
     assert model["verified_evaluator_success_count"] == 1
@@ -892,15 +992,22 @@ def test_model_matrix_analysis_reports_langgraph_tool_reality_columns(tmp_path: 
         model["avg_baseline_decision_belief_coverage"]
         == row["baseline_decision_belief_coverage"]
     )
-    assert (
-        model["avg_verified_stale_tool_decision_use_rate"]
-        == row["verified_stale_tool_decision_use_rate"]
+    # When the single row's rate is None (no tool-decision beliefs to
+    # measure), the aggregate falls back to _mean's empty-input default
+    # (0.0) rather than equaling the row's None.
+    assert model["avg_verified_stale_tool_decision_use_rate"] == (
+        row["verified_stale_tool_decision_use_rate"]
+        if row["verified_stale_tool_decision_use_rate"] is not None
+        else 0.0
     )
     assert report["aggregate"]["total_false_completion_claims"] >= 1
     assert report["aggregate"]["verified_blocked_false_finishes"] == 1
-    assert (
-        report["aggregate"]["avg_verified_contradicted_tool_decision_use_rate"]
-        == row["verified_contradicted_tool_decision_use_rate"]
+    assert report["aggregate"][
+        "avg_verified_contradicted_tool_decision_use_rate"
+    ] == (
+        row["verified_contradicted_tool_decision_use_rate"]
+        if row["verified_contradicted_tool_decision_use_rate"] is not None
+        else 0.0
     )
     assert "Coding-Agent Intervention Matrix" in markdown
 

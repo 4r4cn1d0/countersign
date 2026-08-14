@@ -10,12 +10,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .benchmark_runner import BenchmarkRunConfig, BenchmarkRunner
+from .benchmark_runner import (
+    CONTROLLER_POLICY_VERSION,
+    BenchmarkRunConfig,
+    BenchmarkRunner,
+)
 from .comparison import compare_runs
 from .interventions import resolve_intervention
 from .experiment_protocol import (
     build_artifact_index,
     build_experiment_protocol,
+    counterbalanced_variant_order,
     environment_fingerprint,
     indexed_artifact,
     sha256_file,
@@ -252,6 +257,10 @@ def run_model_matrix(
         probe_interval=active_probe_interval,
         probe_max_tokens=active_probe_max_tokens,
         memory_repair=active_memory_repair,
+        controller_policy_version=CONTROLLER_POLICY_VERSION,
+        model_names_for_digest=[
+            model["model_name"] for model in enabled_models
+        ],
     )
     protocol_path = output_dir / "experiment_protocol.json"
     write_frozen_protocol(protocol_path, protocol)
@@ -503,19 +512,26 @@ def _run_one_model(
                 trial_id = (
                     f"{model_slug}:{task_id}:{profile_id}:seed-{seed}"
                 )
-                for variant in variants:
+                # Seed-derived counterbalanced rotation, not a fixed order —
+                # avoids correlating any one condition with thermal
+                # throttling, cache state, or prior-model memory pressure
+                # on shared local hardware. See experiment_protocol.py.
+                for variant in counterbalanced_variant_order(variants, seed):
                     if intervention_mode:
                         spec = resolve_intervention(variant)
                         row_agent_variant = spec.agent_variant
+                        row_verifier_enabled = spec.verifier_enabled
                         row_intervention = variant
                     else:
                         row_agent_variant = variant
+                        row_verifier_enabled = variant == "verified"
                         row_intervention = "legacy"
                     run_config = BenchmarkRunConfig(
                         framework=framework,
                         model_family=model["model_family"],
                         model_name=model_name,
                         agent_variant=row_agent_variant,
+                        verifier_enabled=row_verifier_enabled,
                         intervention=row_intervention,
                         seed=seed,
                         runtime=runtime,

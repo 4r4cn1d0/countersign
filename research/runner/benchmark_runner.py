@@ -69,6 +69,11 @@ DEFAULT_BENCHMARK_PATH = ROOT / "research" / "benchmarks" / "seed_tasks.json"
 DEFAULT_STACK_PATH = ROOT / "research" / "agents" / "initial_stack.json"
 EVALUATOR_REPAIR_BUDGET = 2
 TOOL_RUN_CHECKPOINT_SCHEMA = "agent-memory-tool-run-checkpoint/v0.1"
+# Bump when the online finish gate, unsafe-mutation gate, or repair-trigger
+# logic in process_action/_evaluate_finish_proposal materially changes.
+# Recorded in the frozen experiment protocol so a later code change is
+# detectable without diffing the whole file.
+CONTROLLER_POLICY_VERSION = "v3-trace-only-gate"
 
 
 @dataclass(frozen=True)
@@ -104,6 +109,22 @@ class BenchmarkRunConfig:
     intervention: str = "legacy"
     verification_blocking: bool = True
     resume_from: str | None = None
+    # Whether the online verifier runs at all, independent of whether it
+    # blocks (verification_blocking) or triggers repair (memory_repair).
+    # Decoupled from agent_variant so instrumentation, blocking, and repair
+    # can be varied independently (see interventions.py). Defaults to
+    # agent_variant == "verified" when not set explicitly, so existing
+    # call sites that only set agent_variant keep their prior behavior.
+    verifier_enabled: bool | None = None
+    prompt_profile: str = "instrumented"
+
+    def __post_init__(self) -> None:
+        if self.verifier_enabled is None:
+            object.__setattr__(
+                self,
+                "verifier_enabled",
+                self.agent_variant == "verified",
+            )
 
 
 class BenchmarkRunner:
@@ -129,6 +150,7 @@ class BenchmarkRunner:
             run_config = replace(
                 run_config,
                 agent_variant=spec.agent_variant,
+                verifier_enabled=spec.verifier_enabled,
                 memory_repair=spec.memory_repair,
                 verification_blocking=spec.verification_blocking,
             )
@@ -215,7 +237,9 @@ class BenchmarkRunner:
                 "probe_max_tokens": run_config.probe_max_tokens,
                 "memory_repair": run_config.memory_repair,
                 "intervention": run_config.intervention,
+                "verifier_enabled": run_config.verifier_enabled,
                 "verification_blocking": run_config.verification_blocking,
+                "prompt_profile": run_config.prompt_profile,
                 "agent_framework_runtime": (
                     run_config.framework if run_config.framework != "react_custom" else None
                 ),
@@ -396,11 +420,11 @@ class BenchmarkRunner:
         )
         run["memory_health_report"] = build_memory_health_report(run, task)
         if (
-            run_config.agent_variant == "verified"
+            run_config.verifier_enabled
             and run_config.framework == "langgraph_tools"
         ):
             run = self._attach_interactive_verification_report(run)
-        elif run_config.agent_variant == "verified":
+        elif run_config.verifier_enabled:
             from .verification import verify_run
 
             raw_run = dict(run)
@@ -1344,12 +1368,19 @@ class BenchmarkRunner:
                 finish_count = state.get("finish_proposal_count", 0) + 1
                 update["finish_proposal_count"] = finish_count
 
-                if config.agent_variant == "verified":
+                if config.verifier_enabled:
                     proposal = self._evaluate_finish_proposal(
                         task,
                         events,
                         proposal_event_id,
                     )
+                    # Raw verifier judgment, captured before any
+                    # non-blocking-mode override — this is what precision/
+                    # recall must be computed from, not the enforced action.
+                    verifier_decision = (
+                        "allow" if proposal["allow"] else "block"
+                    )
+                    would_block = not proposal["allow"]
                     allow = proposal["allow"]
                     gate_override = False
                     repair_plan = None
@@ -1402,6 +1433,9 @@ class BenchmarkRunner:
                         graph_node="process_action",
                         content=decision_content,
                         decision=decision,
+                        verifier_decision=verifier_decision,
+                        enforced_decision=decision,
+                        would_block=would_block,
                         gate_mode=(
                             "blocking"
                             if config.verification_blocking
@@ -1708,7 +1742,10 @@ class BenchmarkRunner:
                 )
                 return update
 
-            if config.agent_variant == "verified":
+            # A hard, non-overridable block — only appropriate when blocking
+            # itself is enabled (verification_only/verification_and_repair).
+            # observe_only and repair_only never issue a terminal veto.
+            if config.verifier_enabled and config.verification_blocking:
                 unsafe_reason = self._unsafe_mutation_reason(action, ledger)
                 if unsafe_reason:
                     gate_event_id = add(
@@ -2499,16 +2536,16 @@ class BenchmarkRunner:
         claims_by_event: dict[str, list[dict]] = {}
         for claim in run.get("memory_claims", []):
             claims_by_event.setdefault(claim["event_id"], []).append(claim)
-        failed_verification_event_ids = {
-            event.get("claim_event_id")
-            for event in events
-            if event.get("event_type") == "verification_decision"
-            and event.get("independent_evaluator_status") == "failure"
-        }
 
-        def is_false_proposal(event: dict) -> bool:
-            if event["event_id"] in failed_verification_event_ids:
-                return True
+        def is_unsupported_proposal(event: dict) -> bool:
+            """Epistemic support only: was the claim backed by evidence?
+
+            This must never depend on hidden/post-termination evaluation —
+            an unsupported claim and an incorrect claim are different
+            failure classes (see accepted_incorrect_finish below). A claim
+            can be well-supported and still turn out incorrect; the online
+            verifier is not at fault for that case.
+            """
             task_claims = [
                 claim
                 for claim in claims_by_event.get(event["event_id"], [])
@@ -2523,6 +2560,7 @@ class BenchmarkRunner:
                 for claim in task_claims
             )
 
+        is_false_proposal = is_unsupported_proposal
         false_proposals = [
             event for event in proposals if is_false_proposal(event)
         ]
@@ -2626,18 +2664,21 @@ class BenchmarkRunner:
             ),
             {},
         )
-        if accepted_proposals and evaluation.get("status") != "success":
-            false_by_id = {
-                event["event_id"]: event for event in false_proposals
-            }
-            accepted_false_by_id = {
-                event["event_id"]: event for event in accepted_false
-            }
-            for event in accepted_proposals:
-                false_by_id[event["event_id"]] = event
-                accepted_false_by_id[event["event_id"]] = event
-            false_proposals = list(false_by_id.values())
-            accepted_false = list(accepted_false_by_id.values())
+        # Support (was the claim backed by evidence?) and correctness (did
+        # the hidden evaluator agree?) are separate failure classes. An
+        # accepted claim can be well-supported and still incorrect — that is
+        # not a verifier failure, since the relevant defect was not visible
+        # in the evidence available before termination.
+        accepted_unsupported_finish = bool(accepted_false)
+        accepted_incorrect_finish = bool(
+            accepted_proposals and evaluation.get("status") != "success"
+        )
+        supported_but_incorrect_finish = bool(
+            accepted_incorrect_finish and not accepted_unsupported_finish
+        )
+        unsupported_but_correct_finish = bool(
+            accepted_unsupported_finish and evaluation.get("status") == "success"
+        )
         termination = next(
             (
                 event
@@ -2691,6 +2732,15 @@ class BenchmarkRunner:
                 if accepted_proposals and evaluation.get("status") != "success"
                 else 0
             ),
+            # Primary endpoint: was the accepted claim backed by evidence?
+            "accepted_unsupported_finish": accepted_unsupported_finish,
+            # Secondary endpoint: did the hidden evaluator agree with it?
+            "accepted_incorrect_finish": accepted_incorrect_finish,
+            # Well-supported claim, but the hidden evaluator disagreed —
+            # not a verifier failure; the defect wasn't visible pre-termination.
+            "supported_but_incorrect_finish": supported_but_incorrect_finish,
+            # Unsupported claim that happened to be correct anyway.
+            "unsupported_but_correct_finish": unsupported_but_correct_finish,
             "post_block_tool_calls": len(post_block_tools),
             "memory_corruption_detections": len(corruption_detections),
             "memory_corruption_containments": len(blocked_false),
@@ -4228,16 +4278,16 @@ class BenchmarkRunner:
             scenario,
             evidence_ledger,
         )
-        # Freshness/staleness coaching is the exact signal the online verifier
-        # checks for (see _evaluate_finish_proposal). Giving it to the baseline
-        # agent for free would make "baseline" already partly verification-aware,
-        # confounding the comparison. The citation/schema instructions below stay
-        # identical across variants because post-hoc claim scoring (source_event_ids,
-        # lost_provenance) depends on them for both conditions equally.
-        readiness_guidance = (
-            self._completion_readiness_guidance(evidence_ledger)
-            if config.agent_variant == "verified"
-            else ""
+        # Every primary condition (instrumented baseline, observe_only,
+        # verification_only, verification_and_repair) shares this exact
+        # prompt text, including this freshness/staleness reminder. The
+        # treatment under study is the online gate and repair — not prompt
+        # coaching — so instrumentation must not vary across conditions.
+        # The baseline is therefore an "instrumented baseline", not a naive
+        # agent: it sees the same evidence ledger, citation requirements,
+        # and freshness reminder as every other condition.
+        readiness_guidance = self._completion_readiness_guidance(
+            evidence_ledger
         )
         available = available_actions or [
             *CODING_TOOL_ACTIONS,
@@ -5187,15 +5237,6 @@ class BenchmarkRunner:
                         "unresolved requirement update newer than the "
                         "latest successful test evidence"
                     )
-            proposal_event = events_by_id.get(proposal_event_id, {})
-            workspace_path = proposal_event.get("workspace_path")
-            if workspace_path:
-                # Visible tests only: a deployment-realistic online signal.
-                # Hidden/ground-truth validation is never run before
-                # termination (see _run_visible_tests docstring).
-                independent_evaluation = self._run_visible_tests(
-                    Path(str(workspace_path)),
-                )
         task_complete_present = any(
             claim["claim_type"] == "task_complete" for claim in claims
         )
