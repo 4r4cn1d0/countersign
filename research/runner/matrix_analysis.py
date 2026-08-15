@@ -790,6 +790,19 @@ def _task_rows_for_model(
                         "unsupported_but_correct_finish", False
                     )
                 ),
+                # Secondary, not-yet-confirmatory endpoint: independent of
+                # the shared claim classifier, but not yet human-validated
+                # (see support_oracle.py / oracle_confusion_matrix).
+                "baseline_accepted_oracle_unsupported_finish": bool(
+                    baseline_interaction.get(
+                        "accepted_oracle_unsupported_finish", False
+                    )
+                ),
+                "baseline_accepted_oracle_uncertain_finish": bool(
+                    baseline_interaction.get(
+                        "accepted_oracle_uncertain_finish", False
+                    )
+                ),
                 "verified_false_finish_proposals": int(
                     verified_interaction.get("false_finish_proposals", 0)
                 ),
@@ -823,6 +836,16 @@ def _task_rows_for_model(
                 "verified_unsupported_but_correct_finish": bool(
                     verified_interaction.get(
                         "unsupported_but_correct_finish", False
+                    )
+                ),
+                "verified_accepted_oracle_unsupported_finish": bool(
+                    verified_interaction.get(
+                        "accepted_oracle_unsupported_finish", False
+                    )
+                ),
+                "verified_accepted_oracle_uncertain_finish": bool(
+                    verified_interaction.get(
+                        "accepted_oracle_uncertain_finish", False
                     )
                 ),
                 "verified_recovery_after_block": bool(

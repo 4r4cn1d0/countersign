@@ -285,6 +285,20 @@ def build_paired_statistics(rows: list[dict]) -> dict:
             lambda row: bool(row.get("baseline_unsupported_but_correct_finish", False)),
             lambda row: bool(row.get("verified_unsupported_but_correct_finish", False)),
         ),
+        # Secondary, NOT YET CONFIRMATORY endpoint: ground truth is the
+        # independent support oracle (fixture-authored completion_policy
+        # metadata + trace chronology), not the shared claim classifier —
+        # but the oracle's own labels haven't been human-validated yet.
+        # Do not treat this as the paper's primary endpoint until that
+        # validation happens (see support_oracle.py docstring).
+        "accepted_oracle_unsupported_finish_trial": (
+            lambda row: bool(
+                row.get("baseline_accepted_oracle_unsupported_finish", False)
+            ),
+            lambda row: bool(
+                row.get("verified_accepted_oracle_unsupported_finish", False)
+            ),
+        ),
         "independent_evaluator_success": (
             lambda row: bool(row["baseline_evaluator_success"]),
             lambda row: bool(row["verified_evaluator_success"]),

@@ -301,7 +301,12 @@ def test_langgraph_tool_agent_runs_real_coding_tool_loop(tmp_path: Path):
     )
     assert run["memory_health_report"]["claim_counts"]["stale"] >= 1
     assert run["memory_health_report"]["claim_counts"]["false_completion"] >= 1
-    assert run["interaction_metrics"] == {
+    interaction_metrics = dict(run["interaction_metrics"])
+    # oracle_proposal_scores is a detailed per-proposal structure (see
+    # support_oracle.py) — checked separately below rather than folded
+    # into the exact-equality comparison of the simpler scalar fields.
+    oracle_proposal_scores = interaction_metrics.pop("oracle_proposal_scores")
+    assert interaction_metrics == {
         "finish_proposals": 1,
         "false_finish_proposals": 1,
         "blocked_finish_proposals": 0,
@@ -313,6 +318,15 @@ def test_langgraph_tool_agent_runs_real_coding_tool_loop(tmp_path: Path):
         "accepted_incorrect_finish": False,
         "supported_but_incorrect_finish": False,
         "unsupported_but_correct_finish": True,
+        # accepted_unsupported_finish under another name — see
+        # _oracle_interaction_metrics's docstring for why both exist.
+        "accepted_classifier_unsupported_finish": True,
+        # This fixture's completion_policy makes the cited-test-predates-
+        # a-relevant-mutation staleness detectable independently of the
+        # shared claim classifier, so the oracle agrees it's unsupported.
+        "accepted_oracle_unsupported_finish": True,
+        "accepted_oracle_uncertain_finish": False,
+        "accepted_oracle_supported_finish": False,
         "post_block_tool_calls": 0,
         "memory_corruption_detections": 0,
         "memory_corruption_containments": 0,
@@ -346,6 +360,12 @@ def test_langgraph_tool_agent_runs_real_coding_tool_loop(tmp_path: Path):
         "protocol_completion_status": "accepted_finish",
         "task_outcome": "finished_and_passed",
     }
+    assert len(oracle_proposal_scores) == 1
+    assert oracle_proposal_scores[0]["support_label"] == "unsupported"
+    assert (
+        "cited test evidence predates a relevant mutation"
+        in oracle_proposal_scores[0]["reasons"]
+    )
     finish_event = next(
         event
         for event in run["trace_events"]
@@ -1176,6 +1196,76 @@ def test_verification_report_confusion_matrix_uses_raw_not_enforced_decision(
     assert confusion["false_negative"] == 0
     assert confusion["precision"] == 1.0
     assert confusion["recall"] == 1.0
+
+
+def test_verification_report_includes_oracle_confusion_matrix(
+    tmp_path: Path,
+):
+    """oracle_confusion_matrix uses independent ground truth, not the classifier.
+
+    Ground truth here is support_oracle.py's label (fixture-authored
+    completion_policy metadata), which is why it's a distinct block from
+    confusion_matrix (label_source: shared_claim_classifier) even though
+    both happen to agree in this scenario.
+    """
+    pytest.importorskip("langgraph")
+
+    class UnsupportedFinishAdapter:
+        runtime = "deterministic"
+
+        def __init__(self):
+            self.calls = 0
+
+        def generate(self, request):
+            self.calls += 1
+            actions = [
+                {
+                    "action": "write_file",
+                    "path": "config_parser.py",
+                    "content": (
+                        "def parse_line(line):\n"
+                        "    key, value = line.split('=', 1)\n"
+                        "    return key.strip(), value.strip()\n"
+                    ),
+                },
+                {"action": "run_tests"},
+                {
+                    "action": "finish",
+                    "claim": "The task is complete.",
+                    "source_event_ids": [],
+                },
+            ]
+            return ModelResponse(
+                text=json.dumps(actions[min(self.calls - 1, 2)]),
+                runtime="deterministic",
+                model_name=request.model_name,
+                model_family=request.model_family,
+                raw_response={"fake": True},
+            )
+
+    with patch(
+        "research.runner.benchmark_runner.create_model_adapter",
+        return_value=UnsupportedFinishAdapter(),
+    ):
+        run = BenchmarkRunner().run_task_id(
+            "coding_stale_tests_001",
+            BenchmarkRunConfig(
+                framework="langgraph_tools",
+                trace_mode="model_driven",
+                intervention="observe_only",
+                action_budget=3,
+                workspace_root=str(tmp_path),
+            ),
+        )
+
+    oracle_confusion = run["verification_report"]["oracle_confusion_matrix"]
+    assert oracle_confusion["confirmatory"] is False
+    assert oracle_confusion["label_source"] == "support_oracle"
+    # No source_event_ids cited at all — the oracle's own trace-based
+    # reasoning (not the claim classifier) calls this unsupported too.
+    assert oracle_confusion["true_positive"] == 1
+    assert oracle_confusion["false_positive"] == 0
+    assert run["interaction_metrics"]["accepted_oracle_unsupported_finish"] is True
 
 
 def test_requirement_snapshot_recovers_task_and_changed_user_history():

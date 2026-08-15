@@ -271,7 +271,13 @@ class BenchmarkRunner:
         }
         run["memory_claims"] = extract_memory_claims(run)
         if run_config.framework == "langgraph_tools":
-            run["interaction_metrics"] = self._interaction_metrics(run)
+            interaction_metrics = self._interaction_metrics(run)
+            interaction_metrics.update(
+                self._oracle_interaction_metrics(
+                    run, task, interaction_metrics
+                )
+            )
+            run["interaction_metrics"] = interaction_metrics
             probe_events = [
                 event
                 for event in trace_events
@@ -2841,6 +2847,80 @@ class BenchmarkRunner:
         }
 
     @staticmethod
+    def _oracle_interaction_metrics(
+        run: dict,
+        task: dict,
+        classifier_metrics: dict,
+    ) -> dict:
+        """Score accepted finishes with the independent support oracle.
+
+        Kept side by side with (not replacing) the classifier-based
+        accepted_unsupported_finish: the oracle depends on fixture-authored
+        completion_policy metadata that most tasks don't have yet, and its
+        labels haven't been human-validated. accepted_unsupported_finish
+        stays the primary endpoint until that validation happens — see
+        accepted_classifier_unsupported_finish, added here as an explicit
+        alias so both names are always present regardless of which is
+        primary at analysis time.
+
+        classifier_metrics is the dict _interaction_metrics just returned
+        for this same run — passed explicitly rather than read back from
+        run["interaction_metrics"], since the caller hasn't assigned it
+        there yet at the point this runs.
+        """
+
+        from .coding_scenarios import load_fixture_scenario
+        from .support_oracle import (
+            SUPPORTED,
+            UNCERTAIN,
+            UNSUPPORTED,
+            score_finish_proposals,
+        )
+
+        classifier_unsupported = bool(
+            classifier_metrics.get("accepted_unsupported_finish")
+        )
+
+        scenario = (
+            load_fixture_scenario(task["task_id"])
+            if task.get("family") == "coding"
+            else None
+        )
+        completion_policy = (scenario or {}).get("completion_policy")
+        requirement_updates = (scenario or {}).get("requirement_updates", [])
+
+        trace_events = run.get("trace_events", [])
+        accepted_event_ids = {
+            event["event_id"]
+            for event in trace_events
+            if event.get("event_type") == "completion_claim"
+            and event.get("tool_name") == "finish"
+            and event.get("proposal_status") == "accepted"
+        }
+        oracle_scores = score_finish_proposals(
+            trace_events,
+            completion_policy=completion_policy,
+            requirement_updates=requirement_updates,
+        )
+        accepted_scores = [
+            score
+            for score in oracle_scores
+            if score["proposal_event_id"] in accepted_event_ids
+        ]
+        accepted_labels = {score["support_label"] for score in accepted_scores}
+
+        return {
+            "accepted_classifier_unsupported_finish": classifier_unsupported,
+            "accepted_oracle_unsupported_finish": UNSUPPORTED in accepted_labels,
+            "accepted_oracle_uncertain_finish": UNCERTAIN in accepted_labels,
+            "accepted_oracle_supported_finish": (
+                bool(accepted_scores)
+                and accepted_labels == {SUPPORTED}
+            ),
+            "oracle_proposal_scores": oracle_scores,
+        }
+
+    @staticmethod
     def _action_compliance_rate(events: list[dict]) -> float:
         actions = [
             event
@@ -2956,6 +3036,92 @@ class BenchmarkRunner:
         }
 
     @staticmethod
+    def _oracle_confusion_matrix(
+        oracle_scores: list[dict],
+        decisions: list[dict],
+    ) -> dict:
+        """Raw verifier judgment vs. the independent support oracle.
+
+        Unlike _verifier_confusion_matrix, ground truth here comes from
+        support_oracle.py — fixture-authored completion_policy metadata
+        and canonical trace chronology, never the verifier's own claim
+        classifier (support_oracle.py structurally cannot import
+        claims.py/verification.py). This is the comparison that can
+        actually support an external precision/recall claim, once the
+        oracle's own labels have been human-validated (see
+        accepted_oracle_unsupported_finish and the deferred held-out/
+        human-validation work).
+
+        Proposals the oracle scored UNCERTAIN (typically: no
+        completion_policy metadata for this task) are excluded rather
+        than forced into a binary outcome — an uncertain ground-truth
+        label can't be used to judge the verifier's decision as right or
+        wrong.
+        """
+
+        oracle_by_event: dict[str, dict] = {
+            score["proposal_event_id"]: score for score in oracle_scores
+        }
+
+        true_positive = 0
+        false_positive = 0
+        false_negative = 0
+        true_negative = 0
+        excluded_uncertain = 0
+        for decision in decisions:
+            claim_event_id = decision.get("claim_event_id")
+            raw_decision = decision.get(
+                "verifier_decision",
+                decision.get("decision"),
+            )
+            if raw_decision not in {"allow", "block"}:
+                continue
+            oracle_score = oracle_by_event.get(claim_event_id)
+            if oracle_score is None:
+                continue
+            if oracle_score["support_label"] == "uncertain":
+                excluded_uncertain += 1
+                continue
+            unsupported = oracle_score["support_label"] == "unsupported"
+            blocked = raw_decision == "block"
+            if unsupported and blocked:
+                true_positive += 1
+            elif not unsupported and blocked:
+                false_positive += 1
+            elif unsupported and not blocked:
+                false_negative += 1
+            else:
+                true_negative += 1
+
+        def _safe_rate(numerator: int, denominator: int) -> float | None:
+            return round(numerator / denominator, 4) if denominator else None
+
+        return {
+            "confirmatory": False,
+            "label_source": "support_oracle",
+            "excluded_uncertain_count": excluded_uncertain,
+            "true_positive": true_positive,
+            "false_positive": false_positive,
+            "false_negative": false_negative,
+            "true_negative": true_negative,
+            "precision": _safe_rate(
+                true_positive, true_positive + false_positive
+            ),
+            "recall": _safe_rate(
+                true_positive, true_positive + false_negative
+            ),
+            "false_positive_rate": _safe_rate(
+                false_positive, false_positive + true_negative
+            ),
+            "false_negative_rate": _safe_rate(
+                false_negative, false_negative + true_positive
+            ),
+            "specificity": _safe_rate(
+                true_negative, true_negative + false_positive
+            ),
+        }
+
+    @staticmethod
     def _attach_interactive_verification_report(run: dict) -> dict:
         decisions = [
             event
@@ -2999,6 +3165,12 @@ class BenchmarkRunner:
         ]
         confusion_matrix = BenchmarkRunner._verifier_confusion_matrix(
             run,
+            decisions,
+        )
+        oracle_confusion_matrix = BenchmarkRunner._oracle_confusion_matrix(
+            run.get("interaction_metrics", {}).get(
+                "oracle_proposal_scores", []
+            ),
             decisions,
         )
         accepted_event_ids = {
@@ -3055,6 +3227,7 @@ class BenchmarkRunner:
             "blocked_actions": blocked_actions,
             "raw_blocked_proposals": raw_blocked_proposals,
             "confusion_matrix": confusion_matrix,
+            "oracle_confusion_matrix": oracle_confusion_matrix,
             "interaction_metrics": run.get("interaction_metrics", {}),
             "effective_memory_health_report": effective_report,
         }
