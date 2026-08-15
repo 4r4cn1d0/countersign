@@ -2874,6 +2874,20 @@ class BenchmarkRunner:
     ) -> dict:
         """Raw verifier judgment vs. epistemic ground truth, per proposal.
 
+        NOT independent/confirmatory evidence: "ground truth" here is
+        _is_unsupported_completion_claim, built from the same claim-
+        extraction and evidence-classification machinery the verifier
+        itself consumes (stale/lost_provenance/support_status). This
+        measures internal consistency between the verifier's decision and
+        the shared claim classifier, not external precision/recall against
+        an independent oracle or human labels — a claim mislabeled by that
+        shared classifier (e.g. an overly broad staleness rule) would
+        register as a "true positive" here even if a human would call it a
+        false positive. Useful for regression testing and instrumentation
+        validation; do not report precision/recall from this as the
+        paper's verifier-quality evidence until compared against an
+        independent support oracle or human validation labels.
+
         Ground truth is whether the proposed completion claim was actually
         unsupported (same definition as accepted_unsupported_finish), not
         whether the hidden evaluator later agreed with it — the verifier
@@ -2916,6 +2930,10 @@ class BenchmarkRunner:
             return round(numerator / denominator, 4) if denominator else None
 
         return {
+            # Not confirmatory: ground truth and verifier decision are
+            # both derived from the same claim classifier. See docstring.
+            "confirmatory": False,
+            "label_source": "shared_claim_classifier",
             "true_positive": true_positive,
             "false_positive": false_positive,
             "false_negative": false_negative,
@@ -3048,8 +3066,19 @@ class BenchmarkRunner:
             if config.workspace_root
             else Path(tempfile.gettempdir()) / "agent-memory-tool-workspaces"
         )
+        # agent_variant alone is not a unique condition identity:
+        # observe_only/verification_only/repair_only/verification_and_repair
+        # all use agent_variant="verified", so they would otherwise collide
+        # on the same workspace/trace-journal/checkpoint path and overwrite
+        # each other when run in the same matrix sweep.
+        condition = (
+            config.intervention
+            if config.intervention != "legacy"
+            else config.agent_variant
+        )
         slug = self._safe_slug(
-            f"{task['task_id']}-{config.framework}-{config.model_name}-{config.agent_variant}-{config.seed}"
+            f"{task['task_id']}-{config.framework}-{config.model_name}-"
+            f"{config.pressure_profile_id}-{condition}-{config.seed}"
         )
         return root / slug
 

@@ -40,6 +40,14 @@ def _reference_and_treatment_variants(
     return reference_variant, treatment_variants or ["verified"]
 
 
+#: Comparisons that don't use the reference/baseline condition, added to
+#: pairwise_statistics whenever both sides are present in the manifest.
+#: Each is its own independent paired sample — never pooled with anything.
+_EXTRA_PAIRWISE_COMPARISONS: tuple[tuple[str, str], ...] = (
+    ("verification_only", "verification_and_repair"),
+)
+
+
 def analyze_model_matrix_manifest(manifest_path: Path) -> dict:
     """Build a paired comparison report from a model-matrix manifest."""
 
@@ -49,17 +57,24 @@ def analyze_model_matrix_manifest(manifest_path: Path) -> dict:
     reference_variant, treatment_variants = _reference_and_treatment_variants(
         manifest
     )
+    manifest_variants = set(
+        manifest.get("variants") or [reference_variant, *treatment_variants]
+    )
+    task_ids = manifest.get("task_ids", [])
+    seeds = manifest.get("seeds", [0])
+    models = manifest.get("models", [])
+
     model_rows = []
     task_rows = []
 
-    for model in manifest.get("models", []):
+    for model in models:
         for treatment_variant in treatment_variants:
             rows = _task_rows_for_model(
                 model,
                 manifest_dir,
-                task_ids=manifest.get("task_ids", []),
+                task_ids=task_ids,
                 pressure_profiles=pressure_profiles,
-                seeds=manifest.get("seeds", [0]),
+                seeds=seeds,
                 reference_variant=reference_variant,
                 treatment_variant=treatment_variant,
             )
@@ -76,19 +91,61 @@ def analyze_model_matrix_manifest(manifest_path: Path) -> dict:
     successful_rows = [
         row for row in model_rows if row["status"] == "succeeded"
     ]
-    paired_statistics = build_paired_statistics(task_rows)
-    paired_statistics_by_treatment = {
-        treatment_variant: build_paired_statistics(
-            [
-                row
-                for row in task_rows
-                if row["treatment_condition"] == treatment_variant
-            ]
+
+    # Every entry is its own independent paired sample — computed from a
+    # disjoint set of rows, never pooled together. Pooling the same
+    # reference/baseline observation across multiple treatment comparisons
+    # (as if each were an independent pair) would violate McNemar's
+    # independence assumption and artificially inflate the effective
+    # sample size.
+    pairwise_statistics = {}
+    for treatment_variant in treatment_variants:
+        comparison_rows = [
+            row
+            for row in task_rows
+            if row["treatment_condition"] == treatment_variant
+        ]
+        pairwise_statistics[f"{reference_variant}__vs__{treatment_variant}"] = (
+            build_paired_statistics(comparison_rows)
         )
-        for treatment_variant in treatment_variants
-    }
+    for extra_reference, extra_treatment in _EXTRA_PAIRWISE_COMPARISONS:
+        if extra_reference not in manifest_variants:
+            continue
+        if extra_treatment not in manifest_variants:
+            continue
+        extra_rows = []
+        for model in models:
+            extra_rows.extend(
+                _task_rows_for_model(
+                    model,
+                    manifest_dir,
+                    task_ids=task_ids,
+                    pressure_profiles=pressure_profiles,
+                    seeds=seeds,
+                    reference_variant=extra_reference,
+                    treatment_variant=extra_treatment,
+                )
+            )
+        pairwise_statistics[
+            f"{extra_reference}__vs__{extra_treatment}"
+        ] = build_paired_statistics(extra_rows)
+
+    # A single confirmatory primary_endpoint statistic only exists when
+    # there is exactly one treatment condition to compare against the
+    # reference — the legacy two-arm case. A multi-arm intervention
+    # manifest has no single valid pooled statistic; use
+    # pairwise_statistics for a specific, independent comparison instead
+    # (e.g. f"{reference_condition}__vs__verification_only").
+    paired_statistics = (
+        pairwise_statistics[f"{reference_variant}__vs__{treatment_variants[0]}"]
+        if len(treatment_variants) == 1
+        else None
+    )
+
+    distinct_model_names = {model["model_name"] for model in models}
+    successful_model_names = {row["model_name"] for row in successful_rows}
     return {
-        "schema_version": "agent-memory-model-matrix-analysis/v0.3",
+        "schema_version": "agent-memory-model-matrix-analysis/v0.4",
         "manifest_path": str(manifest_path.resolve()),
         "protocol_id": manifest.get("protocol_id"),
         "protocol_path": manifest.get("protocol_path"),
@@ -105,24 +162,27 @@ def analyze_model_matrix_manifest(manifest_path: Path) -> dict:
         ),
         "pressure_profiles": pressure_profiles,
         "task_state_probes": manifest.get("task_state_probes", False),
-        "seeds": manifest.get("seeds", [0]),
+        "seeds": seeds,
         "reference_condition": reference_variant,
         "treatment_conditions": treatment_variants,
-        "model_count": len(model_rows),
-        "successful_model_count": len(successful_rows),
+        # Distinct models evaluated — NOT len(models); a multi-arm
+        # manifest produces one model-summary row per (model, treatment).
+        "model_count": len(distinct_model_names),
+        "successful_model_count": len(successful_model_names),
+        "model_treatment_summary_count": len(model_rows),
         "task_count": len(set(row["task_id"] for row in task_rows)),
         "planned_pair_count": len(task_rows),
-        "eligible_pair_count": paired_statistics["eligible_pair_count"],
+        "eligible_pair_count": sum(
+            1 for row in task_rows if row["pair_eligible"]
+        ),
         "models": model_rows,
         "tasks": task_rows,
         "aggregate": _aggregate_summary(successful_rows, task_rows),
-        # Blended across every treatment condition present — for a single
-        # baseline/verified manifest this is the only comparison anyway.
-        # For multi-arm intervention manifests, prefer
-        # paired_statistics_by_treatment for a specific comparison (e.g.
-        # memory_baseline vs verification_only).
+        # None for multi-arm manifests — see pairwise_statistics. Only
+        # populated for a legacy two-arm (single-treatment) manifest,
+        # where it is identical to the one entry in pairwise_statistics.
         "paired_statistics": paired_statistics,
-        "paired_statistics_by_treatment": paired_statistics_by_treatment,
+        "pairwise_statistics": pairwise_statistics,
         "execution_accounting": _execution_accounting(
             manifest,
             task_rows,
@@ -273,8 +333,35 @@ def write_model_matrix_analysis(
 def format_model_matrix_analysis_markdown(report: dict) -> str:
     """Format a model-matrix analysis report as Markdown."""
 
-    statistics = report["paired_statistics"]
-    primary = statistics["binary_outcomes"]["accepted_unsupported_finish_trial"]
+    reference_condition = report.get("reference_condition", "baseline")
+    treatment_conditions = report.get("treatment_conditions", ["verified"])
+    pairwise_statistics = report.get("pairwise_statistics", {})
+    if report.get("paired_statistics") is not None:
+        # Legacy two-arm manifest: exactly one treatment, so this is a
+        # single valid comparison, not a pooled/blended one.
+        primary_key = f"{reference_condition}__vs__{treatment_conditions[0]}"
+        primary_comparison = primary_key
+        statistics = report["paired_statistics"]
+    else:
+        # Multi-arm manifest: there is no single valid pooled statistic
+        # (see analyze_model_matrix_manifest). Surface the reference-vs-
+        # first-treatment comparison as a representative example and point
+        # to pairwise_statistics for the rest.
+        primary_comparison = f"{reference_condition}__vs__{treatment_conditions[0]}"
+        statistics = pairwise_statistics.get(primary_comparison, {})
+    primary = statistics.get("binary_outcomes", {}).get(
+        "accepted_unsupported_finish_trial"
+    )
+    if primary is None:
+        lines = [
+            "# Agent Memory Model Matrix Analysis",
+            "",
+            f"- Manifest: `{report['manifest_path']}`",
+            "",
+            "No paired statistics are available for this manifest.",
+            "",
+        ]
+        return "\n".join(lines)
     lines = [
         "# Agent Memory Model Matrix Analysis",
         "",
@@ -293,14 +380,14 @@ def format_model_matrix_analysis_markdown(report: dict) -> str:
         f"- Planned pairs: `{report['planned_pair_count']}`",
         f"- Statistically eligible pairs: `{report['eligible_pair_count']}`",
         "",
-        "## Primary Endpoint",
+        f"## Primary Endpoint (`{primary_comparison}`)",
         "",
         (
-            f"- Reference condition (`{report.get('reference_condition', 'baseline')}`) "
+            f"- Reference condition (`{reference_condition}`) "
             f"accepted-unsupported-finish rate: `{_rate_text(primary['baseline'])}`"
         ),
         (
-            f"- Treatment condition(s) (`{report.get('treatment_conditions', ['verified'])}`) "
+            f"- Treatment condition (`{primary_comparison.split('__vs__')[-1]}`) "
             f"accepted-unsupported-finish rate: `{_rate_text(primary['verified'])}`"
         ),
         (
@@ -312,7 +399,14 @@ def format_model_matrix_analysis_markdown(report: dict) -> str:
             f"`{primary['mcnemar']['p_value_two_sided_exact']}`"
         ),
         "",
-        "A zero observed treatment rate is not treated as proof of zero risk; the Wilson interval above reports the uncertainty implied by the sample size. This section blends every treatment condition present in the manifest — see paired_statistics_by_treatment in the JSON report for a specific comparison (e.g. memory_baseline vs verification_only).",
+        (
+            "A zero observed treatment rate is not treated as proof of zero "
+            "risk; the Wilson interval above reports the uncertainty "
+            "implied by the sample size. This is one independent pairwise "
+            "comparison, never pooled with any other treatment condition — "
+            "see `pairwise_statistics` in the JSON report for the "
+            f"remaining comparisons: `{sorted(pairwise_statistics)}`."
+        ),
         "",
         "## Model Summary",
         "",

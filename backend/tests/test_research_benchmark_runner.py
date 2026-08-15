@@ -1166,6 +1166,11 @@ def test_verification_report_confusion_matrix_uses_raw_not_enforced_decision(
     assert len(report["raw_blocked_proposals"]) == 1
     assert report["raw_blocked_proposals"][0]["enforced_decision"] == "allow"
     confusion = report["confusion_matrix"]
+    # Not independent evidence — ground truth here is the same claim
+    # classifier the verifier itself consumes. Must be labeled as such so
+    # it can't be mistaken for external precision/recall in the paper.
+    assert confusion["confirmatory"] is False
+    assert confusion["label_source"] == "shared_claim_classifier"
     assert confusion["true_positive"] == 1
     assert confusion["false_positive"] == 0
     assert confusion["false_negative"] == 0

@@ -910,7 +910,7 @@ def test_model_matrix_analysis_summarizes_artifact_rows(tmp_path: Path):
 
     report = analyze_model_matrix_manifest(Path(manifest["manifest_path"]))
 
-    assert report["schema_version"] == "agent-memory-model-matrix-analysis/v0.3"
+    assert report["schema_version"] == "agent-memory-model-matrix-analysis/v0.4"
     assert report["framework"] == "langgraph"
     assert report["successful_model_count"] == 1
     assert report["aggregate"]["baseline_task_rows"] == 1

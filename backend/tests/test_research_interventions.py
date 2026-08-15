@@ -291,6 +291,55 @@ def test_matrix_interventions_axis_produces_distinct_paired_runs(
         )
 
 
+def test_tool_workspace_paths_are_isolated_per_intervention(tmp_path: Path):
+    """Every intervention condition must resolve to a distinct workspace.
+
+    observe_only/verification_only/repair_only/verification_and_repair all
+    share agent_variant="verified" — if the workspace slug keyed on
+    agent_variant alone, they would collide on the same workspace, trace
+    journal, and checkpoint path and silently overwrite each other when
+    run in the same matrix sweep.
+    """
+    runner = BenchmarkRunner()
+    task = runner.get_task("coding_stale_tests_001")
+    workspace_paths = []
+    for intervention in INTERVENTION_CONDITIONS:
+        spec = resolve_intervention(intervention)
+        config = BenchmarkRunConfig(
+            framework="langgraph_tools",
+            agent_variant=spec.agent_variant,
+            verifier_enabled=spec.verifier_enabled,
+            intervention=intervention,
+            workspace_root=str(tmp_path),
+            seed=0,
+        )
+        workspace_paths.append(runner._tool_workspace_path(task, config))
+
+    assert len(set(workspace_paths)) == len(INTERVENTION_CONDITIONS)
+
+    # Different pressure profiles must also isolate, independent of
+    # intervention/agent_variant.
+    baseline_config = BenchmarkRunConfig(
+        framework="langgraph_tools",
+        agent_variant="baseline",
+        intervention="memory_baseline",
+        workspace_root=str(tmp_path),
+        seed=0,
+        pressure_profile_id="full_history",
+    )
+    corrupted_config = BenchmarkRunConfig(
+        framework="langgraph_tools",
+        agent_variant="baseline",
+        intervention="memory_baseline",
+        workspace_root=str(tmp_path),
+        seed=0,
+        pressure_profile_id="lossy_medium",
+    )
+    assert runner._tool_workspace_path(
+        task, baseline_config
+    ) != runner._tool_workspace_path(task, corrupted_config)
+
+
 def test_intervention_mode_manifest_analysis_pairs_every_treatment_condition(
     tmp_path: Path,
 ):
@@ -350,11 +399,21 @@ def test_intervention_mode_manifest_analysis_pairs_every_treatment_condition(
         # looked for pair["baseline"]/pair["verified"] literally.
         assert row["pair_complete"] is True
         assert row["exclusion_reason"] is None
-    assert set(report["paired_statistics_by_treatment"]) == set(
+    # A multi-arm manifest has no single valid pooled statistic — pooling
+    # the same memory_baseline observation across four treatment
+    # comparisons would violate McNemar's independence assumption.
+    assert report["paired_statistics"] is None
+    expected_comparisons = {
+        f"memory_baseline__vs__{treatment}"
+        for treatment in report["treatment_conditions"]
+    } | {"verification_only__vs__verification_and_repair"}
+    assert set(report["pairwise_statistics"]) == expected_comparisons
+    for comparison, stats in report["pairwise_statistics"].items():
+        assert stats["eligible_pair_count"] == 1, comparison
+    assert report["model_count"] == 1
+    assert report["model_treatment_summary_count"] == len(
         report["treatment_conditions"]
     )
-    for treatment, stats in report["paired_statistics_by_treatment"].items():
-        assert stats["eligible_pair_count"] == 1
 
 
 def test_unsafe_mutation_gate_blocks_corrupted_file_basis():
