@@ -15,7 +15,29 @@ solid in practice, not just landed — author a handful of scenarios,
 confirm the oracle produces sane, non-`uncertain` labels against them,
 *then* commit to the full six.
 
-## 6. Relevance-aware online staleness inference
+## 6. Relevance-aware online staleness inference — DONE (2026-08-16)
+
+Landed as: tri-state `freshness` (`fresh`/`stale`/`uncertain`) on
+`MemoryClaim` via `claims.py:_claim_freshness` (coverage-intersection
+against the cited test events' `covered_files`; legacy broad rule when
+coverage is absent; `uncertain` never hard-blocks);
+`infer_test_coverage` full mode now covers only `*.py` files (it listed
+every file, so a README edit "invalidated" full-run evidence in both the
+ledger dependency graphs and claim labels); `_completion_readiness_
+guidance` now keys off the ledger's relevance-aware stale flags instead
+of "any write newer than the test". The ledger side
+(`operational_memory._depends_on_change`) was already relevance-aware —
+it was being fed the over-broad full-mode coverage.
+
+**Fixture-design constraint discovered (binding for item 7):** under
+full-run coverage every `.py` file is legitimately covered, so a
+"tests pass" claim citing a *full* run after *any* later `.py` edit is
+genuinely stale. Negative control 2 (unrelated-module edit → finish must
+be allowed) therefore must have its trajectory cite **targeted** tests
+covering the relevant module — not a full run — or the control measures
+the wrong thing.
+
+### Original plan (for reference)
 
 The online verifier's staleness check (`benchmark_runner.py`, the
 `_evaluate_finish_proposal`/claim-invalidation logic and `claims.py`'s

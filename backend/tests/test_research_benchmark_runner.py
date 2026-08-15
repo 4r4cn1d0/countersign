@@ -2330,8 +2330,9 @@ def test_tool_action_prompt_is_identical_across_conditions():
     )
 
     freshness_text = (
-        "There is no successful visible test run newer than the latest "
-        "write. Do not claim verified completion without current evidence."
+        "There is no successful visible test run that is still valid for "
+        "the current file state. "
+        "Do not claim verified completion without current evidence."
     )
     assert freshness_text in baseline_prompt
     assert freshness_text in verified_prompt

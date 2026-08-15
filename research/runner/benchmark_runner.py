@@ -4707,39 +4707,39 @@ class BenchmarkRunner:
 
     @staticmethod
     def _completion_readiness_guidance(evidence_ledger: list[dict]) -> str:
-        latest_write_index = max(
-            (
-                index
-                for index, entry in enumerate(evidence_ledger)
-                if entry.get("tool_name") in {"write_file", "apply_patch"}
-            ),
-            default=-1,
-        )
-        latest_successful_test = next(
+        # Relevance-aware: a test result stays valid until a later edit
+        # touches something it actually covers — the ledger's stale flags
+        # (apply_event_to_memory -> _depends_on_change) already encode
+        # that per-item. The previous index-based rule ("any write newer
+        # than the test") told the worker its evidence was gone after a
+        # README edit, which both misinforms the worker and destroys the
+        # negative-control measurements of verifier over-blocking.
+        latest_valid_test = next(
             (
                 entry
-                for index, entry in reversed(list(enumerate(evidence_ledger)))
-                if index > latest_write_index
-                and entry.get("tool_name")
+                for entry in reversed(evidence_ledger)
+                if entry.get("tool_name")
                 in {"run_tests", "run_full_tests", "run_targeted_tests"}
                 and entry.get("status") == "success"
+                and not entry.get("stale")
             ),
             None,
         )
-        if latest_successful_test:
+        if latest_valid_test:
             evidence_reference = (
-                latest_successful_test.get("event_id")
-                or latest_successful_test.get("memory_id")
+                latest_valid_test.get("event_id")
+                or latest_valid_test.get("memory_id")
                 or "current test evidence"
             )
             return (
-                "A successful visible test run is newer than the latest write "
-                f"({evidence_reference}). If every acceptance "
+                "A successful visible test run is still valid for the current "
+                f"file state ({evidence_reference}). If every acceptance "
                 "criterion is satisfied, use finish and cite exact write/test event "
                 "IDs. Otherwise make only the edit still required."
             )
         return (
-            "There is no successful visible test run newer than the latest write. "
+            "There is no successful visible test run that is still valid for "
+            "the current file state. "
             "Do not claim verified completion without current evidence."
         )
 

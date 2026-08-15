@@ -23,6 +23,15 @@ class MemoryClaim:
     source_event_sequence_numbers: list[int]
     support_status: str
     stale: bool
+    # Tri-state relevance-aware freshness: "fresh" (no later mutation
+    # touched anything the cited evidence covers), "stale" (a later
+    # mutation intersected the cited evidence's coverage, or relevance
+    # could not be scoped and legacy broad invalidation applied), or
+    # "uncertain" (a later mutation's relevance to the cited evidence
+    # could not be established either way — recorded, never hard-blocked
+    # on). `stale` stays the boolean the verifier and endpoints consume:
+    # stale == (freshness == "stale").
+    freshness: str
     lost_provenance: bool
     freshness_rule: str | None
 
@@ -38,7 +47,8 @@ def extract_memory_claims(run: dict) -> list[dict]:
         source_event_ids = list(label.get("source_event_ids", []))
         source_events = [events_by_id[event_id] for event_id in source_event_ids if event_id in events_by_id]
         lost_provenance = len(source_events) != len(source_event_ids) or not source_event_ids
-        stale = _is_stale_claim(label, event, source_events, run["trace_events"])
+        freshness = _claim_freshness(label, event, source_events, run["trace_events"])
+        stale = freshness == "stale"
         contradicted = _is_contradicted_claim(label, event, run["trace_events"])
         support_status = _support_status(label, source_events, lost_provenance, contradicted)
 
@@ -59,6 +69,7 @@ def extract_memory_claims(run: dict) -> list[dict]:
                 ],
                 support_status=support_status,
                 stale=stale,
+                freshness=freshness,
                 lost_provenance=lost_provenance,
                 freshness_rule=label.get("freshness_rule"),
             )
@@ -81,23 +92,47 @@ def find_stale_claims(memory_claims: Iterable[dict]) -> list[dict]:
     return [claim for claim in memory_claims if claim["stale"]]
 
 
-def _is_stale_claim(
+#: File suffixes whose mutation cannot change a Python unittest outcome.
+#: Used only when a mutation does NOT intersect the cited evidence's
+#: coverage: doc-like paths are then confidently fresh, executable paths
+#: are confidently fresh (the coverage set explicitly excludes them), and
+#: anything else (e.g. a data file a test might read) stays "uncertain".
+_DOC_SUFFIXES = (".md", ".rst", ".txt")
+
+_TEST_TOOL_NAMES = {"run_tests", "run_full_tests", "run_targeted_tests"}
+
+
+def _claim_freshness(
     label: dict,
     event: dict,
     source_events: list[dict],
     trace_events: list[dict],
-) -> bool:
+) -> str:
+    """Relevance-aware freshness of a claim's cited evidence.
+
+    A later mutation only invalidates cited test evidence when it touches
+    something that evidence actually covers (`covered_files` /
+    `covered_symbols`, recorded on test tool-call events by
+    `infer_test_coverage`). When coverage or mutation paths are
+    unavailable — legacy artifacts, synthetic events, fixture-authored
+    state changes without paths — the legacy broad rule applies (stale),
+    never a silent pass. Deliberately independent of the support oracle's
+    fixture-authored `completion_policy` ground truth: this function uses
+    only information present in the trace itself.
+    """
+
     if not source_events:
-        return False
+        return "fresh"
 
     claim_type = label["claim_type"]
     claim_sequence = event["sequence_number"]
     freshness_sources = source_events
+    cited_test_events: list[dict] = []
     if claim_type in {"tests_pass", "task_complete", "no_errors_present"}:
         cited_test_events = [
             source_event
             for source_event in source_events
-            if source_event.get("tool_name") == "run_tests"
+            if source_event.get("tool_name") in _TEST_TOOL_NAMES
         ]
         if cited_test_events:
             freshness_sources = cited_test_events
@@ -105,6 +140,14 @@ def _is_stale_claim(
         source_event["sequence_number"] for source_event in freshness_sources
     )
 
+    covered_files = {
+        str(path)
+        for source_event in cited_test_events
+        for path in source_event.get("covered_files", [])
+    }
+    coverage_available = bool(covered_files)
+
+    saw_uncertain = False
     for candidate in trace_events:
         candidate_sequence = candidate["sequence_number"]
         if candidate_sequence <= latest_source_sequence:
@@ -112,12 +155,72 @@ def _is_stale_claim(
         if candidate_sequence >= claim_sequence:
             continue
         invalidated_claims = candidate.get("invalidates_claim_types", [])
-        if claim_type in invalidated_claims:
-            return True
-        if _implicitly_invalidates(candidate, claim_type):
-            return True
+        invalidating = claim_type in invalidated_claims or _implicitly_invalidates(
+            candidate, claim_type
+        )
+        if not invalidating:
+            continue
+        relevance = _mutation_relevance(
+            candidate,
+            covered_files,
+            coverage_available,
+        )
+        if relevance == "stale":
+            return "stale"
+        if relevance == "uncertain":
+            saw_uncertain = True
 
-    return False
+    return "uncertain" if saw_uncertain else "fresh"
+
+
+def _mutation_relevance(
+    candidate: dict,
+    covered_files: set[str],
+    coverage_available: bool,
+) -> str:
+    """Classify one invalidating event against the cited evidence's coverage."""
+
+    if not coverage_available:
+        # No coverage on the cited evidence (legacy artifacts, synthetic
+        # events, or non-test citations): fall back to the broad rule.
+        return "stale"
+    mutation_paths = _mutation_paths(candidate)
+    if not mutation_paths:
+        # An invalidating event without any attributable path (e.g. a
+        # fixture-authored task_state_change) declares intent we cannot
+        # scope — honor it.
+        return "stale"
+    if mutation_paths & covered_files:
+        return "stale"
+    if all(
+        path.endswith(".py") or path.endswith(_DOC_SUFFIXES)
+        for path in mutation_paths
+    ):
+        # Python paths outside the coverage set are known-irrelevant (the
+        # coverage set enumerates the executable dependencies); doc-like
+        # paths cannot change a test outcome at all.
+        return "fresh"
+    return "uncertain"
+
+
+def _mutation_paths(candidate: dict) -> set[str]:
+    paths = {
+        str(path)
+        for path in (
+            candidate.get("paths")
+            or ([candidate["path"]] if candidate.get("path") else [])
+        )
+    }
+    structured = candidate.get("structured_output") or {}
+    paths.update(str(path) for path in structured.get("changed_files", []))
+    patch_text = candidate.get("patch")
+    if patch_text:
+        for line in str(patch_text).splitlines():
+            if line.startswith("+++ b/"):
+                paths.add(line[len("+++ b/"):].strip())
+            elif line.startswith("--- a/"):
+                paths.add(line[len("--- a/"):].strip())
+    return {path for path in paths if path and path != "/dev/null"}
 
 
 def _is_contradicted_claim(label: dict, event: dict, trace_events: list[dict]) -> bool:

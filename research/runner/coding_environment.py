@@ -364,12 +364,19 @@ def infer_test_coverage(
     """Infer local file and symbol dependencies for unittest targets."""
 
     if not targets:
+        # A full unittest run's outcome depends on the Python sources —
+        # tests plus whatever they import — not on documentation or other
+        # non-executable files. Listing every workspace file here made a
+        # README edit "invalidate" a full test run downstream (ledger
+        # dependency graphs and claim freshness both intersect against
+        # this set), which is exactly the false-positive the
+        # relevance-aware staleness work exists to prevent.
         return {
             "mode": "full",
             "test_targets": ["*"],
             "covered_files": sorted(
                 path.relative_to(workspace).as_posix()
-                for path in workspace.rglob("*")
+                for path in workspace.rglob("*.py")
                 if path.is_file()
                 and ".git" not in path.parts
                 and "__pycache__" not in path.parts

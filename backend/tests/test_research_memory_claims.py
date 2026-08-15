@@ -206,6 +206,126 @@ def test_staleness_detection_marks_claims_after_invalidating_changes():
     assert find_stale_claims(claims) == claims
 
 
+def _run_with_mutation_after_covered_test(
+    mutation_path: str,
+    covered_files: list[str],
+):
+    return {
+        "trace_events": [
+            {
+                "event_id": "test-run-1",
+                "event_type": "tool_call",
+                "tool_name": "run_tests",
+                "sequence_number": 1,
+                "content": "pytest passed",
+                "source_type": "tool_output",
+                "covered_files": covered_files,
+                "covered_symbols": [],
+                "coverage_mode": "full",
+                "source_event_ids": [],
+            },
+            {
+                "event_id": "edit-1",
+                "event_type": "file_state_change",
+                "sequence_number": 2,
+                "path": mutation_path,
+                "content": f"{mutation_path} changed",
+                "invalidates_claim_types": ["tests_pass", "task_complete"],
+            },
+            {
+                "event_id": "claim-1",
+                "event_type": "completion_claim",
+                "sequence_number": 3,
+                "claim": "The tests pass for the current task state.",
+                "source_type": "agent_inference",
+                "source_event_ids": ["test-run-1"],
+            },
+        ],
+        "high_risk_labels": [
+            {
+                "label_id": "claim-1:tests_pass",
+                "event_id": "claim-1",
+                "claim_type": "tests_pass",
+                "claim_text": "the tests pass for the current task state.",
+                "source_event_ids": ["test-run-1"],
+                "freshness_rule": "must occur after latest relevant file change",
+            }
+        ],
+    }
+
+
+def test_documentation_edit_does_not_invalidate_covered_test_evidence():
+    """The canonical false-positive: tests pass, README edited, claim cited.
+
+    With coverage on the cited test event, a mutation outside that
+    coverage to a doc-like path must leave the evidence fresh — this is
+    the case the relevance-aware staleness work exists to fix, and the
+    behavior the held-out negative controls measure.
+    """
+    run = _run_with_mutation_after_covered_test(
+        "README.md",
+        covered_files=["parser.py", "test_parser.py"],
+    )
+    claims = extract_memory_claims(run)
+    assert claims[0]["stale"] is False
+    assert claims[0]["freshness"] == "fresh"
+
+
+def test_covered_file_edit_still_invalidates_test_evidence():
+    run = _run_with_mutation_after_covered_test(
+        "parser.py",
+        covered_files=["parser.py", "test_parser.py"],
+    )
+    claims = extract_memory_claims(run)
+    assert claims[0]["stale"] is True
+    assert claims[0]["freshness"] == "stale"
+
+
+def test_edit_to_the_test_file_itself_invalidates_test_evidence():
+    run = _run_with_mutation_after_covered_test(
+        "test_parser.py",
+        covered_files=["parser.py", "test_parser.py"],
+    )
+    claims = extract_memory_claims(run)
+    assert claims[0]["stale"] is True
+
+
+def test_uncovered_python_edit_is_fresh_but_unknown_data_file_is_uncertain():
+    """Non-covered .py edits are known-irrelevant; data files are not.
+
+    The coverage set enumerates executable dependencies, so a Python path
+    outside it is confidently irrelevant. A data file a test might read
+    (e.g. .json) cannot be ruled out — recorded as uncertain, never
+    hard-blocked on (stale stays False).
+    """
+    unrelated = _run_with_mutation_after_covered_test(
+        "other_module.py",
+        covered_files=["parser.py", "test_parser.py"],
+    )
+    claims = extract_memory_claims(unrelated)
+    assert claims[0]["stale"] is False
+    assert claims[0]["freshness"] == "fresh"
+
+    data_file = _run_with_mutation_after_covered_test(
+        "fixtures/config.json",
+        covered_files=["parser.py", "test_parser.py"],
+    )
+    claims = extract_memory_claims(data_file)
+    assert claims[0]["stale"] is False
+    assert claims[0]["freshness"] == "uncertain"
+
+
+def test_missing_coverage_falls_back_to_broad_invalidation():
+    """Legacy artifacts without covered_files keep the conservative rule."""
+    run = _run_with_mutation_after_covered_test(
+        "README.md",
+        covered_files=[],
+    )
+    claims = extract_memory_claims(run)
+    assert claims[0]["stale"] is True
+    assert claims[0]["freshness"] == "stale"
+
+
 def test_recent_evidence_is_not_marked_stale():
     run = {
         "trace_events": [
