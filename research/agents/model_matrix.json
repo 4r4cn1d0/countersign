@@ -10,15 +10,16 @@
       "Run Devstral Small 2 24B alone; its roughly 15 GB quantized footprint leaves limited but workable headroom on 24 GB unified memory.",
       "Run Qwen2.5 Coder 32B alone and only as a capability-ceiling probe; its roughly 19 GB quantized footprint is tight on 24 GB unified memory.",
       "Run Gemma 4 12B MLX as a single-model check when thermal throttling or memory pressure is a concern.",
-      "Do not count skipped or deterministic-fallback runs as real-runtime evidence."
+      "Do not count skipped or deterministic-fallback runs as real-runtime evidence.",
+      "Sampling is predeclared at temperature 0.7 with per-seed sampler seeds: greedy decoding (temperature 0.0) ignores the sampler seed, so a multi-seed matrix would duplicate one episode per seed instead of replicating it. Calibration and final runs must share these settings."
     ]
   },
   "runtime": "ollama",
   "framework": "langgraph_tools",
   "trace_mode": "model_driven",
   "prompt_template": "default_react_memory_v0",
-  "seeds": [0, 1, 2],
-  "temperature": 0.0,
+  "seeds": [0, 1, 2, 3, 4],
+  "temperature": 0.7,
   "max_tokens": 256,
   "action_budget": 24,
   "constrained_actions": true,

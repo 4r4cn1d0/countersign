@@ -80,6 +80,62 @@ def test_model_matrix_skips_missing_ollama_models_without_fallback(tmp_path: Pat
     assert "not installed" in manifest["models"][0]["skip_reason"]
 
 
+def test_multi_seed_real_runtime_matrix_rejects_greedy_decoding(tmp_path: Path):
+    """Seeds must be genuine replicates, not copies of one greedy episode.
+
+    At temperature 0.0 the sampler seed is inert, so a multi-seed
+    real-runtime matrix would enter the same deterministic episode into
+    paired statistics once per seed — pseudoreplication. The runner must
+    refuse that configuration outright rather than silently produce
+    triplicate data. Deterministic-runtime instrumentation matrices are
+    exempt (their trajectories are scripted; seeds are bookkeeping).
+    """
+    matrix_path = tmp_path / "matrix.json"
+    matrix_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "agent-memory-model-matrix/v0.1",
+                "runtime": "ollama",
+                "minimum_successful_models": 1,
+                "models": [
+                    {
+                        "model_family": "qwen",
+                        "model_name": "missing-local-model:1b",
+                        "enabled": True,
+                    }
+                ],
+            }
+        )
+    )
+
+    with pytest.raises(ValueError, match="temperature 0.0"):
+        run_model_matrix(
+            tmp_path / "out",
+            matrix_path=matrix_path,
+            task_ids=["coding_stale_tests_001"],
+            variants=["baseline"],
+            seeds=[0, 1, 2],
+            temperature=0.0,
+            pull_missing=False,
+            minimum_successful_models=1,
+        )
+
+    # Sampling makes the same configuration legitimate (the run itself is
+    # then skipped for the missing model, which is fine — the guard must
+    # not fire).
+    manifest = run_model_matrix(
+        tmp_path / "out",
+        matrix_path=matrix_path,
+        task_ids=["coding_stale_tests_001"],
+        variants=["baseline"],
+        seeds=[0, 1, 2],
+        temperature=0.7,
+        pull_missing=False,
+        minimum_successful_models=1,
+    )
+    assert manifest["models"][0]["status"] == "skipped"
+
+
 def test_model_matrix_writes_runs_scores_verifications_and_comparisons(tmp_path: Path):
     matrix_path = tmp_path / "matrix.json"
     matrix_path.write_text(

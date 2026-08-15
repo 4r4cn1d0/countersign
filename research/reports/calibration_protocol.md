@@ -2,6 +2,15 @@
 
 Pre-registered: 2026-07-07, before any calibration run was executed.
 
+> **Superseded (2026-08-16):** the generation settings below (seeds 0–2,
+> temperature 0.0) predate the pre-freeze design review. Multi-seed
+> real-runtime matrices at temperature 0.0 are pseudoreplicated (the
+> sampler seed is inert under greedy decoding) and the runner now rejects
+> them. Current predeclared settings — temperature 0.7, seeds 0–4,
+> calibration and final runs at identical settings — live in
+> `research/ROADMAP_HELD_OUT_EVALUATION.md` §11. The staging structure
+> and pass criteria in this document otherwise stand.
+
 ## Motivation
 
 Six real-model attempts at Task 38.7 (devstral-small-2:24b ×2, llama3.2:3b,

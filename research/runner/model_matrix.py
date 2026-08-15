@@ -116,6 +116,23 @@ def run_model_matrix(
     active_temperature = float(
         temperature if temperature is not None else matrix.get("temperature", 0.0)
     )
+    if (
+        active_runtime != "deterministic"
+        and len(set(active_seeds)) > 1
+        and active_temperature == 0.0
+    ):
+        # Greedy decoding ignores the sampler seed, so multiple seeds at
+        # temperature 0.0 produce copies of one episode, not replicates —
+        # paired statistics would then count the same observation several
+        # times (pseudoreplication). Multi-seed real-runtime matrices must
+        # sample (temperature > 0) so each seed is a genuine replicate.
+        raise ValueError(
+            "Multi-seed real-runtime matrix at temperature 0.0: sampler "
+            "seeds are inert under greedy decoding, so distinct seeds "
+            "would duplicate one episode instead of replicating it. Set "
+            "temperature > 0 (predeclared final-run setting: 0.7) or use "
+            "a single seed."
+        )
     active_max_tokens = int(
         max_tokens if max_tokens is not None else matrix.get("max_tokens", 128)
     )

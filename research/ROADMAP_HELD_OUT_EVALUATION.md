@@ -152,12 +152,71 @@ their output (a `"blended_across_comparisons": true` field would do it).
 
 ## 11. The final run
 
+### Predeclared settings (locked 2026-08-16, pre-freeze design review)
+
+An experimental-design review of the held-out plan (before any fixture was
+authored) fixed the following; these are settings the frozen protocol must
+carry, decided before any final-run data exists:
+
+1. **Sampling, not greedy.** `temperature: 0.7` with per-seed sampler
+   seeds, **seeds 0–4** (five, not three). Greedy decoding at
+   `temperature 0.0` ignores the sampler seed, so a multi-seed matrix
+   would count one deterministic episode several times — textbook
+   pseudoreplication. `run_model_matrix` now refuses multi-seed
+   real-runtime matrices at temperature 0.0; `model_matrix.json` carries
+   the predeclared values. **Capability calibration must run at these
+   same settings** — a floor measured under greedy decoding does not
+   transfer to sampled runs.
+2. **Negative controls join the run matrix** under two arms only
+   (`memory_baseline` + `observe_only`; passive raw decisions are the
+   cleanest false-positive measurement). They are predeclared as
+   excluded from the primary endpoint — by construction they cannot
+   produce an accepted-unsupported outcome; they exist to estimate the
+   false-block rate.
+3. **Matched-pair context parity.** Supported and unsupported members of
+   each held-out pair must match on planned action count and event count
+   — not only repo size/difficulty — so the evidence-relationship
+   manipulation is not confounded with context length (the very variable
+   the memory-degradation story is about). Pad the supported member with
+   benign events if needed.
+4. **Family is the RQ1 blocking factor**: the supported-vs-unsupported
+   contrast pairs members within a family (family × model × seed). With
+   three families, family-level generalization is limited — state it.
+5. **Clustering acknowledged in analysis**: report per-model results
+   alongside pooled ones, and run a task-level (cluster) bootstrap as
+   the predeclared sensitivity analysis — the 2-models × 6-tasks pair
+   pool is not 36 independent pairs.
+6. **Calibration fallback ladder, predeclared**: if fewer than two
+   models clear the capability floor, probe `qwen2.5-coder:32b` (viable
+   on a rented A100/H100); if still only one passes, run one model and
+   report it as a stated limitation. No post-hoc model shopping.
+
+### Matrix
+
 ```
-2 models × 6 heldout_v1 tasks × 3 seeds × 4 primary interventions = 144 runs
+2 models × 6 heldout_v1 tasks × 5 seeds × 4 primary interventions = 240 runs
++ 2 models × 4 negative controls × 5 seeds × 2 arms                =  80 runs
+                                                                     320 runs
 ```
 
 Primary arms: `memory_baseline`, `observe_only`, `verification_only`,
 `verification_and_repair`. `repair_only` stays a secondary ablation.
+
+### Target venue (decided 2026-08-16)
+
+Primary: **Third Workshop on Agents in the Wild: Safety, Security, and
+Beyond (NeurIPS 2026)** — Short Paper track, 4 pages (references and
+supplementary material excluded), NeurIPS/ICLR/ICML templates accepted,
+no NeurIPS checklist required, OpenReview, non-archival. **Deadline
+August 29, 2026 AoE; notification September 29.** Anonymization is fully
+double-blind and explicitly extends to "any supplementary or linked
+material as well, including code" — the released artifact must be the
+relocatable anonymized bundle, never the public repository. AgentWild
+has **no demo track**; the 4-page format is a Short Paper.
+
+Fallback (same deadline, same anonymization discipline): "Who Verifies
+the Agents?" (NeurIPS 2026), demo-paper track, ≤4 pages, NeurIPS 2026
+template required. Do not submit the same paper to both.
 
 Select the two models via a predeclared full-history capability
 calibration against the *development* fixtures (never the held-out set)
