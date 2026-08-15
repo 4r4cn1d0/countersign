@@ -8,60 +8,42 @@ from pathlib import Path
 from statistics import mean
 from typing import Any
 
+from .comparison_plan import (
+    comparison_key,
+    extra_pairwise_comparisons,
+    reference_and_treatment_variants,
+)
+from .experiment_protocol import resolve_bundle_path
 from .failure_attribution import classify_run_failure
 from .statistics import build_paired_statistics
 
 
-def _reference_and_treatment_variants(
+def _confirmatory_comparisons_from_manifest(
     manifest: dict,
-) -> tuple[str, list[str]]:
-    """Determine the baseline/reference condition and treatment condition(s).
-
-    Legacy two-arm manifests (variants=["baseline", "verified"]) produce
-    exactly one treatment variant, preserving prior single-pair-per-row
-    behavior. Intervention-mode manifests (memory_baseline plus any subset
-    of observe_only/verification_only/repair_only/verification_and_repair)
-    compare every other condition against memory_baseline, one full set of
-    paired rows per treatment condition — rather than looking for the
-    literal keys "baseline"/"verified", which intervention-mode run
-    artifacts never use (their "variant" field is the intervention name).
-    """
-
-    manifest_variants = list(manifest.get("variants") or ["baseline", "verified"])
-    if "memory_baseline" in manifest_variants:
-        reference_variant = "memory_baseline"
-    elif "baseline" in manifest_variants:
-        reference_variant = "baseline"
-    else:
-        reference_variant = manifest_variants[0]
-    treatment_variants = [
-        variant for variant in manifest_variants if variant != reference_variant
-    ]
-    return reference_variant, treatment_variants or ["verified"]
-
-
-#: Comparisons that don't use the reference/baseline condition, added to
-#: pairwise_statistics whenever both sides are present in the manifest.
-#: Each is its own independent paired sample — never pooled with anything.
-_EXTRA_PAIRWISE_COMPARISONS: tuple[tuple[str, str], ...] = (
-    ("verification_only", "verification_and_repair"),
-)
-
-
-def _confirmatory_comparisons_from_manifest(manifest: dict) -> dict:
+    manifest_dir: Path,
+) -> dict:
     """Load the frozen protocol's predeclared comparisons, if available.
 
     Returns {} (not an error) when the protocol file is missing or
     unreadable — callers must fall back to a sensible default rather than
     fail, since not every manifest (e.g. ad hoc test fixtures) writes a
-    frozen protocol.
+    frozen protocol. Resolves protocol_relative_path first so a
+    copied/relocated bundle (e.g. an anonymized workshop artifact) still
+    finds its protocol — falling back to the absolute protocol_path only
+    reintroduces the exact silent-fallback failure mode this was added to
+    fix (confirmatory_comparisons becomes {}, and the report falls back to
+    whichever treatment condition sorts first).
     """
 
-    protocol_path = manifest.get("protocol_path")
-    if not protocol_path:
+    protocol_location = resolve_bundle_path(
+        manifest_dir,
+        relative_path=manifest.get("protocol_relative_path"),
+        absolute_path=manifest.get("protocol_path"),
+    )
+    if protocol_location is None or not protocol_location.exists():
         return {}
     try:
-        protocol = _read_json(Path(protocol_path))
+        protocol = _read_json(protocol_location)
     except (OSError, ValueError):
         return {}
     return protocol.get("confirmatory_comparisons", {}) or {}
@@ -73,12 +55,11 @@ def analyze_model_matrix_manifest(manifest_path: Path) -> dict:
     manifest = _read_json(manifest_path)
     manifest_dir = manifest_path.parent
     pressure_profiles = _manifest_pressure_profiles(manifest)
-    confirmatory_comparisons = _confirmatory_comparisons_from_manifest(manifest)
-    reference_variant, treatment_variants = _reference_and_treatment_variants(
-        manifest
+    confirmatory_comparisons = _confirmatory_comparisons_from_manifest(
+        manifest, manifest_dir
     )
-    manifest_variants = set(
-        manifest.get("variants") or [reference_variant, *treatment_variants]
+    reference_variant, treatment_variants = reference_and_treatment_variants(
+        manifest.get("variants") or ["baseline", "verified"]
     )
     task_ids = manifest.get("task_ids", [])
     seeds = manifest.get("seeds", [0])
@@ -125,14 +106,12 @@ def analyze_model_matrix_manifest(manifest_path: Path) -> dict:
             for row in task_rows
             if row["treatment_condition"] == treatment_variant
         ]
-        pairwise_statistics[f"{reference_variant}__vs__{treatment_variant}"] = (
-            build_paired_statistics(comparison_rows)
-        )
-    for extra_reference, extra_treatment in _EXTRA_PAIRWISE_COMPARISONS:
-        if extra_reference not in manifest_variants:
-            continue
-        if extra_treatment not in manifest_variants:
-            continue
+        pairwise_statistics[
+            comparison_key(reference_variant, treatment_variant)
+        ] = build_paired_statistics(comparison_rows)
+    for extra_reference, extra_treatment in extra_pairwise_comparisons(
+        manifest.get("variants") or [reference_variant, *treatment_variants]
+    ):
         extra_rows = []
         for model in models:
             extra_rows.extend(
@@ -147,7 +126,7 @@ def analyze_model_matrix_manifest(manifest_path: Path) -> dict:
                 )
             )
         pairwise_statistics[
-            f"{extra_reference}__vs__{extra_treatment}"
+            comparison_key(extra_reference, extra_treatment)
         ] = build_paired_statistics(extra_rows)
 
     # A single confirmatory primary_endpoint statistic only exists when
@@ -157,7 +136,9 @@ def analyze_model_matrix_manifest(manifest_path: Path) -> dict:
     # pairwise_statistics for a specific, independent comparison instead
     # (e.g. f"{reference_condition}__vs__verification_only").
     paired_statistics = (
-        pairwise_statistics[f"{reference_variant}__vs__{treatment_variants[0]}"]
+        pairwise_statistics[
+            comparison_key(reference_variant, treatment_variants[0])
+        ]
         if len(treatment_variants) == 1
         else None
     )
@@ -357,7 +338,9 @@ def format_model_matrix_analysis_markdown(report: dict) -> str:
     reference_condition = report.get("reference_condition", "baseline")
     treatment_conditions = report.get("treatment_conditions", ["verified"])
     pairwise_statistics = report.get("pairwise_statistics", {})
-    default_comparison = f"{reference_condition}__vs__{treatment_conditions[0]}"
+    default_comparison = comparison_key(
+        reference_condition, treatment_conditions[0]
+    )
     if report.get("paired_statistics") is not None:
         # Legacy two-arm manifest: exactly one treatment, so this is a
         # single valid comparison, not a pooled/blended one.
@@ -1202,12 +1185,12 @@ def _task_rows_for_model(
                     "runtime_error"
                 ),
                 "run_path": (
-                    str(_resolve_artifact_path(baseline_info["path"], manifest_dir))
+                    str(_resolve_artifact_path(baseline_info, manifest_dir))
                     if baseline_info
                     else None
                 ),
                 "verified_run_path": (
-                    str(_resolve_artifact_path(verified_info["path"], manifest_dir))
+                    str(_resolve_artifact_path(verified_info, manifest_dir))
                     if verified_info
                     else None
                 ),
@@ -1890,19 +1873,22 @@ def _pair_exclusion_reason(
 def _read_run_info(run_info: dict | None, manifest_dir: Path) -> dict:
     if not run_info:
         return {}
-    path = _resolve_artifact_path(run_info["path"], manifest_dir)
+    path = _resolve_artifact_path(run_info, manifest_dir)
     if not path.exists():
         return {}
     return _read_json(path)
 
 
-def _resolve_artifact_path(path: str, manifest_dir: Path) -> Path:
-    artifact_path = Path(path)
-    return (
-        artifact_path
-        if artifact_path.is_absolute()
-        else manifest_dir / artifact_path
+def _resolve_artifact_path(run_info: dict, manifest_dir: Path) -> Path:
+    # relative_path (from indexed_artifact) is authoritative inside a
+    # relocated/copied bundle; the absolute "path" only works on the
+    # machine that generated it.
+    resolved = resolve_bundle_path(
+        manifest_dir,
+        relative_path=run_info.get("relative_path"),
+        absolute_path=run_info.get("path"),
     )
+    return resolved if resolved is not None else Path(run_info.get("path", ""))
 
 
 def _tool_action_parse_status_counts(run: dict) -> dict[str, int]:

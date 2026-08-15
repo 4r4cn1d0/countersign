@@ -11,56 +11,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
-
-def _predeclared_confirmatory_comparisons(variants: list[str]) -> dict:
-    """Name the specific pairwise comparisons the analysis should report.
-
-    Mirrors matrix_analysis.py's reference/treatment resolution (kept as a
-    separate small copy rather than a cross-module import, so protocol
-    construction doesn't depend on analysis internals). Naming these here
-    — rather than letting the report/markdown formatter default to
-    whichever treatment condition happens to sort first — is what fixes
-    the earlier bug where the Markdown headline silently became
-    memory_baseline vs observe_only instead of the intended
-    memory_baseline vs verification_only.
-    """
-
-    if "memory_baseline" in variants:
-        reference = "memory_baseline"
-    elif "baseline" in variants:
-        reference = "baseline"
-    else:
-        reference = variants[0] if variants else None
-    treatments = [variant for variant in variants if variant != reference]
-
-    def _comparison(reference_variant: str | None, treatment: str | None) -> str | None:
-        if not reference_variant or not treatment:
-            return None
-        return f"{reference_variant}__vs__{treatment}"
-
-    return {
-        "primary": _comparison(
-            reference,
-            "verification_only"
-            if "verification_only" in treatments
-            else (treatments[0] if treatments else None),
-        ),
-        "detector_sanity_check": _comparison(
-            reference, "observe_only" if "observe_only" in treatments else None
-        ),
-        "full_system": _comparison(
-            reference,
-            "verification_and_repair"
-            if "verification_and_repair" in treatments
-            else None,
-        ),
-        "repair_increment": (
-            "verification_only__vs__verification_and_repair"
-            if "verification_only" in treatments
-            and "verification_and_repair" in treatments
-            else None
-        ),
-    }
+from .comparison_plan import (
+    predeclared_confirmatory_comparisons as _predeclared_confirmatory_comparisons,
+)
 
 
 def build_experiment_protocol(
@@ -415,11 +368,28 @@ def build_artifact_index(
 
 
 def audit_model_matrix_manifest(manifest_path: Path) -> dict:
-    """Verify protocol, index, and indexed artifact hashes from a saved manifest."""
+    """Verify protocol, index, and indexed artifact hashes from a saved manifest.
 
+    Relocatable by construction: a manifest is always written directly
+    into its own output_dir, so manifest_path.parent is authoritative for
+    where the bundle actually lives now — never manifest["output_dir"],
+    which is only valid on the machine that generated it. Protocol and
+    artifact-index paths are resolved the same way, preferring the
+    relative_path fields over the absolute ones.
+    """
+
+    manifest_dir = manifest_path.parent
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    protocol_path = Path(manifest["protocol_path"])
-    index_path = Path(manifest["artifact_index_path"])
+    protocol_path = resolve_bundle_path(
+        manifest_dir,
+        relative_path=manifest.get("protocol_relative_path"),
+        absolute_path=manifest.get("protocol_path"),
+    ) or Path(manifest.get("protocol_path", ""))
+    index_path = resolve_bundle_path(
+        manifest_dir,
+        relative_path=manifest.get("artifact_index_relative_path"),
+        absolute_path=manifest.get("artifact_index_path"),
+    ) or Path(manifest.get("artifact_index_path", ""))
     protocol = (
         json.loads(protocol_path.read_text(encoding="utf-8"))
         if protocol_path.exists()
@@ -449,9 +419,10 @@ def audit_model_matrix_manifest(manifest_path: Path) -> dict:
     hash_mismatches = []
     if index_path.exists():
         index = json.loads(index_path.read_text(encoding="utf-8"))
-        output_dir = Path(manifest["output_dir"])
+        # manifest_dir, not manifest["output_dir"] — the latter is only
+        # valid on the machine that generated the manifest.
         for artifact in index.get("artifacts", []):
-            artifact_path = output_dir / artifact["path"]
+            artifact_path = manifest_dir / artifact["path"]
             if not artifact_path.exists():
                 missing_artifacts.append(artifact["path"])
                 continue
@@ -572,6 +543,48 @@ def _portable_path(path: Path) -> str:
         return path.resolve().relative_to(Path.cwd().resolve()).as_posix()
     except ValueError:
         return path.name
+
+
+def resolve_bundle_path(
+    manifest_dir: Path,
+    *,
+    relative_path: str | None = None,
+    absolute_path: str | None = None,
+) -> Path | None:
+    """Resolve an artifact path so a relocated/copied bundle still works.
+
+    Manifests record absolute paths from the machine that generated them
+    (for provenance) but those don't survive copying a run directory
+    elsewhere — an anonymized workshop artifact, a different collaborator's
+    machine, a CI runner. Resolution order:
+
+    1. manifest_dir / relative_path — authoritative inside a bundle.
+    2. absolute_path as recorded — works only on the originating machine.
+    3. manifest_dir / basename(absolute_path) — legacy fallback for
+       artifacts written before relative_path existed.
+
+    Returns None only when neither argument is given. When nothing on
+    disk actually resolves, returns the best-effort relative candidate
+    (not None) so callers get a sensible path for error messages rather
+    than silently treating the artifact as absent.
+    """
+
+    if relative_path:
+        candidate = manifest_dir / relative_path
+        if candidate.exists():
+            return candidate
+    if absolute_path:
+        candidate = Path(absolute_path)
+        if candidate.exists():
+            return candidate
+        legacy_candidate = manifest_dir / Path(absolute_path).name
+        if legacy_candidate.exists():
+            return legacy_candidate
+    if relative_path:
+        return manifest_dir / relative_path
+    if absolute_path:
+        return Path(absolute_path)
+    return None
 
 
 def hash_directory_tree(root: Path) -> str | None:

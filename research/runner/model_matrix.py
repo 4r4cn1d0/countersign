@@ -340,6 +340,10 @@ def run_model_matrix(
         "created_at": datetime.now(timezone.utc).isoformat(),
         "protocol_id": protocol["protocol_id"],
         "protocol_path": str(protocol_path.resolve()),
+        # Authoritative inside a copied/relocated bundle — see
+        # experiment_protocol.resolve_bundle_path. protocol_path above is
+        # only valid on the machine that generated it.
+        "protocol_relative_path": protocol_path.relative_to(output_dir).as_posix(),
         "protocol_sha256": sha256_file(protocol_path),
         "matrix_path": str(matrix_path.resolve()),
         "benchmark_path": str(active_runner.benchmark_path.resolve()),
@@ -406,7 +410,11 @@ def run_model_matrix(
         "limitations": limitations,
         "manifest_path": str(manifest_path.resolve()),
         "summary_markdown": str(summary_path.resolve()),
+        "summary_relative_path": summary_path.relative_to(output_dir).as_posix(),
         "artifact_index_path": str(artifact_index_path.resolve()),
+        "artifact_index_relative_path": (
+            artifact_index_path.relative_to(output_dir).as_posix()
+        ),
     }
     summary_path.write_text(_model_matrix_summary(manifest), encoding="utf-8")
     artifact_index = build_artifact_index(output_dir)
