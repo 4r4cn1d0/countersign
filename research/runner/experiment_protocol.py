@@ -12,6 +12,57 @@ from pathlib import Path
 from typing import Any, Iterable
 
 
+def _predeclared_confirmatory_comparisons(variants: list[str]) -> dict:
+    """Name the specific pairwise comparisons the analysis should report.
+
+    Mirrors matrix_analysis.py's reference/treatment resolution (kept as a
+    separate small copy rather than a cross-module import, so protocol
+    construction doesn't depend on analysis internals). Naming these here
+    — rather than letting the report/markdown formatter default to
+    whichever treatment condition happens to sort first — is what fixes
+    the earlier bug where the Markdown headline silently became
+    memory_baseline vs observe_only instead of the intended
+    memory_baseline vs verification_only.
+    """
+
+    if "memory_baseline" in variants:
+        reference = "memory_baseline"
+    elif "baseline" in variants:
+        reference = "baseline"
+    else:
+        reference = variants[0] if variants else None
+    treatments = [variant for variant in variants if variant != reference]
+
+    def _comparison(reference_variant: str | None, treatment: str | None) -> str | None:
+        if not reference_variant or not treatment:
+            return None
+        return f"{reference_variant}__vs__{treatment}"
+
+    return {
+        "primary": _comparison(
+            reference,
+            "verification_only"
+            if "verification_only" in treatments
+            else (treatments[0] if treatments else None),
+        ),
+        "detector_sanity_check": _comparison(
+            reference, "observe_only" if "observe_only" in treatments else None
+        ),
+        "full_system": _comparison(
+            reference,
+            "verification_and_repair"
+            if "verification_and_repair" in treatments
+            else None,
+        ),
+        "repair_increment": (
+            "verification_only__vs__verification_and_repair"
+            if "verification_only" in treatments
+            and "verification_and_repair" in treatments
+            else None
+        ),
+    }
+
+
 def build_experiment_protocol(
     *,
     matrix_path: Path,
@@ -72,6 +123,7 @@ def build_experiment_protocol(
         }
         for condition in active_memory_conditions
     ]
+    confirmatory_comparisons = _predeclared_confirmatory_comparisons(variants)
     protocol_body = {
         "schema_version": "agent-memory-experiment-protocol/v0.1",
         "research_question": (
@@ -79,6 +131,12 @@ def build_experiment_protocol(
             "accuracy and false-completion behavior in open-source coding agents, "
             "and does in-loop evidence verification reduce unsafe completion?"
         ),
+        # Which specific pairwise comparison (see matrix_analysis.py's
+        # pairwise_statistics) is the confirmatory primary endpoint,
+        # predeclared before any run — not left for the report/markdown
+        # formatter to default to whichever treatment condition sorts
+        # first.
+        "confirmatory_comparisons": confirmatory_comparisons,
         "design": {
             "unit_of_analysis": "model-task-memory-condition-seed pair",
             "pairing": (
@@ -186,7 +244,12 @@ def build_experiment_protocol(
                     "is not counted here (see accepted_incorrect_finish_trial "
                     "and supported_but_incorrect_finish_trial)."
                 ),
-                "comparison": "paired baseline versus verified exact McNemar test",
+                "comparison": (
+                    f"paired {confirmatory_comparisons['primary']} exact "
+                    "McNemar test"
+                    if confirmatory_comparisons.get("primary")
+                    else "paired exact McNemar test (no treatment condition declared)"
+                ),
             },
             "secondary": [
                 "accepted_incorrect_finish_trial",

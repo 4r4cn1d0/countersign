@@ -48,12 +48,32 @@ _EXTRA_PAIRWISE_COMPARISONS: tuple[tuple[str, str], ...] = (
 )
 
 
+def _confirmatory_comparisons_from_manifest(manifest: dict) -> dict:
+    """Load the frozen protocol's predeclared comparisons, if available.
+
+    Returns {} (not an error) when the protocol file is missing or
+    unreadable — callers must fall back to a sensible default rather than
+    fail, since not every manifest (e.g. ad hoc test fixtures) writes a
+    frozen protocol.
+    """
+
+    protocol_path = manifest.get("protocol_path")
+    if not protocol_path:
+        return {}
+    try:
+        protocol = _read_json(Path(protocol_path))
+    except (OSError, ValueError):
+        return {}
+    return protocol.get("confirmatory_comparisons", {}) or {}
+
+
 def analyze_model_matrix_manifest(manifest_path: Path) -> dict:
     """Build a paired comparison report from a model-matrix manifest."""
 
     manifest = _read_json(manifest_path)
     manifest_dir = manifest_path.parent
     pressure_profiles = _manifest_pressure_profiles(manifest)
+    confirmatory_comparisons = _confirmatory_comparisons_from_manifest(manifest)
     reference_variant, treatment_variants = _reference_and_treatment_variants(
         manifest
     )
@@ -165,6 +185,7 @@ def analyze_model_matrix_manifest(manifest_path: Path) -> dict:
         "seeds": seeds,
         "reference_condition": reference_variant,
         "treatment_conditions": treatment_variants,
+        "confirmatory_comparisons": confirmatory_comparisons,
         # Distinct models evaluated — NOT len(models); a multi-arm
         # manifest produces one model-summary row per (model, treatment).
         "model_count": len(distinct_model_names),
@@ -336,18 +357,27 @@ def format_model_matrix_analysis_markdown(report: dict) -> str:
     reference_condition = report.get("reference_condition", "baseline")
     treatment_conditions = report.get("treatment_conditions", ["verified"])
     pairwise_statistics = report.get("pairwise_statistics", {})
+    default_comparison = f"{reference_condition}__vs__{treatment_conditions[0]}"
     if report.get("paired_statistics") is not None:
         # Legacy two-arm manifest: exactly one treatment, so this is a
         # single valid comparison, not a pooled/blended one.
-        primary_key = f"{reference_condition}__vs__{treatment_conditions[0]}"
-        primary_comparison = primary_key
+        primary_comparison = default_comparison
         statistics = report["paired_statistics"]
     else:
         # Multi-arm manifest: there is no single valid pooled statistic
-        # (see analyze_model_matrix_manifest). Surface the reference-vs-
-        # first-treatment comparison as a representative example and point
-        # to pairwise_statistics for the rest.
-        primary_comparison = f"{reference_condition}__vs__{treatment_conditions[0]}"
+        # (see analyze_model_matrix_manifest). Use the frozen protocol's
+        # predeclared primary comparison — never default to whichever
+        # treatment condition happens to sort first, which previously
+        # silently picked memory_baseline vs observe_only instead of the
+        # intended memory_baseline vs verification_only.
+        declared_primary = report.get("confirmatory_comparisons", {}).get(
+            "primary"
+        )
+        primary_comparison = (
+            declared_primary
+            if declared_primary and declared_primary in pairwise_statistics
+            else default_comparison
+        )
         statistics = pairwise_statistics.get(primary_comparison, {})
     primary = statistics.get("binary_outcomes", {}).get(
         "accepted_unsupported_finish_trial"

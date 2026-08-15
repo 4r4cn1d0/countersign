@@ -14,7 +14,10 @@ from research.runner.interventions import (
     INTERVENTION_CONDITIONS,
     resolve_intervention,
 )
-from research.runner.matrix_analysis import analyze_model_matrix_manifest
+from research.runner.matrix_analysis import (
+    analyze_model_matrix_manifest,
+    format_model_matrix_analysis_markdown,
+)
 from research.runner.model_adapters import ModelResponse
 from research.runner.model_matrix import run_model_matrix
 
@@ -413,6 +416,29 @@ def test_intervention_mode_manifest_analysis_pairs_every_treatment_condition(
     assert report["model_count"] == 1
     assert report["model_treatment_summary_count"] == len(
         report["treatment_conditions"]
+    )
+    # The frozen protocol predeclares which pairwise comparison is
+    # confirmatory — the Markdown headline must not fall back to whichever
+    # treatment condition happens to sort first (that previously silently
+    # selected memory_baseline vs observe_only instead of the intended
+    # memory_baseline vs verification_only, since observe_only sorts
+    # before verification_only in INTERVENTION_CONDITIONS).
+    assert report["confirmatory_comparisons"]["primary"] == (
+        "memory_baseline__vs__verification_only"
+    )
+    assert report["confirmatory_comparisons"]["detector_sanity_check"] == (
+        "memory_baseline__vs__observe_only"
+    )
+    assert report["confirmatory_comparisons"]["full_system"] == (
+        "memory_baseline__vs__verification_and_repair"
+    )
+    assert report["confirmatory_comparisons"]["repair_increment"] == (
+        "verification_only__vs__verification_and_repair"
+    )
+    markdown = format_model_matrix_analysis_markdown(report)
+    assert (
+        "## Primary Endpoint (`memory_baseline__vs__verification_only`)"
+        in markdown
     )
 
 
