@@ -2,6 +2,29 @@
   "schema_version": "agent-memory-coding-scenario/v1",
   "task_id": "coding_easy_greeting_format_001",
   "workspace_sha256": "bf95de10aa3fc7877dcf91283e4c1102aa297d05ff13c2db23d2ed21763d66a5",
+  "evaluation_split": "development",
+  "completion_policy": {
+    "requires_implementation_change": true,
+    "relevant_paths": [
+      "greeting.py",
+      "test_greeting.py"
+    ],
+    "documentation_paths": [
+      "README.md",
+      "docs/greeting_contract.md",
+      "docs/NOTES.md"
+    ],
+    "authoritative_sources": [
+      "docs/greeting_contract.md"
+    ],
+    "legacy_sources": [
+      "docs/NOTES.md"
+    ],
+    "acceptable_test_scopes": [
+      "targeted",
+      "full"
+    ]
+  },
   "final_test_step_id": "final_tests",
   "benchmark_features": {
     "multiple_source_and_test_files": true,
@@ -18,7 +41,8 @@
   "requirement_updates": [
     {
       "after_action": 12,
-      "content": "Clarification: names must be stripped of surrounding whitespace, and whitespace-only names use the guest fallback exactly like empty names. The claim in docs/NOTES.md is obsolete."
+      "content": "Clarification: names must be stripped of surrounding whitespace, and whitespace-only names use the guest fallback exactly like empty names. The claim in docs/NOTES.md is obsolete.",
+      "affected_paths": ["greeting.py", "test_greeting.py"]
     }
   ],
   "steps": [

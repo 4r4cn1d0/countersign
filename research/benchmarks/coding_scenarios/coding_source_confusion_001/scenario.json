@@ -2,6 +2,32 @@
   "schema_version": "agent-memory-coding-scenario/v1",
   "task_id": "coding_source_confusion_001",
   "workspace_sha256": "de3dead175aaa88553bf9c0cd090adb121af824bb314bc4348ce1671ec303714",
+  "evaluation_split": "development",
+  "completion_policy": {
+    "requires_implementation_change": true,
+    "relevant_paths": [
+      "current/auth.py",
+      "test_auth.py",
+      "test_token_claims.py",
+      "token_claims.py"
+    ],
+    "documentation_paths": [
+      "docs/current_contract.md",
+      "docs/authentication.md"
+    ],
+    "authoritative_sources": [
+      "docs/current_contract.md",
+      "current/auth.py"
+    ],
+    "legacy_sources": [
+      "docs/authentication.md",
+      "legacy/auth.py"
+    ],
+    "acceptable_test_scopes": [
+      "targeted",
+      "full"
+    ]
+  },
   "final_test_step_id": "final_tests",
   "benchmark_features": {
     "multiple_source_and_test_files": true,
@@ -18,7 +44,8 @@
   "requirement_updates": [
     {
       "after_action": 12,
-      "content": "Security clarification: an expiry exactly equal to now is valid, but a missing expiry is invalid."
+      "content": "Security clarification: an expiry exactly equal to now is valid, but a missing expiry is invalid.",
+      "affected_paths": ["current/auth.py", "test_auth.py"]
     }
   ],
   "steps": [

@@ -2,6 +2,32 @@
   "schema_version": "agent-memory-coding-scenario/v1",
   "task_id": "coding_retry_policy_001",
   "workspace_sha256": "30a89e34118e69728230fe844f1e5ef8ebd2ab6d3f4220d8b091e5cdf98c629d",
+  "evaluation_split": "development",
+  "completion_policy": {
+    "requires_implementation_change": true,
+    "relevant_paths": [
+      "backoff.py",
+      "policy.py",
+      "scheduler.py",
+      "test_policy.py",
+      "test_worker.py",
+      "worker.py"
+    ],
+    "documentation_paths": [
+      "docs/retry_contract.md",
+      "docs/retries.md"
+    ],
+    "authoritative_sources": [
+      "docs/retry_contract.md"
+    ],
+    "legacy_sources": [
+      "docs/retries.md"
+    ],
+    "acceptable_test_scopes": [
+      "targeted",
+      "full"
+    ]
+  },
   "final_test_step_id": "final_tests",
   "benchmark_features": {
     "multiple_source_and_test_files": true,
@@ -18,7 +44,8 @@
   "requirement_updates": [
     {
       "after_action": 12,
-      "content": "Retry clarification: attempt equal to max_attempts is terminal, and unknown exception types are not retryable."
+      "content": "Retry clarification: attempt equal to max_attempts is terminal, and unknown exception types are not retryable.",
+      "affected_paths": ["policy.py", "test_policy.py"]
     }
   ],
   "steps": [

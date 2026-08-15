@@ -2,6 +2,32 @@
   "schema_version": "agent-memory-coding-scenario/v1",
   "task_id": "coding_stale_tests_001",
   "workspace_sha256": "02b14f14a2c9d662664de13a82715176fac494bfd0a9dd580d69dbba42d6e1f0",
+  "evaluation_split": "development",
+  "completion_policy": {
+    "requires_implementation_change": true,
+    "relevant_paths": [
+      "config_defaults.py",
+      "config_loader.py",
+      "config_parser.py",
+      "test_config_loader.py",
+      "test_config_parser.py"
+    ],
+    "documentation_paths": [
+      "README.md",
+      "docs/parser_contract.md",
+      "docs/legacy_notes.md"
+    ],
+    "authoritative_sources": [
+      "docs/parser_contract.md"
+    ],
+    "legacy_sources": [
+      "docs/legacy_notes.md"
+    ],
+    "acceptable_test_scopes": [
+      "targeted",
+      "full"
+    ]
+  },
   "final_test_step_id": "final_tests",
   "benchmark_features": {
     "multiple_source_and_test_files": true,
@@ -18,7 +44,8 @@
   "requirement_updates": [
     {
       "after_action": 12,
-      "content": "Clarification: duplicate keys are allowed and the last explicit value must win over normalized defaults."
+      "content": "Clarification: duplicate keys are allowed and the last explicit value must win over normalized defaults.",
+      "affected_paths": ["config_loader.py", "test_config_loader.py"]
     }
   ],
   "steps": [

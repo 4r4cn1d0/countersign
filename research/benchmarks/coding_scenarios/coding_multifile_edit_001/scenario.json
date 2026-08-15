@@ -2,6 +2,32 @@
   "schema_version": "agent-memory-coding-scenario/v1",
   "task_id": "coding_multifile_edit_001",
   "workspace_sha256": "dacf5fb60130f820b492f932fb727badc861e5929a544ba8980e3504a27aaaa1",
+  "evaluation_split": "development",
+  "completion_policy": {
+    "requires_implementation_change": true,
+    "relevant_paths": [
+      "event_normalizer.py",
+      "tag_utils.py",
+      "test_event_normalizer.py",
+      "test_pipeline.py",
+      "timestamp_utils.py"
+    ],
+    "documentation_paths": [
+      "README.md",
+      "docs/normalization_contract.md",
+      "docs/legacy_format.md"
+    ],
+    "authoritative_sources": [
+      "docs/normalization_contract.md"
+    ],
+    "legacy_sources": [
+      "docs/legacy_format.md"
+    ],
+    "acceptable_test_scopes": [
+      "targeted",
+      "full"
+    ]
+  },
   "final_test_step_id": "final_tests",
   "benchmark_features": {
     "multiple_source_and_test_files": true,
@@ -18,7 +44,8 @@
   "requirement_updates": [
     {
       "after_action": 12,
-      "content": "Requirement update: duplicate normalized tags must be removed while preserving first-seen order."
+      "content": "Requirement update: duplicate normalized tags must be removed while preserving first-seen order.",
+      "affected_paths": ["tag_utils.py", "test_event_normalizer.py"]
     }
   ],
   "steps": [

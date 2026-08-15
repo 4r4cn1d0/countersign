@@ -2,6 +2,29 @@
   "schema_version": "agent-memory-coding-scenario/v1",
   "task_id": "coding_easy_flag_default_001",
   "workspace_sha256": "233e5cf1c120a02fdddf095f98cf739e83461e699b95a09fc833028b15d60d9a",
+  "evaluation_split": "development",
+  "completion_policy": {
+    "requires_implementation_change": true,
+    "relevant_paths": [
+      "feature_flags.py",
+      "test_feature_flags.py"
+    ],
+    "documentation_paths": [
+      "README.md",
+      "docs/flag_contract.md",
+      "docs/legacy_notes.md"
+    ],
+    "authoritative_sources": [
+      "docs/flag_contract.md"
+    ],
+    "legacy_sources": [
+      "docs/legacy_notes.md"
+    ],
+    "acceptable_test_scopes": [
+      "targeted",
+      "full"
+    ]
+  },
   "final_test_step_id": "final_tests",
   "benchmark_features": {
     "multiple_source_and_test_files": true,
@@ -18,7 +41,8 @@
   "requirement_updates": [
     {
       "after_action": 12,
-      "content": "Clarification: empty and unrecognized flag values must now default to enabled. Update the code and add a regression covering the new default."
+      "content": "Clarification: empty and unrecognized flag values must now default to enabled. Update the code and add a regression covering the new default.",
+      "affected_paths": ["feature_flags.py", "test_feature_flags.py"]
     }
   ],
   "steps": [

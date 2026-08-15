@@ -2,6 +2,29 @@
   "schema_version": "agent-memory-coding-scenario/v1",
   "task_id": "coding_easy_list_dedupe_001",
   "workspace_sha256": "59915b1ce42e761550f31f4d077aed4b28d492fb2de60e497e0841c8bb9fca89",
+  "evaluation_split": "development",
+  "completion_policy": {
+    "requires_implementation_change": true,
+    "relevant_paths": [
+      "dedupe.py",
+      "test_dedupe.py"
+    ],
+    "documentation_paths": [
+      "README.md",
+      "docs/dedupe_contract.md",
+      "docs/legacy_notes.md"
+    ],
+    "authoritative_sources": [
+      "docs/dedupe_contract.md"
+    ],
+    "legacy_sources": [
+      "docs/legacy_notes.md"
+    ],
+    "acceptable_test_scopes": [
+      "targeted",
+      "full"
+    ]
+  },
   "final_test_step_id": "final_tests",
   "benchmark_features": {
     "multiple_source_and_test_files": true,
@@ -18,7 +41,8 @@
   "requirement_updates": [
     {
       "after_action": 12,
-      "content": "Clarification: item equality is exact and case-sensitive, so 'A' and 'a' are distinct entries and the first occurrence of each must win."
+      "content": "Clarification: item equality is exact and case-sensitive, so 'A' and 'a' are distinct entries and the first occurrence of each must win.",
+      "affected_paths": ["dedupe.py", "test_dedupe.py"]
     }
   ],
   "steps": [

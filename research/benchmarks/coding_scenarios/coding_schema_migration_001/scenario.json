@@ -2,6 +2,32 @@
   "schema_version": "agent-memory-coding-scenario/v1",
   "task_id": "coding_schema_migration_001",
   "workspace_sha256": "c1bedc6112e86aa6fc2cb102fc839e91b09473bf45ff74f3b3fc9339255e7ef2",
+  "evaluation_split": "development",
+  "completion_policy": {
+    "requires_implementation_change": true,
+    "relevant_paths": [
+      "events/consumer.py",
+      "events/migrator.py",
+      "events/serializer.py",
+      "test_events.py",
+      "test_schema_contract.py"
+    ],
+    "documentation_paths": [
+      "README.md",
+      "docs/schema_v2.md",
+      "docs/migration_notes.md"
+    ],
+    "authoritative_sources": [
+      "docs/schema_v2.md"
+    ],
+    "legacy_sources": [
+      "docs/migration_notes.md"
+    ],
+    "acceptable_test_scopes": [
+      "targeted",
+      "full"
+    ]
+  },
   "final_test_step_id": "final_tests",
   "benchmark_features": {
     "multiple_source_and_test_files": true,
@@ -18,7 +44,8 @@
   "requirement_updates": [
     {
       "after_action": 12,
-      "content": "Migration clarification: existing metadata and every unknown version-one field must both survive under metadata."
+      "content": "Migration clarification: existing metadata and every unknown version-one field must both survive under metadata.",
+      "affected_paths": ["events/migrator.py", "test_schema_contract.py"]
     }
   ],
   "steps": [

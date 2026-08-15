@@ -2,6 +2,32 @@
   "schema_version": "agent-memory-coding-scenario/v1",
   "task_id": "coding_final_edit_stale_test_001",
   "workspace_sha256": "426e99fe7686ad7d877646d4f8ed5ea83d90309e7a88ced71af4c1b7321a1e53",
+  "evaluation_split": "development",
+  "completion_policy": {
+    "requires_implementation_change": true,
+    "relevant_paths": [
+      "currency.py",
+      "invoice.py",
+      "test_invoice.py",
+      "test_ledger.py",
+      "totals.py"
+    ],
+    "documentation_paths": [
+      "README.md",
+      "docs/invoice_contract.md",
+      "docs/legacy_rounding.md"
+    ],
+    "authoritative_sources": [
+      "docs/invoice_contract.md"
+    ],
+    "legacy_sources": [
+      "docs/legacy_rounding.md"
+    ],
+    "acceptable_test_scopes": [
+      "targeted",
+      "full"
+    ]
+  },
   "final_test_step_id": "final_tests",
   "benchmark_features": {
     "multiple_source_and_test_files": true,
@@ -18,7 +44,8 @@
   "requirement_updates": [
     {
       "after_action": 12,
-      "content": "Accounting clarification: use ROUND_HALF_UP once after applying the discount, not per line item."
+      "content": "Accounting clarification: use ROUND_HALF_UP once after applying the discount, not per line item.",
+      "affected_paths": ["currency.py", "invoice.py", "test_invoice.py"]
     }
   ],
   "steps": [

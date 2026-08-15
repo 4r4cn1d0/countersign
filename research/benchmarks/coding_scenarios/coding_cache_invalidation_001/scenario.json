@@ -2,6 +2,29 @@
   "schema_version": "agent-memory-coding-scenario/v1",
   "task_id": "coding_cache_invalidation_001",
   "workspace_sha256": "d913d6fae7673f2443d27eb5dc05f94567a3e9cc9ee7f18b47cec656580ad4f5",
+  "evaluation_split": "development",
+  "completion_policy": {
+    "requires_implementation_change": true,
+    "relevant_paths": [
+      "cache.py",
+      "config.py",
+      "service.py",
+      "test_cache.py",
+      "test_service.py"
+    ],
+    "documentation_paths": [
+      "README.md",
+      "docs/cache_contract.md"
+    ],
+    "authoritative_sources": [
+      "docs/cache_contract.md"
+    ],
+    "legacy_sources": [],
+    "acceptable_test_scopes": [
+      "targeted",
+      "full"
+    ]
+  },
   "final_test_step_id": "final_tests",
   "benchmark_features": {
     "multiple_source_and_test_files": true,
@@ -18,7 +41,8 @@
   "requirement_updates": [
     {
       "after_action": 12,
-      "content": "Requirement update: selecting the current namespace again must not clear any other namespace."
+      "content": "Requirement update: selecting the current namespace again must not clear any other namespace.",
+      "affected_paths": ["cache.py", "test_cache.py"]
     }
   ],
   "steps": [
