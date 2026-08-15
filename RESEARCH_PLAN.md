@@ -299,3 +299,114 @@ The research contribution sits above them:
 - memory health metrics,
 - verification policies,
 - and before/after evaluation.
+
+## Execution Plan to Submission (locked 2026-08-16)
+
+Target: Managing Agents that Manage Agents (NeurIPS 2026) — 4-page Short
+Paper + Demo Track. Deadline August 29, 2026 AoE. Venue facts, framing,
+and checklists live in `.claude/skills/neurips-workshop-submission/SKILL.md`;
+predeclared experiment settings live in
+`research/ROADMAP_HELD_OUT_EVALUATION.md` §11.
+
+### Phase 1 — Finish the build (assistant; Aug 16–19)
+
+1. **Relevance-aware online staleness — the critical path, ~1–2 days.**
+   The supervisor currently treats *any* later write as invalidating
+   cited test evidence. Extend the staleness check to use the
+   `covered_files`/`covered_symbols` already recorded on test events: a
+   cited test goes stale only when a later mutation intersects its
+   coverage; returns `fresh`/`stale`/`uncertain`; stays independent of
+   the oracle's fixture-authored ground truth. Unit tests for the two
+   canonical cases (README edit stays fresh; tested-file edit goes
+   stale). Everything downstream is meaningless without this — the
+   negative controls would all be trivially blocked.
+2. **Oracle-supervisor arm — ~half day.** The flagged evaluation-only
+   condition where the gate consults the hidden validator: new
+   `InterventionSpec`, explicit `oracle_gate` flag, firewall tests
+   proving it cannot leak into any other arm,
+   `CONTROLLER_POLICY_VERSION` bump.
+3. **Held-out-v1 fixtures — ~1–2 days, with one user checkpoint.**
+   Three matched pairs (temporal freshness, source provenance,
+   requirement state) under the context-parity rule, plus the four
+   negative controls; `completion_policy` and
+   `evaluation_split: heldout_v1` from birth. Author one pair first,
+   confirm the oracle emits sane non-`uncertain` labels and a
+   deterministic smoke run behaves, **then** commit to all six. User
+   checkpoint: a 15-minute review of the pair designs before finalizing
+   — the last point where change is cheap.
+4. **Strict freeze — ~half day, target Aug 19.** Frozen protocol with
+   both fixture-tree hashes, strict-mode checks (clean tree, resolved
+   policy hashes, model digests), the 380-run schedule, and a tagged
+   commit. After this, verifier/oracle logic is immutable; any change
+   means held-out-v2.
+
+### Phase 2 — Compute (user's RunPod + assistant babysitting; Aug 19–21)
+
+5. **Pod bring-up (~1 hour).** Clone at the frozen tag, install via the
+   CI recipe (it is the Linux install script), `ollama pull` the
+   models, record digests. User decision: GPU choice — an A100 80GB
+   (~$1.2–2/hr) keeps the 32B fallback viable; total spend $10–40.
+6. **Calibration at final settings** (temperature 0.7, seeds 0–4,
+   development fixtures only): `qwen2.5-coder:14b`,
+   `devstral-small-2:24b`, predeclared fallback ladder to 32B. A few
+   hours. Models that clear the floor proceed; no post-hoc shopping.
+7. **The 380-run matrix.** One environment, checkpoint/resume armed,
+   roughly overnight on one pod (half that on two). Then
+   `matrix-audit`, pull the bundle off the pod, verify `valid: true`
+   from the copy.
+
+### Phase 3 — Analysis + human validation (Aug 21–24)
+
+8. **Reports and figures** (assistant): `matrix-report`, pairwise
+   stats, per-comparison aggregates, supervisor-failure analyses
+   (over-blocking, liveness failure after repeated blocks, worker
+   adaptation), figures via academic-plotting, honesty pass via
+   statistical-analysis.
+9. **Blinded human validation — the one item only humans can do.**
+   `validation-sample` from the final manifest → user (+ ideally a
+   second rater) labels the blinded CSVs, ~half a day of human time →
+   `validation-agreement` → decide whether oracle agreement justifies
+   promoting `accepted_oracle_unsupported_finish_trial` to primary.
+   User decision: second rater, or predeclare single-rater as a stated
+   limitation now, not after.
+
+### Phase 4 — Paper + demo (Aug 24–28; pages 1–2 can start during Phase 2)
+
+10. **The 4-page Short Paper**: NeurIPS 2026 workshop template,
+    supervisory framing throughout, drafted via ml-paper-writing,
+    related work via paper-lookup. Title and abstract opening are
+    locked in the project skill.
+11. **The responsible-use statement** — the desk-rejection item.
+    Drafted early, alongside the intro, not at the deadline.
+12. **Demo-track material**: the paired live trajectory (same
+    worker/task/seed, supervisor on vs off, hidden evaluation revealed
+    only at termination).
+13. **Internal review, Aug 28**: academic-paper-reviewer 5-seat panel +
+    peer-review claims-vs-evidence pass; fix what they catch.
+
+### Phase 5 — Package + submit (Aug 28–29 AoE)
+
+14. **Anonymized artifact** from the relocatable bundle: scrub
+    `spiderishi`/`4r4cn1d0`/paths/repo links, third-person
+    self-citations, `matrix-audit` green from inside the copy,
+    deprecated reports excluded.
+15. **OpenReview upload** with margin before the AoE cutoff. User item:
+    an OpenReview account that is not identity-linked in the submission
+    itself.
+
+### User decision list (in order of when they bite)
+
+| When | Decision |
+|---|---|
+| ~Aug 18 | 15-min review of held-out pair designs (last cheap change) |
+| Aug 19 | RunPod go + GPU choice |
+| Aug 22 | Second rater: who, or predeclare single-rater |
+| Aug 24 | Oracle-endpoint promotion (informed by kappa) |
+| Aug 28 | Final read + submit authority |
+
+Slack in the plan: about 2 days, all of it consumed if calibration
+forces the 32B fallback *and* fixture authoring hits surprises. The two
+failure modes with pre-agreed answers: models fail calibration →
+fallback ladder, honest single-model limitation if needed; repair does
+not recover tasks → reported as the negative result, which this venue
+explicitly welcomes.
