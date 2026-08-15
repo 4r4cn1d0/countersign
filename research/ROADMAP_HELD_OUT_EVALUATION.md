@@ -196,11 +196,37 @@ carry, decided before any final-run data exists:
 ```
 2 models × 6 heldout_v1 tasks × 5 seeds × 4 primary interventions = 240 runs
 + 2 models × 4 negative controls × 5 seeds × 2 arms                =  80 runs
-                                                                     320 runs
++ 2 models × 6 heldout_v1 tasks × 5 seeds × oracle_supervisor      =  60 runs
+                                                                     380 runs
 ```
 
 Primary arms: `memory_baseline`, `observe_only`, `verification_only`,
 `verification_and_repair`. `repair_only` stays a secondary ablation.
+
+**`oracle_supervisor` (to implement before freeze — evaluation-only
+upper bound):** a gate that consults the hidden validator before
+allowing termination. This deliberately reintroduces, behind an
+explicit per-condition flag, the exact mechanism that was excised from
+the deployable gate as ground-truth leakage — which is why it must be
+firewalled: labeled evaluation-only in every table, never pooled into a
+primary comparison, never described as deployable. Its role is to bound
+what any trace-only supervisor could achieve. Bump
+`CONTROLLER_POLICY_VERSION` when adding the flag.
+
+### Supervisory framing (meta-agents venue, locked 2026-08-16)
+
+The conditions are presented as a supervisor ablation — worker only /
+passive supervisor / halting supervisor / halting+repairing supervisor /
+oracle upper bound — and two analyses are predeclared as first-class:
+
+- **Supervisor-policy generalization**: the supervisor's rules were
+  developed against the development fixtures; held-out families are the
+  unseen evaluation. Report per-family and per-worker-model.
+- **Supervisor-failure modes**: over-blocking (false-block rate on
+  supported controls), intervention-induced liveness failure (budget
+  exhaustion following repeated blocks), and worker adaptation to the
+  gate (post-block behavior, redundant test runs) — all computed from
+  fields the runner already records.
 
 ### Target venue (decided 2026-08-16)
 

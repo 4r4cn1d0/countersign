@@ -5,45 +5,99 @@ description: Venue requirements, framing, and submission checklist for this proj
 
 # NeurIPS 2026 workshop submission (Agent Memory Observatory)
 
-Both candidate venues were fetched from their CFP pages on 2026-08-16.
-Facts below are from those pages; do not silently contradict them.
+CFPs fetched from the venue pages on 2026-08-16. Facts below are from
+those pages; do not silently contradict them.
 
-## Primary target: AgentWild (preferred)
+## Target venue (user-locked 2026-08-16)
 
-**Third Workshop on Agents in the Wild: Safety, Security, and Beyond**
-(NeurIPS 2026) — https://agentwild-workshop.github.io/neurips2026/
+**Managing Agents that Manage Agents: Workshop on Responsible Use of
+Meta-Agents** (NeurIPS 2026, Sydney, Dec 11–12) —
+https://meta-agents-workshop.github.io/
 
-- Track: **Short Paper, 4 pages**. There is **no demo track** — never
-  call the submission a "demo paper" in AgentWild materials.
-- References and supplementary materials do not count against the limit.
-- Templates: NeurIPS, ICLR, or ICML LaTeX (top-venue templates accepted).
-- No NeurIPS paper checklist required.
-- **Deadline: August 29, 2026 AoE. Notification: September 29, 2026.**
-- OpenReview; non-archival; work under review elsewhere is welcome.
-- Anonymization: fully double-blind, and **explicitly extends to "any
-  supplementary or linked material as well, including code."**
-- Topic fit: agent safety, evaluation/benchmarking, trustworthiness.
+- Tracks: Full Papers (max 9 pages), **Short Papers (max 4 pages)**,
+  **Demo Track** ("live demonstrations of meta-agent systems and tools,
+  presented alongside the poster sessions"), Position Papers.
+- Plan of record: **4-page Short Paper**, plus the demo-track live
+  demonstration (the dashboard's side-by-side baseline-vs-verified
+  trajectory is exactly a "meta-agent tool" demo).
+- Template: **NeurIPS 2026 workshop LaTeX template**, single PDF.
+  References and appendices excluded from the page count, but "the main
+  text must be self-contained."
+- **Deadline: August 29, 2026 AoE. Notification: on or before
+  September 29, 2026 AoE.** OpenReview; non-archival; concurrent
+  submission elsewhere permitted.
+- Double-blind: author names, affiliations, and acknowledgments
+  removed; **prior work cited in the third person**.
+- **HARD REQUIREMENT: every submission must include "a short
+  responsible-use statement covering the potential societal impacts";
+  omitting it warrants desk rejection.** Draft this early, never bolt it
+  on at the deadline. For this project it writes itself: runtime
+  verification that blocks unsupported completion claims is a control on
+  agent overclaiming; discuss dual-use (a verifier's allow decision must
+  not be marketed as a correctness guarantee), oversight displacement
+  risk (humans over-trusting the gate), and open-weight release context.
+- Topics of interest matched by this project: **evaluation benchmarks**,
+  **misalignment and safety**, **automated agent harness design**,
+  optimization of compound agentic systems, governance/human oversight.
 
-## Fallback: Who Verifies the Agents?
+## Framing for this venue (supervisory pivot, locked 2026-08-16)
 
-**"Who Verifies the Agents? Toward Reliable Agent Development"**
-(NeurIPS 2026, Sydney, Dec 11–12) —
-https://verify-agents-workshop.github.io/
+The paper's central object is the **supervision loop**, not the
+detector: a worker coding agent proposes actions and termination; the
+Observatory is a **supervisory meta-agent** with authority over the
+worker's termination — it audits the worker's completion claims against
+the execution trace, **halts** unjustified termination, and issues
+**bounded corrective guidance** ("your cited test result is stale;
+re-run X", "requirement Y has no supporting evidence"). Never describe
+it as a passive logger or "runtime verifier for one coding agent."
 
-- Tracks: regular papers 4–9 pages; **demo papers ≤ 4 pages**.
-- NeurIPS 2026 template required; double-blind; OpenReview;
-  non-archival. Same deadline and notification dates as AgentWild.
-- Do **not** submit the same paper to both workshops.
+Bridge diagram (use it): worker agent → Observatory supervisor →
+accept / block / repair.
 
-## Framing per venue
+- Title direction: **"Agent Memory Observatory: Supervisory Runtime
+  Verification for Long-Horizon Agents"** (or "Supervising Agent
+  Completion with Evidence-Grounded Runtime Verification").
+- Abstract opens with the supervisor: "Long-horizon agents often
+  terminate on stale, misattributed, or missing evidence. We introduce
+  Agent Memory Observatory, a supervisory meta-agent that audits a
+  worker agent's completion claims against its execution trace and can
+  block termination or trigger bounded repair when the evidence is
+  insufficient."
+- Research question: *Can a lightweight supervisory meta-agent reliably
+  distinguish when a worker agent has sufficient evidence to terminate,
+  and intervene without inducing over-blocking or new failure modes?*
+- The intervention conditions ARE the supervisor ablation — always
+  present them as: worker only (`memory_baseline`), passive supervisor
+  (`observe_only`), halting supervisor (`verification_only`), halting +
+  repairing supervisor (`verification_and_repair`), plus the
+  evaluation-only oracle-supervisor upper bound (see roadmap §11).
+- The dev/held-out split IS the supervisory-policy generalization
+  claim: the supervisor's rules were developed against the development
+  fixtures and evaluated on unseen held-out families. Say it that way.
+- Include a **supervisor-failure analysis**: over-blocking (false-block
+  rate on supported controls), intervention-induced liveness failure
+  (action-budget exhaustion after repeated blocks — the historical
+  Devstral run is the motivating example), and worker adaptation to the
+  gate (post-block behavior, redundant test runs). "Who supervises the
+  supervisor" feeds the responsible-use statement directly.
+- The supervisor is deterministic and rule-based: report discrimination
+  (precision/recall/FPR against oracle labels), not probability
+  calibration — pseudo-confidence was deliberately removed.
+- Justified-vs-correct (trace-only online supervisor vs
+  post-termination hidden evaluation) remains the technical core. Keep
+  "operational memory"; no literal dementia claims; "self-hosted
+  open-weight models" (final runs execute on rented GPUs).
 
-- AgentWild: lead with deployment safety — unsupported completion claims
-  as a concrete in-the-wild failure of autonomous coding agents; runtime
-  verification as the guardrail. Verification mechanics support the
-  safety story.
-- Verify-agents (fallback): lead with the verification discipline — the
-  justified-vs-correct distinction (trace-only online verifier vs
-  post-termination hidden evaluation) is the core contribution.
+## Documented alternates (same deadline, not the target)
+
+- **"Who Verifies the Agents?"** (NeurIPS 2026) — regular 4–9pp, demo
+  papers ≤4pp, NeurIPS 2026 template, double-blind, OpenReview,
+  non-archival. https://verify-agents-workshop.github.io/
+- **AgentWild: Agents in the Wild** (NeurIPS 2026) — 9pp regular / 4pp
+  short, **no demo track**, NeurIPS/ICLR/ICML templates, double-blind
+  explicitly including "any supplementary or linked material as well,
+  including code". https://agentwild-workshop.github.io/neurips2026/
+- Do not submit the same paper to more than one of these workshops.
 
 ## Non-negotiables carried from the project's own protocol
 
@@ -58,11 +112,8 @@ https://verify-agents-workshop.github.io/
   held-out); pairs are clustered by model/task (per-model results +
   task-level bootstrap reported); negative results (e.g., repair rarely
   recovering) are reported as such.
-- Terminology: "operational memory," "self-hosted open-weight models" —
-  no literal dementia claims, no "local-only" claims that break on
-  rented GPUs.
 
-## Anonymized artifact checklist (both venues)
+## Anonymized artifact checklist
 
 Build from the relocatable bundle machinery (`resolve_bundle_path`,
 artifact index), never by hand:
@@ -74,6 +125,18 @@ artifact index), never by hand:
 4. Frozen protocol + manifest + run artifacts pass `matrix-audit`
    (`valid: true`) from inside the copied bundle.
 5. Non-anonymized historical reports (five-model comparison) excluded.
+6. Prior-work self-citations rewritten in the third person.
+
+## Submission checklist (deadline Aug 29 AoE)
+
+1. NeurIPS 2026 workshop template, single PDF, main text ≤4 pages and
+   self-contained.
+2. **Responsible-use statement present** (desk-reject item).
+3. Fully anonymized (names, affiliations, acknowledgments, third-person
+   self-citations, artifact scrubbed).
+4. Demo-track material ready: live side-by-side trajectory with hidden
+   evaluation revealed only post-termination.
+5. Uploaded on OpenReview before AoE cutoff.
 
 ## Sequencing with installed user skills
 
