@@ -24,6 +24,13 @@ jobs:
           pip install -r research/requirements-analysis.txt
           # Real-agent tool loop; pinned to the locally validated version.
           pip install "langgraph==0.6.11"
+          # search_code coding tool shells out to ripgrep.
+          sudo apt-get install -y ripgrep
+      - name: Generate JWT test keys
+        # Auth tests sign real RS256 tokens; keys are gitignored local
+        # secrets, so each CI run generates a throwaway pair.
+        working-directory: backend
+        run: python generate_keys.py
       - name: Run test suite
         # pytest.ini deselects integration (PostgreSQL/Redis) and
         # real_runtime (local Ollama) tests by default, so this is the
