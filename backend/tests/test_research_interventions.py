@@ -417,6 +417,20 @@ def test_intervention_mode_manifest_analysis_pairs_every_treatment_condition(
     assert report["model_treatment_summary_count"] == len(
         report["treatment_conditions"]
     )
+    # Descriptive aggregates must not blend reference runs across
+    # comparisons: with 1 model × 1 task × 1 seed there is exactly ONE
+    # distinct baseline trial, so every per-comparison aggregate counts 1
+    # — while the blended aggregate (JSON-only, flagged) counts one copy
+    # per treatment arm.
+    assert set(report["aggregate_by_comparison"]) == expected_comparisons
+    for comparison, aggregate in report["aggregate_by_comparison"].items():
+        assert aggregate["baseline_task_rows"] == 1, comparison
+    assert report["aggregate"]["blended_across_comparisons"] is True
+    assert report["aggregate"]["baseline_task_rows"] == len(
+        report["treatment_conditions"]
+    )
+    assert set(report["pressure_analysis_by_comparison"]) == expected_comparisons
+    assert set(report["dose_response_by_comparison"]) == expected_comparisons
     # The frozen protocol predeclares which pairwise comparison is
     # confirmatory — the Markdown headline must not fall back to whichever
     # treatment condition happens to sort first (that previously silently
@@ -440,6 +454,12 @@ def test_intervention_mode_manifest_analysis_pairs_every_treatment_condition(
         "## Primary Endpoint (`memory_baseline__vs__verification_only`)"
         in markdown
     )
+    # The rendered tables must carry the comparison label — three visually
+    # identical rows for the same model/task/seed are unusable.
+    assert "| `memory_baseline__vs__verification_only` |" in markdown
+    assert "| `memory_baseline__vs__observe_only` |" in markdown
+    assert "## Aggregate (per comparison)" in markdown
+    assert "## Other Pairwise Comparisons" in markdown
 
 
 def test_unsafe_mutation_gate_blocks_corrupted_file_basis():

@@ -67,6 +67,10 @@ def analyze_model_matrix_manifest(manifest_path: Path) -> dict:
 
     model_rows = []
     task_rows = []
+    # comparison key -> {"task_rows": [...], "model_rows": [...]} — the
+    # disjoint per-comparison partitions everything downstream (pairwise
+    # statistics AND per-comparison descriptive aggregates) is built from.
+    comparison_partitions: dict[str, dict[str, list[dict]]] = {}
 
     for model in models:
         for treatment_variant in treatment_variants:
@@ -80,12 +84,50 @@ def analyze_model_matrix_manifest(manifest_path: Path) -> dict:
                 treatment_variant=treatment_variant,
             )
             task_rows.extend(rows)
-            model_rows.append(
+            summary = _model_summary(
+                model,
+                rows,
+                reference_variant=reference_variant,
+                treatment_variant=treatment_variant,
+            )
+            model_rows.append(summary)
+            partition = comparison_partitions.setdefault(
+                comparison_key(reference_variant, treatment_variant),
+                {"task_rows": [], "model_rows": []},
+            )
+            partition["task_rows"].extend(rows)
+            partition["model_rows"].append(summary)
+
+    for extra_reference, extra_treatment in extra_pairwise_comparisons(
+        manifest.get("variants") or [reference_variant, *treatment_variants]
+    ):
+        extra_key = comparison_key(extra_reference, extra_treatment)
+        if extra_key in comparison_partitions:
+            # Already built as a reference-based comparison (e.g. a reduced
+            # experiment where verification_only is itself the reference) —
+            # extending would double-count every row.
+            continue
+        partition = comparison_partitions.setdefault(
+            extra_key,
+            {"task_rows": [], "model_rows": []},
+        )
+        for model in models:
+            extra_rows = _task_rows_for_model(
+                model,
+                manifest_dir,
+                task_ids=task_ids,
+                pressure_profiles=pressure_profiles,
+                seeds=seeds,
+                reference_variant=extra_reference,
+                treatment_variant=extra_treatment,
+            )
+            partition["task_rows"].extend(extra_rows)
+            partition["model_rows"].append(
                 _model_summary(
                     model,
-                    rows,
-                    reference_variant=reference_variant,
-                    treatment_variant=treatment_variant,
+                    extra_rows,
+                    reference_variant=extra_reference,
+                    treatment_variant=extra_treatment,
                 )
             )
 
@@ -99,35 +141,49 @@ def analyze_model_matrix_manifest(manifest_path: Path) -> dict:
     # (as if each were an independent pair) would violate McNemar's
     # independence assumption and artificially inflate the effective
     # sample size.
-    pairwise_statistics = {}
-    for treatment_variant in treatment_variants:
-        comparison_rows = [
-            row
-            for row in task_rows
-            if row["treatment_condition"] == treatment_variant
-        ]
-        pairwise_statistics[
-            comparison_key(reference_variant, treatment_variant)
-        ] = build_paired_statistics(comparison_rows)
-    for extra_reference, extra_treatment in extra_pairwise_comparisons(
-        manifest.get("variants") or [reference_variant, *treatment_variants]
-    ):
-        extra_rows = []
-        for model in models:
-            extra_rows.extend(
-                _task_rows_for_model(
-                    model,
-                    manifest_dir,
-                    task_ids=task_ids,
-                    pressure_profiles=pressure_profiles,
-                    seeds=seeds,
-                    reference_variant=extra_reference,
-                    treatment_variant=extra_treatment,
-                )
-            )
-        pairwise_statistics[
-            comparison_key(extra_reference, extra_treatment)
-        ] = build_paired_statistics(extra_rows)
+    pairwise_statistics = {
+        key: build_paired_statistics(partition["task_rows"])
+        for key, partition in comparison_partitions.items()
+    }
+
+    # Descriptive summaries suffer the same duplication as pooled
+    # inference did: the blended task_rows list repeats every reference
+    # run once per treatment comparison, so blended counts overstate
+    # distinct trials by the number of treatment arms. The per-comparison
+    # variants below are the ones paper tables must use; the blended
+    # versions are retained only as quick cross-condition exploration
+    # aids and carry an explicit flag saying so.
+    aggregate_by_comparison = {
+        key: _aggregate_summary(
+            [
+                row
+                for row in partition["model_rows"]
+                if row["status"] == "succeeded"
+            ],
+            partition["task_rows"],
+        )
+        for key, partition in comparison_partitions.items()
+    }
+    pressure_analysis_by_comparison = {
+        key: _pressure_analysis(partition["task_rows"])
+        for key, partition in comparison_partitions.items()
+    }
+    dose_response_by_comparison = {
+        key: dose_response_curves(partition["task_rows"])
+        for key, partition in comparison_partitions.items()
+    }
+    blended_aggregate = _aggregate_summary(successful_rows, task_rows)
+    blended_aggregate["blended_across_comparisons"] = len(
+        treatment_variants
+    ) > 1
+    blended_pressure = _pressure_analysis(task_rows)
+    blended_pressure["blended_across_comparisons"] = len(
+        treatment_variants
+    ) > 1
+    blended_dose_response = dose_response_curves(task_rows)
+    blended_dose_response["blended_across_comparisons"] = len(
+        treatment_variants
+    ) > 1
 
     # A single confirmatory primary_endpoint statistic only exists when
     # there is exactly one treatment condition to compare against the
@@ -179,7 +235,11 @@ def analyze_model_matrix_manifest(manifest_path: Path) -> dict:
         ),
         "models": model_rows,
         "tasks": task_rows,
-        "aggregate": _aggregate_summary(successful_rows, task_rows),
+        # Blended descriptive summaries repeat each reference run once per
+        # treatment comparison (flagged via blended_across_comparisons).
+        # Paper tables must use the *_by_comparison variants instead.
+        "aggregate": blended_aggregate,
+        "aggregate_by_comparison": aggregate_by_comparison,
         # None for multi-arm manifests — see pairwise_statistics. Only
         # populated for a legacy two-arm (single-treatment) manifest,
         # where it is identical to the one entry in pairwise_statistics.
@@ -189,8 +249,10 @@ def analyze_model_matrix_manifest(manifest_path: Path) -> dict:
             manifest,
             task_rows,
         ),
-        "pressure_analysis": _pressure_analysis(task_rows),
-        "dose_response": dose_response_curves(task_rows),
+        "pressure_analysis": blended_pressure,
+        "pressure_analysis_by_comparison": pressure_analysis_by_comparison,
+        "dose_response": blended_dose_response,
+        "dose_response_by_comparison": dose_response_by_comparison,
         "limitations": manifest.get("limitations", []),
     }
 
@@ -423,13 +485,17 @@ def format_model_matrix_analysis_markdown(report: dict) -> str:
         "",
         "## Model Summary",
         "",
-        "| Model | Status | Pairs | Eligible | Reference Accepted Unsupported | Blocked Unsupported | Repair Successes | Contained Recoveries | Recovered Tasks | Treatment Accepted Unsupported | Avg Extra Actions |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "One row per model × treatment comparison; the Comparison column is "
+        "what distinguishes otherwise-identical rows in a multi-arm run.",
+        "",
+        "| Model | Comparison | Status | Pairs | Eligible | Reference Accepted Unsupported | Blocked Unsupported | Repair Successes | Contained Recoveries | Recovered Tasks | Treatment Accepted Unsupported | Avg Extra Actions |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for model in report["models"]:
         lines.append(
-            "| `{model}` | `{status}` | {pairs} | {eligible} | {baseline_false} | {blocked_false} | {repair_successes} | {contained} | {recoveries} | {verified_false} | {actions:.2f} |".format(
+            "| `{model}` | `{comparison}` | `{status}` | {pairs} | {eligible} | {baseline_false} | {blocked_false} | {repair_successes} | {contained} | {recoveries} | {verified_false} | {actions:.2f} |".format(
                 model=model["model_name"],
+                comparison=_row_comparison(model),
                 status=model["status"],
                 pairs=model["pair_count"],
                 eligible=model["eligible_pair_count"],
@@ -461,14 +527,15 @@ def format_model_matrix_analysis_markdown(report: dict) -> str:
             "",
             "## Coding-Agent Intervention Matrix",
             "",
-            "| Model | Task | Pressure Profile | Severity | Seed | Eligible | Reference Outcome | Treatment Outcome | Reference Memory Failure | Reference Accepted Unsupported | Blocked Unsupported | Repair Attempts | Contained Recovery | Recovery Level | Repair Recovery | Treatment Accepted Unsupported | Reference Structured Memory | Treatment Structured Memory | Extra Actions |",
-            "|---|---|---|---|---:|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+            "| Model | Comparison | Task | Pressure Profile | Severity | Seed | Eligible | Reference Outcome | Treatment Outcome | Reference Memory Failure | Reference Accepted Unsupported | Blocked Unsupported | Repair Attempts | Contained Recovery | Recovery Level | Repair Recovery | Treatment Accepted Unsupported | Reference Structured Memory | Treatment Structured Memory | Extra Actions |",
+            "|---|---|---|---|---|---:|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
         ]
     )
     for row in report["tasks"]:
         lines.append(
-            "| `{model}` | `{task}` | `{profile}` | `{severity}` | {seed} | {eligible} | `{baseline_outcome}` | `{verified_outcome}` | {memory_failure} | {baseline_false} | {blocked_false} | {repair_attempts} | {contained_recovery} | {recovery_level} | {repair_recovery} | {verified_false} | {baseline_structured} | {verified_structured} | {actions} |".format(
+            "| `{model}` | `{comparison}` | `{task}` | `{profile}` | `{severity}` | {seed} | {eligible} | `{baseline_outcome}` | `{verified_outcome}` | {memory_failure} | {baseline_false} | {blocked_false} | {repair_attempts} | {contained_recovery} | {recovery_level} | {repair_recovery} | {verified_false} | {baseline_structured} | {verified_structured} | {actions} |".format(
                 model=row["model_name"],
+                comparison=_row_comparison(row),
                 task=row["task_id"],
                 profile=row["pressure_profile_id"],
                 severity=row["pressure_severity"],
@@ -499,21 +566,46 @@ def format_model_matrix_analysis_markdown(report: dict) -> str:
             )
         )
 
-    lines.extend(["", "## Paired Statistical Outcomes", ""])
+    lines.extend(
+        ["", f"## Paired Statistical Outcomes (`{primary_comparison}`)", ""]
+    )
     for name, result in statistics["binary_outcomes"].items():
         lines.append(
-            f"- `{name}`: baseline "
-            f"`{_rate_text(result['baseline'])}`; verified "
+            f"- `{name}`: reference "
+            f"`{_rate_text(result['baseline'])}`; treatment "
             f"`{_rate_text(result['verified'])}`; risk difference "
             f"`{result['risk_difference_verified_minus_baseline']}`; "
             f"exact McNemar p=`{result['mcnemar']['p_value_two_sided_exact']}`"
         )
     for name, result in statistics["continuous_outcomes"].items():
         lines.append(
-            f"- `{name}` verified-minus-baseline mean: "
+            f"- `{name}` treatment-minus-reference mean: "
             f"`{result['mean_difference']}`; bootstrap 95% CI "
             f"`{result['ci95']}`"
         )
+
+    other_comparisons = {
+        key: value
+        for key, value in sorted(pairwise_statistics.items())
+        if key != primary_comparison
+    }
+    if other_comparisons:
+        lines.extend(["", "## Other Pairwise Comparisons", ""])
+        for key, stats in other_comparisons.items():
+            outcome = stats.get("binary_outcomes", {}).get(
+                "accepted_unsupported_finish_trial"
+            )
+            if outcome is None:
+                lines.append(f"- `{key}`: no paired outcome available")
+                continue
+            lines.append(
+                f"- `{key}`: reference "
+                f"`{_rate_text(outcome['baseline'])}`; treatment "
+                f"`{_rate_text(outcome['verified'])}`; risk difference "
+                f"`{outcome['risk_difference_verified_minus_baseline']}`; "
+                f"exact McNemar p="
+                f"`{outcome['mcnemar']['p_value_two_sided_exact']}`"
+            )
 
     lines.extend(["", "## Exclusion Ledger", ""])
     if statistics["exclusion_ledger"]:
@@ -541,8 +633,16 @@ def format_model_matrix_analysis_markdown(report: dict) -> str:
             lines.append(f"- `{key}`: `{value}`")
     lines.append(f"- Note: {accounting['note']}")
 
-    lines.extend(["", "## Pressure Dose Response", ""])
-    for item in report["pressure_analysis"]["dose_response"]:
+    pressure_analysis = report.get(
+        "pressure_analysis_by_comparison", {}
+    ).get(primary_comparison, report["pressure_analysis"])
+    dose_response = report.get("dose_response_by_comparison", {}).get(
+        primary_comparison, report.get("dose_response", {})
+    )
+    lines.extend(
+        ["", f"## Pressure Dose Response (`{primary_comparison}`)", ""]
+    )
+    for item in pressure_analysis["dose_response"]:
         lines.append(
             "- Severity `{severity}`: planned `{planned}`, "
             "memory-contributed failures `{failures}` "
@@ -560,9 +660,9 @@ def format_model_matrix_analysis_markdown(report: dict) -> str:
         )
     lines.append(
         "- Natural versus induced-associated counts: "
-        f"`{report['pressure_analysis']['natural_vs_induced_corruption_counts']}`"
+        f"`{pressure_analysis['natural_vs_induced_corruption_counts']}`"
     )
-    for entry in report.get("dose_response", {}).get("severities", []):
+    for entry in dose_response.get("severities", []):
         lines.append(
             "- Severity `{ordinal}` (`{severity}`): "
             "baseline accepted-false rate `{baseline_rate}`, "
@@ -582,9 +682,23 @@ def format_model_matrix_analysis_markdown(report: dict) -> str:
             )
         )
 
-    lines.extend(["", "## Aggregate", ""])
-    for key, value in report["aggregate"].items():
-        lines.append(f"- `{key}`: `{value}`")
+    aggregate_by_comparison = report.get("aggregate_by_comparison", {})
+    if aggregate_by_comparison:
+        # One subsection per independent comparison. The blended aggregate
+        # (report["aggregate"]) repeats every reference run once per
+        # treatment arm, so its counts overstate distinct trials in a
+        # multi-arm run — it stays JSON-only, flagged
+        # blended_across_comparisons, and is never rendered here.
+        lines.extend(["", "## Aggregate (per comparison)", ""])
+        for comparison in sorted(aggregate_by_comparison):
+            lines.extend([f"### `{comparison}`", ""])
+            for key, value in aggregate_by_comparison[comparison].items():
+                lines.append(f"- `{key}`: `{value}`")
+            lines.append("")
+    else:
+        lines.extend(["", "## Aggregate", ""])
+        for key, value in report["aggregate"].items():
+            lines.append(f"- `{key}`: `{value}`")
 
     if report.get("limitations"):
         lines.extend(["", "## Limitations", ""])
@@ -1959,6 +2073,20 @@ def _rate_text(interval: dict) -> str:
     return (
         f"{interval['successes']}/{interval['total']} = "
         f"{interval['rate']:.4f} (95% CI {lower:.4f}-{upper:.4f})"
+    )
+
+
+def _row_comparison(row: dict) -> str:
+    """Comparison label for a model-summary or task row.
+
+    This column is what keeps otherwise-identical rows distinguishable in
+    a multi-arm run — without it, three treatment conditions for the same
+    model/task/seed render as three visually identical table rows.
+    """
+
+    return comparison_key(
+        row.get("reference_condition", "baseline"),
+        row.get("treatment_condition", "verified"),
     )
 
 
