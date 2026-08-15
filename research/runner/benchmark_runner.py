@@ -2525,6 +2525,33 @@ class BenchmarkRunner:
         return claim_text.get(claim_type, claim_type.replace("_", " "))
 
     @staticmethod
+    def _is_unsupported_completion_claim(claims_for_event: list[dict]) -> bool:
+        """Epistemic support only: was the claim backed by evidence?
+
+        This must never depend on hidden/post-termination evaluation — an
+        unsupported claim and an incorrect claim are different failure
+        classes (see accepted_incorrect_finish in _interaction_metrics). A
+        claim can be well-supported and still turn out incorrect; the
+        online verifier is not at fault for that case. Shared by
+        _interaction_metrics (outcome labeling) and
+        _attach_interactive_verification_report (verifier confusion matrix)
+        so both use the same ground-truth definition of "unsupported".
+        """
+        task_claims = [
+            claim
+            for claim in claims_for_event
+            if claim["claim_type"] == "task_complete"
+        ]
+        if not task_claims:
+            return True
+        return any(
+            claim["stale"]
+            or claim["lost_provenance"]
+            or claim["support_status"] in {"unsupported", "contradicted"}
+            for claim in task_claims
+        )
+
+    @staticmethod
     def _interaction_metrics(run: dict) -> dict:
         events = run.get("trace_events", [])
         proposals = [
@@ -2537,30 +2564,10 @@ class BenchmarkRunner:
         for claim in run.get("memory_claims", []):
             claims_by_event.setdefault(claim["event_id"], []).append(claim)
 
-        def is_unsupported_proposal(event: dict) -> bool:
-            """Epistemic support only: was the claim backed by evidence?
-
-            This must never depend on hidden/post-termination evaluation —
-            an unsupported claim and an incorrect claim are different
-            failure classes (see accepted_incorrect_finish below). A claim
-            can be well-supported and still turn out incorrect; the online
-            verifier is not at fault for that case.
-            """
-            task_claims = [
-                claim
-                for claim in claims_by_event.get(event["event_id"], [])
-                if claim["claim_type"] == "task_complete"
-            ]
-            if not task_claims:
-                return True
-            return any(
-                claim["stale"]
-                or claim["lost_provenance"]
-                or claim["support_status"] in {"unsupported", "contradicted"}
-                for claim in task_claims
+        def is_false_proposal(event: dict) -> bool:
+            return BenchmarkRunner._is_unsupported_completion_claim(
+                claims_by_event.get(event["event_id"], [])
             )
-
-        is_false_proposal = is_unsupported_proposal
         false_proposals = [
             event for event in proposals if is_false_proposal(event)
         ]
@@ -2861,6 +2868,76 @@ class BenchmarkRunner:
         )
 
     @staticmethod
+    def _verifier_confusion_matrix(
+        run: dict,
+        decisions: list[dict],
+    ) -> dict:
+        """Raw verifier judgment vs. epistemic ground truth, per proposal.
+
+        Ground truth is whether the proposed completion claim was actually
+        unsupported (same definition as accepted_unsupported_finish), not
+        whether the hidden evaluator later agreed with it — the verifier
+        can only ever be judged against evidence that existed at decision
+        time. Uses the raw verifier_decision, not the enforced action, so
+        this is meaningful for non-blocking conditions (observe_only,
+        repair_only) too.
+        """
+
+        claims_by_event: dict[str, list[dict]] = {}
+        for claim in run.get("memory_claims", []):
+            claims_by_event.setdefault(claim["event_id"], []).append(claim)
+
+        true_positive = 0
+        false_positive = 0
+        false_negative = 0
+        true_negative = 0
+        for decision in decisions:
+            claim_event_id = decision.get("claim_event_id")
+            raw_decision = decision.get(
+                "verifier_decision",
+                decision.get("decision"),
+            )
+            if raw_decision not in {"allow", "block"}:
+                continue
+            unsupported = BenchmarkRunner._is_unsupported_completion_claim(
+                claims_by_event.get(claim_event_id, [])
+            )
+            blocked = raw_decision == "block"
+            if unsupported and blocked:
+                true_positive += 1
+            elif not unsupported and blocked:
+                false_positive += 1
+            elif unsupported and not blocked:
+                false_negative += 1
+            else:
+                true_negative += 1
+
+        def _safe_rate(numerator: int, denominator: int) -> float | None:
+            return round(numerator / denominator, 4) if denominator else None
+
+        return {
+            "true_positive": true_positive,
+            "false_positive": false_positive,
+            "false_negative": false_negative,
+            "true_negative": true_negative,
+            "precision": _safe_rate(
+                true_positive, true_positive + false_positive
+            ),
+            "recall": _safe_rate(
+                true_positive, true_positive + false_negative
+            ),
+            "false_positive_rate": _safe_rate(
+                false_positive, false_positive + true_negative
+            ),
+            "false_negative_rate": _safe_rate(
+                false_negative, false_negative + true_positive
+            ),
+            "specificity": _safe_rate(
+                true_negative, true_negative + false_positive
+            ),
+        }
+
+    @staticmethod
     def _attach_interactive_verification_report(run: dict) -> dict:
         decisions = [
             event
@@ -2868,6 +2945,11 @@ class BenchmarkRunner:
             if event.get("event_type") == "verification_decision"
             and event.get("graph_node") == "process_action"
         ]
+        # Enforced blocks are what actually happened to the episode
+        # (terminal veto). In non-blocking conditions (observe_only,
+        # repair_only) this can be empty even when the verifier's raw
+        # judgment wanted to block — see raw_decision_counts below, which
+        # is what verifier precision/recall must be computed from.
         blocked_actions = [
             {
                 "claim_event_id": decision.get("claim_event_id"),
@@ -2882,6 +2964,25 @@ class BenchmarkRunner:
             for decision in decisions
             if decision.get("decision") == "block"
         ]
+        raw_blocked_proposals = [
+            {
+                "claim_event_id": decision.get("claim_event_id"),
+                "claim_types": decision.get("claim_types", []),
+                "reasons": decision.get("reasons", []),
+                "recommended_actions": decision.get(
+                    "recommended_actions",
+                    [],
+                ),
+                "enforced_decision": decision.get("enforced_decision"),
+            }
+            for decision in decisions
+            if decision.get("verifier_decision", decision.get("decision"))
+            == "block"
+        ]
+        confusion_matrix = BenchmarkRunner._verifier_confusion_matrix(
+            run,
+            decisions,
+        )
         accepted_event_ids = {
             event["event_id"]
             for event in run.get("trace_events", [])
@@ -2903,9 +3004,10 @@ class BenchmarkRunner:
         verified["blocked_actions"] = blocked_actions
         verified["effective_memory_health_report"] = effective_report
         verified["verification_report"] = {
-            "schema_version": "agent-memory-interactive-verification/v0.2",
+            "schema_version": "agent-memory-interactive-verification/v0.3",
             "run_id": run.get("run_id"),
             "task_id": run.get("task_id"),
+            # Enforced: the action actually taken (terminal veto or not).
             "decision_counts": {
                 "allow": sum(
                     1 for decision in decisions if decision.get("decision") == "allow"
@@ -2914,8 +3016,27 @@ class BenchmarkRunner:
                     1 for decision in decisions if decision.get("decision") == "block"
                 ),
             },
+            # Raw: the verifier's own judgment before any override — use
+            # this, not decision_counts, for precision/recall/observe_only
+            # analysis.
+            "raw_decision_counts": {
+                "allow": sum(
+                    1
+                    for decision in decisions
+                    if decision.get("verifier_decision", decision.get("decision"))
+                    == "allow"
+                ),
+                "block": sum(
+                    1
+                    for decision in decisions
+                    if decision.get("verifier_decision", decision.get("decision"))
+                    == "block"
+                ),
+            },
             "decisions": decisions,
             "blocked_actions": blocked_actions,
+            "raw_blocked_proposals": raw_blocked_proposals,
+            "confusion_matrix": confusion_matrix,
             "interaction_metrics": run.get("interaction_metrics", {}),
             "effective_memory_health_report": effective_report,
         }

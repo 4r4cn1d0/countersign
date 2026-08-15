@@ -12,30 +12,81 @@ from .failure_attribution import classify_run_failure
 from .statistics import build_paired_statistics
 
 
+def _reference_and_treatment_variants(
+    manifest: dict,
+) -> tuple[str, list[str]]:
+    """Determine the baseline/reference condition and treatment condition(s).
+
+    Legacy two-arm manifests (variants=["baseline", "verified"]) produce
+    exactly one treatment variant, preserving prior single-pair-per-row
+    behavior. Intervention-mode manifests (memory_baseline plus any subset
+    of observe_only/verification_only/repair_only/verification_and_repair)
+    compare every other condition against memory_baseline, one full set of
+    paired rows per treatment condition — rather than looking for the
+    literal keys "baseline"/"verified", which intervention-mode run
+    artifacts never use (their "variant" field is the intervention name).
+    """
+
+    manifest_variants = list(manifest.get("variants") or ["baseline", "verified"])
+    if "memory_baseline" in manifest_variants:
+        reference_variant = "memory_baseline"
+    elif "baseline" in manifest_variants:
+        reference_variant = "baseline"
+    else:
+        reference_variant = manifest_variants[0]
+    treatment_variants = [
+        variant for variant in manifest_variants if variant != reference_variant
+    ]
+    return reference_variant, treatment_variants or ["verified"]
+
+
 def analyze_model_matrix_manifest(manifest_path: Path) -> dict:
     """Build a paired comparison report from a model-matrix manifest."""
 
     manifest = _read_json(manifest_path)
     manifest_dir = manifest_path.parent
     pressure_profiles = _manifest_pressure_profiles(manifest)
+    reference_variant, treatment_variants = _reference_and_treatment_variants(
+        manifest
+    )
     model_rows = []
     task_rows = []
 
     for model in manifest.get("models", []):
-        rows = _task_rows_for_model(
-            model,
-            manifest_dir,
-            task_ids=manifest.get("task_ids", []),
-            pressure_profiles=pressure_profiles,
-            seeds=manifest.get("seeds", [0]),
-        )
-        task_rows.extend(rows)
-        model_rows.append(_model_summary(model, rows))
+        for treatment_variant in treatment_variants:
+            rows = _task_rows_for_model(
+                model,
+                manifest_dir,
+                task_ids=manifest.get("task_ids", []),
+                pressure_profiles=pressure_profiles,
+                seeds=manifest.get("seeds", [0]),
+                reference_variant=reference_variant,
+                treatment_variant=treatment_variant,
+            )
+            task_rows.extend(rows)
+            model_rows.append(
+                _model_summary(
+                    model,
+                    rows,
+                    reference_variant=reference_variant,
+                    treatment_variant=treatment_variant,
+                )
+            )
 
     successful_rows = [
         row for row in model_rows if row["status"] == "succeeded"
     ]
     paired_statistics = build_paired_statistics(task_rows)
+    paired_statistics_by_treatment = {
+        treatment_variant: build_paired_statistics(
+            [
+                row
+                for row in task_rows
+                if row["treatment_condition"] == treatment_variant
+            ]
+        )
+        for treatment_variant in treatment_variants
+    }
     return {
         "schema_version": "agent-memory-model-matrix-analysis/v0.3",
         "manifest_path": str(manifest_path.resolve()),
@@ -55,6 +106,8 @@ def analyze_model_matrix_manifest(manifest_path: Path) -> dict:
         "pressure_profiles": pressure_profiles,
         "task_state_probes": manifest.get("task_state_probes", False),
         "seeds": manifest.get("seeds", [0]),
+        "reference_condition": reference_variant,
+        "treatment_conditions": treatment_variants,
         "model_count": len(model_rows),
         "successful_model_count": len(successful_rows),
         "task_count": len(set(row["task_id"] for row in task_rows)),
@@ -63,7 +116,13 @@ def analyze_model_matrix_manifest(manifest_path: Path) -> dict:
         "models": model_rows,
         "tasks": task_rows,
         "aggregate": _aggregate_summary(successful_rows, task_rows),
+        # Blended across every treatment condition present — for a single
+        # baseline/verified manifest this is the only comparison anyway.
+        # For multi-arm intervention manifests, prefer
+        # paired_statistics_by_treatment for a specific comparison (e.g.
+        # memory_baseline vs verification_only).
         "paired_statistics": paired_statistics,
+        "paired_statistics_by_treatment": paired_statistics_by_treatment,
         "execution_accounting": _execution_accounting(
             manifest,
             task_rows,
@@ -215,7 +274,7 @@ def format_model_matrix_analysis_markdown(report: dict) -> str:
     """Format a model-matrix analysis report as Markdown."""
 
     statistics = report["paired_statistics"]
-    primary = statistics["binary_outcomes"]["accepted_false_finish_trial"]
+    primary = statistics["binary_outcomes"]["accepted_unsupported_finish_trial"]
     lines = [
         "# Agent Memory Model Matrix Analysis",
         "",
@@ -237,15 +296,15 @@ def format_model_matrix_analysis_markdown(report: dict) -> str:
         "## Primary Endpoint",
         "",
         (
-            "- Baseline accepted-false-finish rate: "
-            f"`{_rate_text(primary['baseline'])}`"
+            f"- Reference condition (`{report.get('reference_condition', 'baseline')}`) "
+            f"accepted-unsupported-finish rate: `{_rate_text(primary['baseline'])}`"
         ),
         (
-            "- Verified accepted-false-finish rate: "
-            f"`{_rate_text(primary['verified'])}`"
+            f"- Treatment condition(s) (`{report.get('treatment_conditions', ['verified'])}`) "
+            f"accepted-unsupported-finish rate: `{_rate_text(primary['verified'])}`"
         ),
         (
-            "- Verified minus baseline risk difference: "
+            "- Treatment minus reference risk difference: "
             f"`{primary['risk_difference_verified_minus_baseline']}`"
         ),
         (
@@ -253,11 +312,11 @@ def format_model_matrix_analysis_markdown(report: dict) -> str:
             f"`{primary['mcnemar']['p_value_two_sided_exact']}`"
         ),
         "",
-        "A zero observed verified rate is not treated as proof of zero risk; the Wilson interval above reports the uncertainty implied by the sample size.",
+        "A zero observed treatment rate is not treated as proof of zero risk; the Wilson interval above reports the uncertainty implied by the sample size. This section blends every treatment condition present in the manifest — see paired_statistics_by_treatment in the JSON report for a specific comparison (e.g. memory_baseline vs verification_only).",
         "",
         "## Model Summary",
         "",
-        "| Model | Status | Pairs | Eligible | Baseline Accepted False | Blocked False | Repair Successes | Contained Recoveries | Recovered Tasks | Verified Accepted False | Avg Extra Actions |",
+        "| Model | Status | Pairs | Eligible | Reference Accepted Unsupported | Blocked Unsupported | Repair Successes | Contained Recoveries | Recovered Tasks | Treatment Accepted Unsupported | Avg Extra Actions |",
         "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for model in report["models"]:
@@ -295,7 +354,7 @@ def format_model_matrix_analysis_markdown(report: dict) -> str:
             "",
             "## Coding-Agent Intervention Matrix",
             "",
-            "| Model | Task | Pressure Profile | Severity | Seed | Eligible | Baseline Outcome | Verified Outcome | Baseline Memory Failure | Baseline Accepted False | Blocked False | Repair Attempts | Contained Recovery | Recovery Level | Repair Recovery | Verified Accepted False | Baseline Structured Memory | Verified Structured Memory | Extra Actions |",
+            "| Model | Task | Pressure Profile | Severity | Seed | Eligible | Reference Outcome | Treatment Outcome | Reference Memory Failure | Reference Accepted Unsupported | Blocked Unsupported | Repair Attempts | Contained Recovery | Recovery Level | Repair Recovery | Treatment Accepted Unsupported | Reference Structured Memory | Treatment Structured Memory | Extra Actions |",
             "|---|---|---|---|---:|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
         ]
     )
@@ -434,6 +493,8 @@ def _task_rows_for_model(
     task_ids: list[str],
     pressure_profiles: list[dict],
     seeds: list[int],
+    reference_variant: str = "baseline",
+    treatment_variant: str = "verified",
 ) -> list[dict]:
     runs_by_pair: dict[
         tuple[str, str, int],
@@ -492,8 +553,8 @@ def _task_rows_for_model(
             },
         )
         memory_condition = pressure_profile["condition"]
-        baseline_info = pair.get("baseline")
-        verified_info = pair.get("verified")
+        baseline_info = pair.get(reference_variant)
+        verified_info = pair.get(treatment_variant)
         baseline = _read_run_info(baseline_info, manifest_dir)
         verified = _read_run_info(verified_info, manifest_dir)
         baseline_attribution = (
@@ -538,6 +599,8 @@ def _task_rows_for_model(
             baseline_metadata=baseline_metadata,
             verified_metadata=verified_metadata,
             pair=pair,
+            reference_variant=reference_variant,
+            treatment_variant=treatment_variant,
         )
         false_completion_claims = int(
             baseline_counts.get("false_completion", 0)
@@ -545,6 +608,8 @@ def _task_rows_for_model(
         stale_claims = int(baseline_counts.get("stale", 0))
         rows.append(
             {
+                "reference_condition": reference_variant,
+                "treatment_condition": treatment_variant,
                 "model_name": model["model_name"],
                 "model_family": model.get("model_family"),
                 "task_id": task_id,
@@ -1027,7 +1092,13 @@ def _task_rows_for_model(
     return rows
 
 
-def _model_summary(model: dict, rows: list[dict]) -> dict:
+def _model_summary(
+    model: dict,
+    rows: list[dict],
+    *,
+    reference_variant: str = "baseline",
+    treatment_variant: str = "verified",
+) -> dict:
     parse_counts = Counter(row["parse_status"] for row in rows)
     tool_action_parse_counts: Counter[str] = Counter()
     tool_action_status_counts: Counter[str] = Counter()
@@ -1040,6 +1111,8 @@ def _model_summary(model: dict, rows: list[dict]) -> dict:
         )
     eligible = [row for row in rows if row["pair_eligible"]]
     return {
+        "reference_condition": reference_variant,
+        "treatment_condition": treatment_variant,
         "model_name": model["model_name"],
         "model_family": model.get("model_family"),
         "status": model.get("status"),
@@ -1659,13 +1732,15 @@ def _pair_exclusion_reason(
     baseline_metadata: dict,
     verified_metadata: dict,
     pair: dict,
+    reference_variant: str = "baseline",
+    treatment_variant: str = "verified",
 ) -> str | None:
     if not pair_complete:
         missing = []
         if not baseline_info:
-            missing.append("baseline")
+            missing.append(reference_variant)
         if not verified_info:
-            missing.append("verified")
+            missing.append(treatment_variant)
         errors = [
             value.get("error", "")
             for key, value in pair.items()

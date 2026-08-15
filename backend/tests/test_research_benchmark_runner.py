@@ -1096,6 +1096,83 @@ def test_verification_only_enforces_block_and_matches_raw_decision(
     assert run["interaction_metrics"]["accepted_finish_proposals"] == 0
 
 
+def test_verification_report_confusion_matrix_uses_raw_not_enforced_decision(
+    tmp_path: Path,
+):
+    """Verifier precision/recall must be computable from observe_only runs.
+
+    The verification report's decision_counts/blocked_actions reflect the
+    enforced action (always "allow" in observe_only), but
+    raw_decision_counts and confusion_matrix must reflect the verifier's
+    own raw judgment against ground-truth support — otherwise observe_only
+    would look like a verifier that never finds anything to flag.
+    """
+    pytest.importorskip("langgraph")
+
+    class UnsupportedFinishAdapter:
+        runtime = "deterministic"
+
+        def __init__(self):
+            self.calls = 0
+
+        def generate(self, request):
+            self.calls += 1
+            actions = [
+                {
+                    "action": "write_file",
+                    "path": "config_parser.py",
+                    "content": (
+                        "def parse_line(line):\n"
+                        "    key, value = line.split('=', 1)\n"
+                        "    return key.strip(), value.strip()\n"
+                    ),
+                },
+                {"action": "run_tests"},
+                {
+                    "action": "finish",
+                    "claim": "The task is complete.",
+                    "source_event_ids": [],
+                },
+            ]
+            return ModelResponse(
+                text=json.dumps(actions[min(self.calls - 1, 2)]),
+                runtime="deterministic",
+                model_name=request.model_name,
+                model_family=request.model_family,
+                raw_response={"fake": True},
+            )
+
+    with patch(
+        "research.runner.benchmark_runner.create_model_adapter",
+        return_value=UnsupportedFinishAdapter(),
+    ):
+        run = BenchmarkRunner().run_task_id(
+            "coding_stale_tests_001",
+            BenchmarkRunConfig(
+                framework="langgraph_tools",
+                trace_mode="model_driven",
+                intervention="observe_only",
+                action_budget=3,
+                workspace_root=str(tmp_path),
+            ),
+        )
+
+    report = run["verification_report"]
+    # Enforced: observe_only never blocks.
+    assert report["decision_counts"]["block"] == 0
+    assert report["blocked_actions"] == []
+    # Raw: the verifier still recognized the unsupported claim.
+    assert report["raw_decision_counts"]["block"] == 1
+    assert len(report["raw_blocked_proposals"]) == 1
+    assert report["raw_blocked_proposals"][0]["enforced_decision"] == "allow"
+    confusion = report["confusion_matrix"]
+    assert confusion["true_positive"] == 1
+    assert confusion["false_positive"] == 0
+    assert confusion["false_negative"] == 0
+    assert confusion["precision"] == 1.0
+    assert confusion["recall"] == 1.0
+
+
 def test_requirement_snapshot_recovers_task_and_changed_user_history():
     task = BenchmarkRunner().get_task("coding_stale_tests_001")
     scenario = load_fixture_scenario("coding_stale_tests_001")

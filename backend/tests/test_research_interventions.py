@@ -14,6 +14,7 @@ from research.runner.interventions import (
     INTERVENTION_CONDITIONS,
     resolve_intervention,
 )
+from research.runner.matrix_analysis import analyze_model_matrix_manifest
 from research.runner.model_adapters import ModelResponse
 from research.runner.model_matrix import run_model_matrix
 
@@ -288,6 +289,72 @@ def test_matrix_interventions_axis_produces_distinct_paired_runs(
             seeds=[0],
             trace_mode="model_driven",
         )
+
+
+def test_intervention_mode_manifest_analysis_pairs_every_treatment_condition(
+    tmp_path: Path,
+):
+    """analyze_model_matrix_manifest must not silently produce empty pairs.
+
+    Intervention-mode run artifacts record their "variant" as the actual
+    intervention name (e.g. "observe_only"), never the literal strings
+    "baseline"/"verified" that the legacy two-arm analysis path looks for.
+    Every non-baseline condition must be paired against memory_baseline as
+    its own reference/treatment comparison, not silently dropped.
+    """
+    pytest.importorskip("langgraph")
+    matrix_path = tmp_path / "matrix.json"
+    matrix_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "agent-memory-model-matrix/v0.1",
+                "runtime": "deterministic",
+                "minimum_successful_models": 1,
+                "models": [
+                    {
+                        "model_family": "qwen",
+                        "model_name": "qwen2.5-coder:7b",
+                        "enabled": True,
+                    }
+                ],
+            }
+        )
+    )
+
+    manifest = run_model_matrix(
+        tmp_path / "out",
+        matrix_path=matrix_path,
+        framework="langgraph_tools",
+        task_ids=["coding_easy_flag_default_001"],
+        interventions=list(INTERVENTION_CONDITIONS),
+        seeds=[0],
+        minimum_successful_models=1,
+        trace_mode="model_driven",
+    )
+
+    report = analyze_model_matrix_manifest(Path(manifest["manifest_path"]))
+
+    assert report["reference_condition"] == "memory_baseline"
+    assert set(report["treatment_conditions"]) == {
+        "observe_only",
+        "verification_only",
+        "repair_only",
+        "verification_and_repair",
+    }
+    # One full set of paired rows per treatment condition.
+    assert len(report["tasks"]) == len(report["treatment_conditions"])
+    for row in report["tasks"]:
+        assert row["reference_condition"] == "memory_baseline"
+        assert row["treatment_condition"] in report["treatment_conditions"]
+        # The core bug: these were always None/empty because the analysis
+        # looked for pair["baseline"]/pair["verified"] literally.
+        assert row["pair_complete"] is True
+        assert row["exclusion_reason"] is None
+    assert set(report["paired_statistics_by_treatment"]) == set(
+        report["treatment_conditions"]
+    )
+    for treatment, stats in report["paired_statistics_by_treatment"].items():
+        assert stats["eligible_pair_count"] == 1
 
 
 def test_unsafe_mutation_gate_blocks_corrupted_file_basis():
