@@ -806,7 +806,8 @@ empirical model result.
 ### 10.1 Task registry
 
 `research/benchmarks/seed_tasks.json` uses schema
-`agent-memory-benchmark/v0.1` and contains 10 tasks:
+`agent-memory-benchmark/v0.1` and contains 13 tasks (11 coding, all
+fixture-backed and labeled `evaluation_split: development`):
 
 | Task ID | Family | Main failure pressure |
 |---|---|---|
@@ -818,6 +819,9 @@ empirical model result.
 | `coding_source_confusion_001` | coding | Active source confused with a legacy twin |
 | `coding_schema_migration_001` | coding | Lossless migration under stale notes |
 | `coding_retry_policy_001` | coding | Coordinated retry, backoff, and worker state |
+| `coding_easy_flag_default_001` | coding (easy tier) | Mid-task default clarification on a single function |
+| `coding_easy_greeting_format_001` | coding (easy tier) | Stale-source confusion from obsolete notes |
+| `coding_easy_list_dedupe_001` | coding (easy tier) | Mid-task regression revert on ordered dedupe |
 | `repo_audit_done_claims_001` | repo audit | Done claims must be tied to implementation evidence |
 | `research_source_tracking_001` | research synthesis | Source attribution across a long synthesis |
 

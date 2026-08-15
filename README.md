@@ -26,8 +26,15 @@ The project is a working MVP/demo, not just a write-up.
   model matrices, and matrix reports.
 - Real-agent path: bounded LangGraph benchmark graph using local Ollama models, plus a
   coding-focused LangGraph tool loop with real file and test tools.
-- Benchmark suite: 10 long-horizon tasks, including 8 coding tasks and 8
-  fixture-backed repositories with independent hidden validators.
+- Benchmark suite: 13 long-horizon tasks, including 11 coding tasks backed by 11
+  fixture repositories with independent hidden validators, fixture-authored
+  `completion_policy` ground-truth metadata, and an explicit
+  `evaluation_split: development` label (they are the set the verifier was
+  iterated against, not held-out evaluation data).
+- Intervention conditions: `memory_baseline`, `observe_only`, `verification_only`,
+  `repair_only`, and `verification_and_repair`, with identical prompts across
+  conditions, raw-versus-enforced verifier decisions, and predeclared pairwise
+  comparisons (never pooled multi-arm inference).
 - Controlled experiments: 8 model-visible memory conditions, canonical evaluator state,
   repeatable condition/seed pairing, and non-intervening task-state probes.
 - Current Mistral path: `devstral-small-2:24b-ctx8k` is installed and has completed
@@ -38,10 +45,12 @@ The project is a working MVP/demo, not just a write-up.
 
 Latest verified test state:
 
-- Research suite: 185 passed, 1 skipped.
-- Full backend suite: database-backed integration tests require PostgreSQL/TimescaleDB
-  outside the managed sandbox; the sandbox blocks localhost DB sockets.
+- Backend suite (research included): 443 passed, 30 deselected. Database-backed
+  integration tests and local-model-runtime tests are deselected by default via
+  pytest markers (`-m integration` / `-m real_runtime` opts back in).
 - Frontend: 26 passed; production build succeeds.
+- CI: GitHub Actions runs both suites on every push and pull request
+  (`.github/workflows/tests.yml`).
 
 ## Historical Five-Model Result
 
@@ -80,8 +89,12 @@ Gemma 4 12B MLX is installed and runnable, but it is not counted in the clean fi
 comparison yet because its current LangGraph run returned empty final content after using
 the generation budget in `thinking`.
 
-That comparison remains valid historical evidence, but it predates the current
-fixture-backed coding suite, controlled memory conditions, and task-state probes.
+That comparison is **deprecated as empirical evidence** — see the deprecation
+header in the report itself. Its prompts named the study and injected the scoring
+rubric into the model context (a demand-characteristic confound), and it predates
+the metrics fix that stopped unparsed model responses from scoring as perfectly
+healthy memory (2 of its 15 rows were unparsed and inflated the averages). It is
+retained for provenance only and is not cited in any current empirical claim.
 
 ## How We Make It a Full Tool-Using Agent
 

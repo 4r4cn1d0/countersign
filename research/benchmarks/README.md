@@ -27,11 +27,20 @@ Every benchmark task includes:
 - Targeted failure modes such as semantic drift, temporal disordering, source confusion, and
   false completion.
 
-The current seed file contains 10 manually auditable tasks: 8 coding tasks, one
-repository-audit task, and one research-synthesis task. All eight coding tasks are
+The current seed file contains 13 manually auditable tasks: 11 coding tasks, one
+repository-audit task, and one research-synthesis task. All eleven coding tasks are
 checked-in fixture repositories with 20 planned model actions, multiple source and test
 files, a staged false lead and rollback, a mid-run requirement update, stale test
 evidence, delayed final validation, hidden validation, and a stable repository hash.
+Every fixture also carries `evaluation_split: development` — these tasks were iterated
+against while building the verifier, prompts, and repair logic, so they are a
+development set, not held-out evaluation data — plus a `completion_policy` block
+(relevant paths, authoritative versus legacy sources, requirement-update
+`affected_paths`) that supplies fixture-authored ground truth to the independent
+post-hoc support oracle without going through the verifier's own claim classifier.
+Because all fixtures share the same broad ingredients, they are less independent than
+"11 tasks" might imply; held-out matched-pair tasks are tracked in
+`research/ROADMAP_HELD_OUT_EVALUATION.md`.
 
 The coding suite covers parser repair, multi-file normalization, post-test invoice edits,
 checklist-versus-code auditing, namespace cache invalidation, active-versus-legacy source

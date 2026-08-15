@@ -37,10 +37,18 @@ file reads/writes, test execution, independent hidden evaluation, controlled mod
 memory treatments, and non-intervening task-state probes. Browser, source-fetch, and
 data-analysis task environments remain future work.
 
-The June 11 implementation checkpoint contains 10 tasks, including 8 coding tasks and 4
+The June 11 implementation checkpoint contained 10 tasks, including 8 coding tasks and 4
 fixture-backed repositories. Eight memory conditions are available as a first-class matrix
 axis. A real `devstral-small-2:24b` run completed 8 valid actions with evaluator success,
 and a live 768-token shadow probe produced parseable state JSON with `0.9333` accuracy.
+
+The suite has since grown to 13 tasks — 11 coding tasks, all backed by checked-in fixture
+repositories with hidden validators and fixture-authored `completion_policy` ground-truth
+metadata, labeled `evaluation_split: development`. Five intervention conditions
+(`memory_baseline`, `observe_only`, `verification_only`, `repair_only`,
+`verification_and_repair`) run with identical prompts, raw-versus-enforced verifier
+decisions, and predeclared pairwise comparisons. Held-out evaluation tasks remain future
+work — see `research/ROADMAP_HELD_OUT_EVALUATION.md`.
 
 ## Real-Runtime Model Matrix
 
