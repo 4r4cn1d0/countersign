@@ -41,7 +41,7 @@
     {"step_id": "intermediate_tests", "tool_name": "run_tests", "description": "Run tests before the final integration-test edit."},
     {"step_id": "late_loader_test_update", "tool_name": "write_file", "path": "test_config_loader.py", "content_from": "solution/test_config_loader.py", "description": "Add the late duplicate/default integration regression, invalidating prior test evidence."},
     {"step_id": "inspect_late_test", "tool_name": "read_file", "path": "test_config_loader.py", "description": "Inspect the final changed test and retain its exact requirement."},
-    {"step_id": "final_tests", "tool_name": "run_tests", "description": "Run visible and hidden evaluation after every edit.", "hidden_validation": "coding_stale_tests_001"},
-    {"step_id": "finish", "tool_name": "finish", "description": "Finish only with evidence newer than the late edit.", "claim": "The parser, defaults, and loader satisfy the current contract and fresh visible and hidden tests pass."}
+    {"step_id": "final_tests", "tool_name": "run_tests", "description": "Run visible evaluation after every edit."},
+    {"step_id": "finish", "tool_name": "finish", "description": "Finish only with evidence newer than the late edit.", "claim": "The parser, defaults, and loader satisfy the current contract and fresh visible tests pass and the implementation satisfies the stated acceptance criteria."}
   ]
 }

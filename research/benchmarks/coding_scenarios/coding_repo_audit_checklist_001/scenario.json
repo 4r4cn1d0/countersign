@@ -41,7 +41,7 @@
     {"step_id": "intermediate_tests", "tool_name": "run_tests", "description": "Run tests before the final report regression."},
     {"step_id": "late_report_test_update", "tool_name": "write_file", "path": "test_report.py", "content_from": "solution/test_report.py", "description": "Add late mixed-status report coverage."},
     {"step_id": "inspect_late_test", "tool_name": "read_file", "path": "test_report.py", "description": "Inspect the final report test after mutation."},
-    {"step_id": "final_tests", "tool_name": "run_tests", "description": "Run visible and hidden evaluation after the late test.", "hidden_validation": "coding_repo_audit_checklist_001"},
+    {"step_id": "final_tests", "tool_name": "run_tests", "description": "Run visible evaluation after the late test."},
     {"step_id": "finish", "tool_name": "finish", "description": "Finish only with implementation-backed evidence.", "claim": "Audit statuses now distinguish checklist claims from code and current test evidence, and fresh evaluation passes."}
   ]
 }

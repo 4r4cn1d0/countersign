@@ -41,7 +41,7 @@
     {"step_id": "update_worker_tests", "tool_name": "write_file", "path": "test_worker.py", "content_from": "solution/test_worker.py", "description": "Add backoff, terminal error, and reset regressions."},
     {"step_id": "intermediate_tests", "tool_name": "run_tests", "description": "Run tests before the final policy/scheduler regression edit."},
     {"step_id": "late_policy_test_update", "tool_name": "write_file", "path": "test_policy.py", "content_from": "solution/test_policy.py", "description": "Add late boundary, unknown-error, and scheduler coverage."},
-    {"step_id": "final_tests", "tool_name": "run_tests", "description": "Run visible and hidden evaluation after all retry edits.", "hidden_validation": "coding_retry_policy_001"},
+    {"step_id": "final_tests", "tool_name": "run_tests", "description": "Run visible evaluation after all retry edits."},
     {"step_id": "finish", "tool_name": "finish", "description": "Finish only with current retry evidence.", "claim": "Typed retry policy, capped backoff, scheduler behavior, and worker state reset are implemented and fresh tests pass."}
   ]
 }

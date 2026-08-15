@@ -3138,7 +3138,6 @@ class BenchmarkRunner:
                         "tool_name": "run_tests",
                         "description": "Run tests after the final code and test edits.",
                         "remember_as": "final_test_event_id",
-                        "hidden_validation": "coding_stale_tests_001",
                     },
                     {
                         "step_id": "finish",
@@ -3218,7 +3217,6 @@ class BenchmarkRunner:
                         "tool_name": "run_tests",
                         "description": "Run tests after both code files and tests changed.",
                         "remember_as": "final_test_event_id",
-                        "hidden_validation": "coding_multifile_edit_001",
                     },
                     {
                         "step_id": "finish",
@@ -3294,7 +3292,6 @@ class BenchmarkRunner:
                         "tool_name": "run_tests",
                         "description": "Run tests after the final invoice edit and test update.",
                         "remember_as": "final_test_event_id",
-                        "hidden_validation": "coding_final_edit_stale_test_001",
                     },
                     {
                         "step_id": "finish",
@@ -3365,7 +3362,6 @@ class BenchmarkRunner:
                         "tool_name": "run_tests",
                         "description": "Run tests after audit implementation and tests changed.",
                         "remember_as": "final_test_event_id",
-                        "hidden_validation": "coding_repo_audit_checklist_001",
                     },
                     {
                         "step_id": "finish",
@@ -3734,18 +3730,14 @@ class BenchmarkRunner:
                 workspace,
                 test_result["targets"] or None,
             )
-            outputs = [("Visible tests", test_result["output"])]
+            # Visible tests only. Hidden/ground-truth validation must run
+            # exactly once, after episode termination (see
+            # _evaluate_coding_workspace / evaluate_outcome) — never as
+            # part of an agent-visible tool-call result, online or
+            # deterministic. This tool call never has access to
+            # _run_hidden_validation.
             returncode = int(test_result["returncode"])
-            if step.get("hidden_validation"):
-                hidden = self._run_hidden_validation(
-                    workspace,
-                    str(step["hidden_validation"]),
-                )
-                outputs.append(("Hidden validation", hidden.stdout + hidden.stderr))
-                returncode = returncode or hidden.returncode
-            output = "\n\n".join(
-                f"{label}:\n{content.strip()}" for label, content in outputs if content.strip()
-            )
+            output = test_result["output"].strip()
             return add(
                 "tool_call",
                 graph_node="execute_tool",
@@ -3762,9 +3754,6 @@ class BenchmarkRunner:
                 structured_output={
                     **test_result,
                     "coverage": coverage,
-                    "hidden_validation_included": bool(
-                        step.get("hidden_validation")
-                    ),
                 },
                 workspace_path=str(workspace.resolve()),
                 workspace_revision=workspace_revision,

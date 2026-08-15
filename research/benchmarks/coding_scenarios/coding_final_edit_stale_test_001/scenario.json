@@ -41,7 +41,7 @@
     {"step_id": "intermediate_tests", "tool_name": "run_tests", "description": "Run tests before the final ledger regression edit."},
     {"step_id": "late_ledger_test_update", "tool_name": "write_file", "path": "test_ledger.py", "content_from": "solution/test_ledger.py", "description": "Add the late multi-invoice rounding regression."},
     {"step_id": "inspect_late_test", "tool_name": "read_file", "path": "test_ledger.py", "description": "Inspect the final test change that stales prior evidence."},
-    {"step_id": "final_tests", "tool_name": "run_tests", "description": "Run visible and hidden evaluation after all edits.", "hidden_validation": "coding_final_edit_stale_test_001"},
+    {"step_id": "final_tests", "tool_name": "run_tests", "description": "Run visible evaluation after all edits."},
     {"step_id": "finish", "tool_name": "finish", "description": "Finish only with evidence newer than the ledger test.", "claim": "Invoice arithmetic, display, and ledger behavior satisfy the current contract and fresh tests pass."}
   ]
 }

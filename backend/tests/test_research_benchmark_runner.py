@@ -2521,6 +2521,69 @@ def test_evaluator_rejects_zero_discovered_tests_even_when_hidden_behavior_passe
     assert result["status"] == "failure"
 
 
+def test_hidden_validation_runs_exactly_once_after_termination(tmp_path: Path):
+    """Hidden validation must never run as part of an agent-visible tool call.
+
+    Spies on _run_hidden_validation across a complete deterministic
+    coding_stale_tests_001 episode. Only evaluate_outcome (post-
+    termination) may call it — never _execute_coding_tool's run_tests
+    handling, online or deterministic. Guards against reintroducing the
+    now-removed (and, on inspection, already-unreachable)
+    step.get("hidden_validation") branch.
+    """
+    pytest.importorskip("langgraph")
+    calls: list[tuple[str, str]] = []
+    original = BenchmarkRunner._run_hidden_validation
+
+    def spy(self, workspace, task_id):
+        calls.append((str(workspace), task_id))
+        return original(self, workspace, task_id)
+
+    with patch.object(BenchmarkRunner, "_run_hidden_validation", spy):
+        run = BenchmarkRunner().run_task_id(
+            "coding_stale_tests_001",
+            BenchmarkRunConfig(
+                framework="langgraph_tools",
+                trace_mode="model_driven",
+                intervention="verification_only",
+                action_budget=20,
+                workspace_root=str(tmp_path),
+            ),
+        )
+
+    assert len(calls) == 1
+    events = run["trace_events"]
+    termination_sequence = next(
+        (
+            event["sequence_number"]
+            for event in events
+            if event.get("event_type") in {"agent_termination", "decision_point"}
+            and event.get("termination_reason")
+        ),
+        None,
+    )
+    evaluation_event = next(
+        event
+        for event in events
+        if event.get("event_type") == "evaluation_result"
+    )
+    if termination_sequence is not None:
+        assert evaluation_event["sequence_number"] > termination_sequence
+    assert not [
+        event
+        for event in events
+        if event.get("structured_output", {}).get("hidden_validation_included")
+    ]
+    assert not [
+        event
+        for event in events
+        if event.get("event_type") == "tool_call"
+        and event.get("tool_name")
+        in {"run_tests", "run_full_tests", "run_targeted_tests"}
+        and "hidden" in json.dumps(event.get("structured_output", {})).lower()
+    ]
+
+
 def test_labeling_marks_configured_high_risk_claims():
     events = [
         {

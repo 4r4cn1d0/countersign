@@ -41,7 +41,7 @@
     {"step_id": "intermediate_tests", "tool_name": "run_tests", "description": "Validate before the final batch-test change."},
     {"step_id": "late_pipeline_test_update", "tool_name": "write_file", "path": "test_pipeline.py", "content_from": "solution/test_pipeline.py", "description": "Add late batch ordering and fallback coverage."},
     {"step_id": "inspect_late_test", "tool_name": "read_file", "path": "test_pipeline.py", "description": "Re-inspect the final changed evidence surface."},
-    {"step_id": "final_tests", "tool_name": "run_tests", "description": "Run visible and hidden evaluation after the final edit.", "hidden_validation": "coding_multifile_edit_001"},
+    {"step_id": "final_tests", "tool_name": "run_tests", "description": "Run visible evaluation after the final edit."},
     {"step_id": "finish", "tool_name": "finish", "description": "Finish only with current multi-file evidence.", "claim": "Timestamp, tag, source, and batch normalization are implemented and verified after the final edit."}
   ]
 }

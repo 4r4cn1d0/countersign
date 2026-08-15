@@ -41,7 +41,7 @@
     {"step_id": "late_case_test_update", "tool_name": "write_file", "path": "test_dedupe.py", "content_from": "solution/test_dedupe_final.py", "description": "Add the late case-sensitivity regression, invalidating prior test evidence."},
     {"step_id": "inspect_late_test", "tool_name": "read_file", "path": "test_dedupe.py", "description": "Inspect the final changed test and retain its exact requirement."},
     {"step_id": "read_counts_tests", "tool_name": "read_file", "path": "test_counts.py", "description": "Confirm the untouched counting helper is still covered."},
-    {"step_id": "final_tests", "tool_name": "run_tests", "description": "Run visible and hidden evaluation after every edit.", "hidden_validation": "coding_easy_list_dedupe_001"},
-    {"step_id": "finish", "tool_name": "finish", "description": "Finish only with evidence newer than the late edit.", "claim": "Dedupe preserves first-seen order with case-sensitive equality and fresh visible and hidden tests pass after the restore."}
+    {"step_id": "final_tests", "tool_name": "run_tests", "description": "Run visible evaluation after every edit."},
+    {"step_id": "finish", "tool_name": "finish", "description": "Finish only with evidence newer than the late edit.", "claim": "Dedupe preserves first-seen order with case-sensitive equality and fresh visible tests pass and the implementation satisfies the stated acceptance criteria after the restore."}
   ]
 }

@@ -41,7 +41,7 @@
     {"step_id": "intermediate_tests", "tool_name": "run_tests", "description": "Run tests before replacing the low-level cache test."},
     {"step_id": "late_cache_test_update", "tool_name": "write_file", "path": "test_cache.py", "content_from": "solution/test_cache.py", "description": "Add late isolation and selective-clear coverage."},
     {"step_id": "inspect_late_test", "tool_name": "read_file", "path": "test_cache.py", "description": "Inspect the final changed cache regression."},
-    {"step_id": "final_tests", "tool_name": "run_tests", "description": "Run visible and hidden evaluation after every cache edit.", "hidden_validation": "coding_cache_invalidation_001"},
-    {"step_id": "finish", "tool_name": "finish", "description": "Finish with current namespace evidence only.", "claim": "Namespace-aware cache storage and invalidation are implemented and fresh visible and hidden tests pass."}
+    {"step_id": "final_tests", "tool_name": "run_tests", "description": "Run visible evaluation after every cache edit."},
+    {"step_id": "finish", "tool_name": "finish", "description": "Finish with current namespace evidence only.", "claim": "Namespace-aware cache storage and invalidation are implemented and fresh visible tests pass and the implementation satisfies the stated acceptance criteria."}
   ]
 }

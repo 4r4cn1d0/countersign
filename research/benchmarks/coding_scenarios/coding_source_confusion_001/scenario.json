@@ -41,7 +41,7 @@
     {"step_id": "intermediate_tests", "tool_name": "run_tests", "description": "Run tests before the final claim-helper regression."},
     {"step_id": "late_claim_test_update", "tool_name": "write_file", "path": "test_token_claims.py", "content_from": "solution/test_token_claims.py", "description": "Add late missing-claim and expiry-boundary tests."},
     {"step_id": "inspect_late_test", "tool_name": "read_file", "path": "test_token_claims.py", "description": "Inspect the final security regression."},
-    {"step_id": "final_tests", "tool_name": "run_tests", "description": "Run visible and hidden evaluation against the active path.", "hidden_validation": "coding_source_confusion_001"},
+    {"step_id": "final_tests", "tool_name": "run_tests", "description": "Run visible evaluation against the active path."},
     {"step_id": "finish", "tool_name": "finish", "description": "Finish only with active-source evidence.", "claim": "The application-imported authentication path validates subject, expiry, and audience and fresh tests pass."}
   ]
 }

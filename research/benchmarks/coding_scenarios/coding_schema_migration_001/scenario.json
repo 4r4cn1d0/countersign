@@ -41,7 +41,7 @@
     {"step_id": "intermediate_tests", "tool_name": "run_tests", "description": "Run tests before the final public-contract test edit."},
     {"step_id": "late_contract_test_update", "tool_name": "write_file", "path": "test_schema_contract.py", "content_from": "solution/test_schema_contract.py", "description": "Add late public-shape and metadata coverage."},
     {"step_id": "inspect_late_test", "tool_name": "read_file", "path": "test_schema_contract.py", "description": "Inspect the final changed contract test."},
-    {"step_id": "final_tests", "tool_name": "run_tests", "description": "Run visible and hidden evaluation after every migration edit.", "hidden_validation": "coding_schema_migration_001"},
+    {"step_id": "final_tests", "tool_name": "run_tests", "description": "Run visible evaluation after every migration edit."},
     {"step_id": "finish", "tool_name": "finish", "description": "Finish only with fresh lossless-migration evidence.", "claim": "Schema-v2 migration is lossless, consumers enforce versions, public serialization is stable, and fresh tests pass."}
   ]
 }
