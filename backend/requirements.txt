@@ -1,8 +1,10 @@
 # Agent Observability Platform
-fastapi==0.109.0
+fastapi==0.109.1
 uvicorn[standard]==0.27.0
 pydantic==2.5.0
 pydantic-settings==2.1.0
+# CVE-2026-28684 fix (1.2.2) requires Python >=3.10; this project floors at
+# 3.9 and .env files are developer-controlled, so exposure is negligible.
 python-dotenv==1.0.0
 
 # Database & queue
@@ -11,13 +13,13 @@ redis==5.0.1
 
 # Auth & storage
 bcrypt==4.1.2
-python-jose[cryptography]==3.3.0
+python-jose[cryptography]==3.4.0
 boto3==1.34.34
 
 # Config & serialization
 PyYAML==6.0.1
 zstandard==0.22.0
-protobuf==4.25.3
+protobuf==5.29.6
 
 # Testing
 pytest==7.4.4
