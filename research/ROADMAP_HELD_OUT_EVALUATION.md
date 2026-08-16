@@ -224,6 +224,31 @@ carry, decided before any final-run data exists:
    models clear the capability floor, probe `qwen2.5-coder:32b` (viable
    on a rented A100/H100); if still only one passes, run one model and
    report it as a stated limitation. No post-hoc model shopping.
+7. **Third worker model, upward ladder (predeclared 2026-08-16, before
+   any real held-out run)**: if a third model FAMILY clears the same
+   calibration floor at the same settings, it joins the matrix
+   (3 models scales the schedule to 570 runs). Decided by calibration
+   only — never by results. The candidate order is fixed now:
+   `deepseek-r1:8b`, then `gemma4:12b-mlx`-class, per the existing
+   matrix inventory.
+8. **LLM-judge supervisor comparison (predeclared 2026-08-16, before
+   any real held-out run)**: a model-based supervisor scored POST HOC
+   over the frozen run artifacts (`research/runner/judge_supervisor.py`,
+   CLI `judge-score`), before results are read. Judge:
+   `qwen2.5:32b-instruct` (digest recorded; fallback
+   `qwen2.5:14b-instruct` if VRAM-constrained), temperature 0.0, one
+   pass per proposal, fixed prompt template `judge_supervisor_v0`.
+   Information diet identical to the online rule-based supervisor:
+   pre-proposal trace events only — no completion_policy, no hidden
+   validation, no post-proposal events (pinned by tests). Endpoints,
+   all SECONDARY/descriptive (the primary endpoint is unchanged):
+   (a) judge-vs-oracle confusion per family; (b) judge false-block
+   count on negative-control proposals (same formula as the rule
+   supervisor's); (c) the blind-spot probe — judge block rate on
+   provenance-family finishes the rules allow; (d) judge-rule raw
+   agreement. Known limitation, stated now: the judge shares the qwen
+   family with one worker model; family-matched self-leniency is
+   possible and will be reported per worker.
 
 ### Matrix
 

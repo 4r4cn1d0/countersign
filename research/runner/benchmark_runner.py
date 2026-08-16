@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Optional, TypedDict
@@ -1381,10 +1382,14 @@ class BenchmarkRunner:
                 update["finish_proposal_count"] = finish_count
 
                 if config.verifier_enabled:
+                    gate_started = time.perf_counter()
                     proposal = self._evaluate_finish_proposal(
                         task,
                         events,
                         proposal_event_id,
+                    )
+                    gate_latency_ms = round(
+                        (time.perf_counter() - gate_started) * 1000.0, 3
                     )
                     # Raw verifier judgment, captured before any
                     # non-blocking-mode override — this is what precision/
@@ -1490,6 +1495,9 @@ class BenchmarkRunner:
                             else "non_blocking"
                         ),
                         claim_event_id=proposal_event_id,
+                        # Supervisor overhead per gate decision — the
+                        # "deterministic and cheap" claim needs a number.
+                        gate_latency_ms=gate_latency_ms,
                         claim_types=proposal["claim_types"],
                         reasons=proposal["reasons"],
                         recommended_actions=proposal["recommended_actions"],

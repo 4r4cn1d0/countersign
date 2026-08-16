@@ -100,6 +100,29 @@ def main(argv: list[str] | None = None) -> int:
     score_parser.add_argument("--format", choices=["table", "json", "markdown"], default="table")
     score_parser.set_defaults(handler=_score_command)
 
+    judge_parser = subparsers.add_parser(
+        "judge-score",
+        help=(
+            "Post-hoc LLM-judge supervisor comparison over a matrix "
+            "manifest's stored runs (predeclared secondary endpoints; "
+            "same information diet as the online supervisor)"
+        ),
+    )
+    judge_parser.add_argument("--manifest", required=True)
+    judge_parser.add_argument(
+        "--judge-model",
+        default="qwen2.5:32b-instruct",
+        help="Ollama tag of the judge model (predeclared default).",
+    )
+    judge_parser.add_argument("--judge-family", default="qwen")
+    judge_parser.add_argument("--runtime", default="ollama")
+    judge_parser.add_argument("--runtime-endpoint")
+    judge_parser.add_argument("--out")
+    judge_parser.add_argument(
+        "--format", choices=["table", "json", "markdown"], default="json"
+    )
+    judge_parser.set_defaults(handler=_judge_score_command)
+
     verify_parser = subparsers.add_parser("verify", help="Apply verification policy")
     verify_parser.add_argument("--run", required=True)
     verify_parser.add_argument("--out")
@@ -456,6 +479,25 @@ def _score_command(args: argparse.Namespace) -> None:
     if args.out:
         _write_report(report, Path(args.out), args.format)
     _emit(report, args.format, title="Memory Health Report")
+
+
+def _judge_score_command(args: argparse.Namespace) -> None:
+    from .runner.judge_supervisor import judge_manifest
+
+    report = judge_manifest(
+        Path(args.manifest),
+        judge_model_name=args.judge_model,
+        judge_model_family=args.judge_family,
+        runtime=args.runtime,
+        runtime_endpoint=args.runtime_endpoint,
+        out_path=Path(args.out) if args.out else None,
+    )
+    # Records can be large; emit the aggregate, keep records in --out.
+    _emit(
+        {key: value for key, value in report.items() if key != "records"},
+        args.format,
+        title="Judge Supervisor",
+    )
 
 
 def _verify_command(args: argparse.Namespace) -> None:

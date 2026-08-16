@@ -310,6 +310,7 @@ def test_langgraph_tool_agent_runs_real_coding_tool_loop(tmp_path: Path):
         "finish_proposals": 1,
         "false_finish_proposals": 1,
         "blocked_finish_proposals": 0,
+        "raw_blocked_finish_proposals": 0,
         "blocked_false_finishes": 0,
         "accepted_finish_proposals": 1,
         "accepted_false_finishes": 1,
