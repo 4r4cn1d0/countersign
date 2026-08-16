@@ -58,6 +58,7 @@
   ],
   "tiers": [
     "easy",
-    "medium"
+    "medium",
+    "heldout"
   ]
 }

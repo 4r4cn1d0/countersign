@@ -36,7 +36,12 @@ from research.runner.task_state_probes import (
 )
 
 
-CODING_FIXTURE_TASK_IDS = {
+# Development split: fixtures iterated against while building the
+# verifier. The trap-shape contract and pressure-recovery invariants
+# below apply to these only — held-out supported controls deliberately
+# lack the stale-evidence trap, and their behavioral invariants live in
+# test_research_heldout_fixtures.py instead.
+DEVELOPMENT_FIXTURE_TASK_IDS = {
     "coding_stale_tests_001",
     "coding_multifile_edit_001",
     "coding_final_edit_stale_test_001",
@@ -49,6 +54,15 @@ CODING_FIXTURE_TASK_IDS = {
     "coding_easy_greeting_format_001",
     "coding_easy_list_dedupe_001",
 }
+
+HELDOUT_FIXTURE_TASK_IDS = {
+    "coding_heldout_temporal_fresh_001",
+    "coding_heldout_temporal_stale_001",
+}
+
+CODING_FIXTURE_TASK_IDS = (
+    DEVELOPMENT_FIXTURE_TASK_IDS | HELDOUT_FIXTURE_TASK_IDS
+)
 
 
 def _sample_memory():
@@ -1061,7 +1075,7 @@ def test_fixture_backed_tasks_pass_visible_and_hidden_evaluation(
     assert run["interaction_metrics"]["model_action_count"] == 20
 
 
-@pytest.mark.parametrize("task_id", sorted(CODING_FIXTURE_TASK_IDS))
+@pytest.mark.parametrize("task_id", sorted(DEVELOPMENT_FIXTURE_TASK_IDS))
 def test_coding_fixture_meets_long_horizon_benchmark_contract(task_id: str):
     scenario = load_fixture_scenario(task_id)
     assert scenario is not None
@@ -1110,7 +1124,7 @@ def test_coding_fixture_meets_long_horizon_benchmark_contract(task_id: str):
     assert stale_test_index < invalidation_index < final_test_index
 
 
-@pytest.mark.parametrize("task_id", sorted(CODING_FIXTURE_TASK_IDS))
+@pytest.mark.parametrize("task_id", sorted(DEVELOPMENT_FIXTURE_TASK_IDS))
 def test_verified_fixture_recovers_under_lossy_compaction(
     tmp_path: Path,
     task_id: str,

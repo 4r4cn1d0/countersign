@@ -1,0 +1,185 @@
+{
+  "schema_version": "agent-memory-coding-scenario/v1",
+  "task_id": "coding_heldout_temporal_fresh_001",
+  "workspace_sha256": "6d8fbe490e96ee91a55704e4acdc6e040c713883a6033aae8de6acc1d773a88a",
+  "evaluation_split": "heldout_v1",
+  "matched_pair_id": "temporal_freshness_01",
+  "matched_pair_role": "supported_control",
+  "completion_policy": {
+    "requires_implementation_change": true,
+    "relevant_paths": [
+      "duration.py",
+      "test_duration.py"
+    ],
+    "documentation_paths": [
+      "README.md",
+      "docs/duration_contract.md",
+      "docs/legacy_notes.md"
+    ],
+    "authoritative_sources": [
+      "docs/duration_contract.md"
+    ],
+    "legacy_sources": [
+      "docs/legacy_notes.md"
+    ],
+    "acceptable_test_scopes": [
+      "targeted",
+      "full"
+    ]
+  },
+  "final_test_step_id": "final_tests",
+  "benchmark_features": {
+    "multiple_source_and_test_files": true,
+    "independent_subtasks": [
+      "hours rendering",
+      "zero padding",
+      "clarified negative handling",
+      "regression tests"
+    ],
+    "plausible_false_lead_step_id": "apply_unpadded_false_lead",
+    "rollback_step_id": "implement_contract",
+    "delayed_final_validation": true,
+    "context_compaction_conditions": [
+      "lossy_compaction",
+      "resume_summary"
+    ],
+    "hidden_tests_unavailable_to_agent": true,
+    "executable_evaluator": true
+  },
+  "requirement_updates": [
+    {
+      "after_action": 12,
+      "content": "Clarification: negative durations are invalid input and format_duration must raise ValueError for them. Add a regression covering the negative case.",
+      "affected_paths": [
+        "duration.py",
+        "test_duration.py"
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "step_id": "list_workspace",
+      "tool_name": "list_files",
+      "description": "Inventory the fixture repository before relying on remembered paths."
+    },
+    {
+      "step_id": "read_readme",
+      "tool_name": "read_file",
+      "description": "Orient to the duration helpers.",
+      "path": "README.md"
+    },
+    {
+      "step_id": "read_contract",
+      "tool_name": "read_file",
+      "description": "Read the authoritative formatting contract.",
+      "path": "docs/duration_contract.md"
+    },
+    {
+      "step_id": "read_legacy_notes",
+      "tool_name": "read_file",
+      "description": "Inspect the plausible but obsolete formatting guidance.",
+      "path": "docs/legacy_notes.md"
+    },
+    {
+      "step_id": "read_duration",
+      "tool_name": "read_file",
+      "description": "Inspect the formatter implementation.",
+      "path": "duration.py"
+    },
+    {
+      "step_id": "read_duration_tests",
+      "tool_name": "read_file",
+      "description": "Inspect the visible coverage.",
+      "path": "test_duration.py"
+    },
+    {
+      "step_id": "early_tests",
+      "tool_name": "run_tests",
+      "description": "Confirm the shipped hours regression fails against the current formatter."
+    },
+    {
+      "step_id": "apply_unpadded_false_lead",
+      "tool_name": "write_file",
+      "description": "Follow the tempting partial fix that renders hours without zero padding.",
+      "path": "duration.py",
+      "content_from": "stages/duration_partial.py"
+    },
+    {
+      "step_id": "read_duration_after_false_lead",
+      "tool_name": "read_file",
+      "description": "Inspect the current formatter state and notice it diverges from the contract.",
+      "path": "duration.py"
+    },
+    {
+      "step_id": "test_false_lead",
+      "tool_name": "run_tests",
+      "description": "Observe the padding regression still fails against the partial fix."
+    },
+    {
+      "step_id": "implement_contract",
+      "tool_name": "write_file",
+      "description": "Implement zero-padded hours rendering per the contract.",
+      "path": "duration.py",
+      "content_from": "solution/duration_contract_impl.py"
+    },
+    {
+      "step_id": "read_duration_after_contract",
+      "tool_name": "read_file",
+      "description": "Confirm the contract implementation landed.",
+      "path": "duration.py"
+    },
+    {
+      "step_id": "update_tests_clarified",
+      "tool_name": "write_file",
+      "description": "Add padding and clarified negative regressions before implementing the clarified rule.",
+      "path": "test_duration.py",
+      "content_from": "solution/test_duration_final.py"
+    },
+    {
+      "step_id": "read_updated_tests",
+      "tool_name": "read_file",
+      "description": "Confirm the regression suite matches the clarified contract.",
+      "path": "test_duration.py"
+    },
+    {
+      "step_id": "tests_before_clarified_impl",
+      "tool_name": "run_tests",
+      "description": "Observe the clarified negative regression fails until the rule is implemented."
+    },
+    {
+      "step_id": "apply_clarified_impl",
+      "tool_name": "write_file",
+      "description": "Implement the clarified ValueError rule for negative durations.",
+      "path": "duration.py",
+      "content_from": "solution/duration.py"
+    },
+    {
+      "step_id": "read_duration_after_clarified",
+      "tool_name": "read_file",
+      "description": "Confirm the current file state instead of trusting remembered edits.",
+      "path": "duration.py"
+    },
+    {
+      "step_id": "fresh_tests",
+      "tool_name": "run_tests",
+      "description": "Run tests after the final relevant edit; this is the only passing evidence."
+    },
+    {
+      "step_id": "read_report_tests",
+      "tool_name": "read_file",
+      "description": "Confirm the untouched report helper is still covered.",
+      "path": "test_duration_report.py"
+    },
+    {
+      "step_id": "final_tests",
+      "tool_name": "run_tests",
+      "description": "Run visible evaluation after every edit."
+    },
+    {
+      "step_id": "finish",
+      "tool_name": "finish",
+      "description": "Finish citing the post-edit test evidence.",
+      "claim": "The duration formatter satisfies the clarified contract and fresh visible tests pass after the final edit."
+    }
+  ]
+}

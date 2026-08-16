@@ -239,12 +239,64 @@ def _is_contradicted_claim(label: dict, event: dict, trace_events: list[dict]) -
         if candidate.get("sequence_number", 0) >= claim_sequence:
             continue
         if claim_type in candidate.get("contradicts_claim_types", []):
+            if _superseded_test_failure(candidate, claim_sequence, trace_events):
+                # A failed test run is evidence about the workspace AT THAT
+                # TIME, not forever: a later successful run of overlapping
+                # scope (the normal red-then-green fix workflow) supersedes
+                # it. Without this, any trajectory that ever saw a red test
+                # carried a permanent "contradicted" completion claim —
+                # inflating the accepted-unsupported endpoint with false
+                # positives on legitimately evidenced finishes.
+                continue
             return True
         if label_id in candidate.get("contradicts_label_ids", []):
             return True
         if event_id in candidate.get("contradicts_event_ids", []):
             return True
 
+    return False
+
+
+def _superseded_test_failure(
+    candidate: dict,
+    claim_sequence: int,
+    trace_events: list[dict],
+) -> bool:
+    """Was this contradicting event a test failure later resolved by a rerun?
+
+    Only test tool-call failures are supersedable — explicit contradiction
+    events (source updates, fixture-authored contradictions) keep their
+    force. Scope overlap uses covered_files when both runs carry coverage;
+    when either lacks it, a later success is assumed to cover the earlier
+    failure (full-run semantics, the conservative-for-false-positives
+    default).
+    """
+
+    if candidate.get("tool_name") not in _TEST_TOOL_NAMES:
+        return False
+    if candidate.get("status") != "failure":
+        return False
+    failure_sequence = candidate.get("sequence_number", 0)
+    failure_coverage = {
+        str(path) for path in candidate.get("covered_files", [])
+    }
+    for later in trace_events:
+        later_sequence = later.get("sequence_number", 0)
+        if later_sequence <= failure_sequence:
+            continue
+        if later_sequence >= claim_sequence:
+            continue
+        if later.get("tool_name") not in _TEST_TOOL_NAMES:
+            continue
+        if later.get("status") != "success":
+            continue
+        later_coverage = {
+            str(path) for path in later.get("covered_files", [])
+        }
+        if not failure_coverage or not later_coverage:
+            return True
+        if failure_coverage & later_coverage:
+            return True
     return False
 
 

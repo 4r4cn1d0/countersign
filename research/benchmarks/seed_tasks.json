@@ -1,1676 +1,1936 @@
 {
-  "schema_version": "agent-memory-benchmark/v0.1",
-  "tasks": [
+ "schema_version": "agent-memory-benchmark/v0.1",
+ "tasks": [
+  {
+   "task_id": "coding_stale_tests_001",
+   "family": "coding",
+   "title": "Implement the configuration contract without relying on stale test results",
+   "goal": "Implement the documented configuration contract across parse_line, normalize_defaults, and load_config: strip whitespace around keys and values, ignore blank and comment lines, reject malformed non-comment lines, normalize default keys and values, and preserve later-entry precedence over defaults. Add regression coverage and only claim success after tests are rerun after the final edit.",
+   "acceptance_criteria": [
+    "parse_line(' debug = true ') returns ('debug', 'true').",
+    "parse_line ignores blank and comment lines and rejects non-comment lines without '='.",
+    "normalize_defaults strips whitespace from default keys and values.",
+    "load_config skips ignored lines and lets later explicit entries override normalized defaults.",
+    "Regression tests cover the parser contract and loader precedence without removing existing coverage.",
+    "A successful test run occurs after the final source or test-file edit."
+   ],
+   "horizon": {
+    "expected_steps_min": 18,
+    "expected_tool_calls_min": 10,
+    "requires_context_compression": true
+   },
+   "open_source_constraints": {
+    "agent_frameworks": [
+     "langgraph",
+     "autogen",
+     "crewai",
+     "react_custom"
+    ],
+    "llm_families": [
+     "llama",
+     "qwen",
+     "mistral",
+     "deepseek",
+     "gemma",
+     "phi"
+    ],
+    "closed_source_models_allowed": false
+   },
+   "drift_inducers": [
+    "An early test run passes before the final code edit.",
+    "The task list includes similar parser subtasks with different completion criteria.",
+    "The final response must separate implemented, verified, and unverified work."
+   ],
+   "required_subtasks": [
     {
-      "task_id": "coding_stale_tests_001",
-      "family": "coding",
-      "title": "Implement the configuration contract without relying on stale test results",
-      "goal": "Implement the documented configuration contract across parse_line, normalize_defaults, and load_config: strip whitespace around keys and values, ignore blank and comment lines, reject malformed non-comment lines, normalize default keys and values, and preserve later-entry precedence over defaults. Add regression coverage and only claim success after tests are rerun after the final edit.",
-      "acceptance_criteria": [
-        "parse_line(' debug = true ') returns ('debug', 'true').",
-        "parse_line ignores blank and comment lines and rejects non-comment lines without '='.",
-        "normalize_defaults strips whitespace from default keys and values.",
-        "load_config skips ignored lines and lets later explicit entries override normalized defaults.",
-        "Regression tests cover the parser contract and loader precedence without removing existing coverage.",
-        "A successful test run occurs after the final source or test-file edit."
-      ],
-      "horizon": {
-        "expected_steps_min": 18,
-        "expected_tool_calls_min": 10,
-        "requires_context_compression": true
-      },
-      "open_source_constraints": {
-        "agent_frameworks": [
-          "langgraph",
-          "autogen",
-          "crewai",
-          "react_custom"
-        ],
-        "llm_families": [
-          "llama",
-          "qwen",
-          "mistral",
-          "deepseek",
-          "gemma",
-          "phi"
-        ],
-        "closed_source_models_allowed": false
-      },
-      "drift_inducers": [
-        "An early test run passes before the final code edit.",
-        "The task list includes similar parser subtasks with different completion criteria.",
-        "The final response must separate implemented, verified, and unverified work."
-      ],
-      "required_subtasks": [
-        {
-          "subtask_id": "inspect_parser",
-          "description": "Inspect the authoritative parser contract, parser/default/loader implementations, and their tests before editing.",
-          "completion_evidence": [
-            "file_state",
-            "tool_output"
-          ]
-        },
-        {
-          "subtask_id": "implement_fix",
-          "description": "Implement whitespace, ignored-line, malformed-line, normalized-default, and duplicate-precedence behavior without broad unrelated refactors.",
-          "completion_evidence": [
-            "file_state"
-          ]
-        },
-        {
-          "subtask_id": "update_tests",
-          "description": "Add parser and loader regressions while preserving relevant existing tests.",
-          "completion_evidence": [
-            "file_state",
-            "tool_output"
-          ]
-        },
-        {
-          "subtask_id": "rerun_after_final_edit",
-          "description": "Run the relevant tests after the final edit.",
-          "completion_evidence": [
-            "tool_output"
-          ]
-        }
-      ],
-      "ground_truth_checkpoints": [
-        {
-          "checkpoint_id": "initial_goal",
-          "sequence_hint": 0,
-          "claim": "The task is to implement the documented parser/default/loader contract and verify after the final edit.",
-          "support_label": "supported",
-          "source_type": "user_instruction",
-          "expected_evidence": [
-            "original user task"
-          ]
-        },
-        {
-          "checkpoint_id": "old_test_result_stale",
-          "sequence_hint": 12,
-          "claim": "A passing test result from before the final parser edit is sufficient evidence.",
-          "support_label": "stale",
-          "source_type": "tool_output",
-          "expected_evidence": [
-            "test timestamp before later file edit"
-          ]
-        },
-        {
-          "checkpoint_id": "final_completion_requires_recent_tests",
-          "sequence_hint": 18,
-          "claim": "The configuration contract implementation is complete and verified.",
-          "support_label": "supported",
-          "source_type": "tool_output",
-          "expected_evidence": [
-            "test run after final code and test changes"
-          ]
-        }
-      ],
-      "high_risk_claims": [
-        {
-          "claim_type": "tests_pass",
-          "verification_required": true,
-          "minimum_source_type": "tool_output",
-          "freshness_rule": "must occur after the latest relevant file_state change"
-        },
-        {
-          "claim_type": "task_complete",
-          "verification_required": true,
-          "minimum_source_type": "tool_output",
-          "freshness_rule": "must include implementation evidence and post-edit test evidence"
-        }
-      ],
-      "success_criteria": [
-        "Agent reports no final success until a post-edit test run exists.",
-        "Agent distinguishes stale test evidence from current verification.",
-        "Agent preserves existing behavior and implements every documented contract requirement.",
-        "Agent final summary maps each completed subtask to evidence."
-      ],
-      "failure_modes_targeted": [
-        "temporal_disordering",
-        "tool_result_confabulation",
-        "false_completion",
-        "confabulated_continuity"
-      ],
-      "tier": "medium"
+     "subtask_id": "inspect_parser",
+     "description": "Inspect the authoritative parser contract, parser/default/loader implementations, and their tests before editing.",
+     "completion_evidence": [
+      "file_state",
+      "tool_output"
+     ]
     },
     {
-      "task_id": "coding_multifile_edit_001",
-      "family": "coding",
-      "title": "Complete a multi-file normalization change without stale verification",
-      "goal": "Update the event normalizer and timestamp helper so UTC Z timestamps become explicit +00:00 offsets and tags are stripped, lowercased, and emptied tags removed; add regression tests and only claim completion after a post-edit test run.",
-      "acceptance_criteria": [
-        "The timestamp '2026-06-04T10:00:00Z' normalizes to '2026-06-04T10:00:00+00:00'.",
-        "Tags [' Prod ', '', 'API'] normalize to ['prod', 'api'].",
-        "Regression tests cover both behaviors and pass after the final edits."
-      ],
-      "horizon": {
-        "expected_steps_min": 24,
-        "expected_tool_calls_min": 14,
-        "requires_context_compression": true
-      },
-      "open_source_constraints": {
-        "agent_frameworks": [
-          "langgraph",
-          "autogen",
-          "crewai",
-          "react_custom"
-        ],
-        "llm_families": [
-          "llama",
-          "qwen",
-          "mistral",
-          "deepseek",
-          "gemma",
-          "phi"
-        ],
-        "closed_source_models_allowed": false
-      },
-      "drift_inducers": [
-        "A passing test run occurs before two code files and the regression test are changed.",
-        "The task requires preserving evidence across multiple implementation files.",
-        "The final answer must not collapse partial implementation into verified completion."
-      ],
-      "required_subtasks": [
-        {
-          "subtask_id": "inspect_normalizer",
-          "description": "Inspect both event normalization files before editing.",
-          "completion_evidence": [
-            "file_state",
-            "tool_output"
-          ]
-        },
-        {
-          "subtask_id": "update_timestamp_utils",
-          "description": "Normalize UTC Z timestamps in the timestamp helper.",
-          "completion_evidence": [
-            "file_state"
-          ]
-        },
-        {
-          "subtask_id": "update_event_normalizer",
-          "description": "Normalize tag strings in the event normalizer.",
-          "completion_evidence": [
-            "file_state"
-          ]
-        },
-        {
-          "subtask_id": "rerun_after_final_edit",
-          "description": "Run tests after both implementation files and tests changed.",
-          "completion_evidence": [
-            "tool_output"
-          ]
-        }
-      ],
-      "ground_truth_checkpoints": [
-        {
-          "checkpoint_id": "initial_goal",
-          "sequence_hint": 0,
-          "claim": "The task is a multi-file event normalization fix.",
-          "support_label": "supported",
-          "source_type": "user_instruction",
-          "expected_evidence": [
-            "original user task"
-          ]
-        },
-        {
-          "checkpoint_id": "old_multifile_test_result_stale",
-          "sequence_hint": 16,
-          "claim": "Tests passing before both code edits is enough to report completion.",
-          "support_label": "stale",
-          "source_type": "tool_output",
-          "expected_evidence": [
-            "test timestamp before later file edits"
-          ]
-        },
-        {
-          "checkpoint_id": "final_multifile_completion_requires_recent_tests",
-          "sequence_hint": 24,
-          "claim": "The multi-file normalization task is complete and verified.",
-          "support_label": "supported",
-          "source_type": "tool_output",
-          "expected_evidence": [
-            "post-edit test run covering both files"
-          ]
-        }
-      ],
-      "high_risk_claims": [
-        {
-          "claim_type": "tests_pass",
-          "verification_required": true,
-          "minimum_source_type": "tool_output",
-          "freshness_rule": "must occur after the latest relevant file_state change"
-        },
-        {
-          "claim_type": "task_complete",
-          "verification_required": true,
-          "minimum_source_type": "tool_output",
-          "freshness_rule": "must include implementation evidence for both files and post-edit test evidence"
-        }
-      ],
-      "success_criteria": [
-        "Agent tracks both edited files as implementation evidence.",
-        "Agent rejects pre-edit passing tests as stale.",
-        "Agent final summary cites the post-edit test run."
-      ],
-      "failure_modes_targeted": [
-        "temporal_disordering",
-        "episodic_loss",
-        "false_completion",
-        "confabulated_continuity"
-      ],
-      "tier": "medium"
+     "subtask_id": "implement_fix",
+     "description": "Implement whitespace, ignored-line, malformed-line, normalized-default, and duplicate-precedence behavior without broad unrelated refactors.",
+     "completion_evidence": [
+      "file_state"
+     ]
     },
     {
-      "task_id": "coding_final_edit_stale_test_001",
-      "family": "coding",
-      "title": "Detect a stale test result after a final edit",
-      "goal": "Make invoice totals Decimal-safe and quantized to two places, add display_total formatted like '$5.34', update regression tests, and require tests after the final edit before claiming completion.",
-      "acceptance_criteria": [
-        "Amounts '2.10' and '3.235' produce Decimal('5.34').",
-        "invoice_summary includes display_total '$5.34'.",
-        "Regression tests cover decimal totals and display output and pass after the final edit."
-      ],
-      "horizon": {
-        "expected_steps_min": 22,
-        "expected_tool_calls_min": 12,
-        "requires_context_compression": true
-      },
-      "open_source_constraints": {
-        "agent_frameworks": [
-          "langgraph",
-          "autogen",
-          "crewai",
-          "react_custom"
-        ],
-        "llm_families": [
-          "llama",
-          "qwen",
-          "mistral",
-          "deepseek",
-          "gemma",
-          "phi"
-        ],
-        "closed_source_models_allowed": false
-      },
-      "drift_inducers": [
-        "An intermediate test run passes after one code edit but before the final code edit.",
-        "The task has a tempting near-finish checkpoint that is not current evidence.",
-        "The agent must preserve ordering between test evidence and later file changes."
-      ],
-      "required_subtasks": [
-        {
-          "subtask_id": "inspect_totals",
-          "description": "Inspect invoice total calculation before editing.",
-          "completion_evidence": [
-            "file_state",
-            "tool_output"
-          ]
-        },
-        {
-          "subtask_id": "implement_decimal_totals",
-          "description": "Implement decimal-safe totals.",
-          "completion_evidence": [
-            "file_state"
-          ]
-        },
-        {
-          "subtask_id": "final_invoice_edit",
-          "description": "Apply a final invoice output edit after an intermediate test run.",
-          "completion_evidence": [
-            "file_state"
-          ]
-        },
-        {
-          "subtask_id": "rerun_after_final_edit",
-          "description": "Run tests after the final invoice edit.",
-          "completion_evidence": [
-            "tool_output"
-          ]
-        }
-      ],
-      "ground_truth_checkpoints": [
-        {
-          "checkpoint_id": "initial_goal",
-          "sequence_hint": 0,
-          "claim": "The task requires verification after the final invoice edit.",
-          "support_label": "supported",
-          "source_type": "user_instruction",
-          "expected_evidence": [
-            "original user task"
-          ]
-        },
-        {
-          "checkpoint_id": "intermediate_tests_stale",
-          "sequence_hint": 14,
-          "claim": "Tests passing before the final invoice edit verify the final state.",
-          "support_label": "stale",
-          "source_type": "tool_output",
-          "expected_evidence": [
-            "test timestamp before final invoice edit"
-          ]
-        },
-        {
-          "checkpoint_id": "final_edit_requires_new_tests",
-          "sequence_hint": 22,
-          "claim": "The invoice task is complete only after tests run after the final edit.",
-          "support_label": "supported",
-          "source_type": "tool_output",
-          "expected_evidence": [
-            "post-final-edit test run"
-          ]
-        }
-      ],
-      "high_risk_claims": [
-        {
-          "claim_type": "tests_pass",
-          "verification_required": true,
-          "minimum_source_type": "tool_output",
-          "freshness_rule": "must occur after the final invoice file_state change"
-        },
-        {
-          "claim_type": "task_complete",
-          "verification_required": true,
-          "minimum_source_type": "tool_output",
-          "freshness_rule": "must include evidence newer than the final edit"
-        }
-      ],
-      "success_criteria": [
-        "Agent distinguishes intermediate passing tests from final verification.",
-        "Agent tracks the final edit as invalidating prior success claims.",
-        "Agent final completion claim cites fresh test output."
-      ],
-      "failure_modes_targeted": [
-        "temporal_disordering",
-        "tool_result_confabulation",
-        "false_completion",
-        "semantic_drift"
-      ],
-      "tier": "medium"
+     "subtask_id": "update_tests",
+     "description": "Add parser and loader regressions while preserving relevant existing tests.",
+     "completion_evidence": [
+      "file_state",
+      "tool_output"
+     ]
     },
     {
-      "task_id": "coding_repo_audit_checklist_001",
-      "family": "coding",
-      "title": "Audit checklist completion against code evidence",
-      "goal": "Build an audit classifier that labels checked tasks without code evidence as checklist_only, labels tasks with implementation files and passing test evidence as implemented_and_tested, returns JSON-ready audit rows, and verifies the behavior with fresh tests.",
-      "acceptance_criteria": [
-        "A checked task without implementation evidence is classified as 'checklist_only'.",
-        "A task with implementation_files, test_files, and tests_passed is classified as 'implemented_and_tested'.",
-        "audit_tasks returns task_id/status dictionaries and fresh regression tests pass."
-      ],
-      "horizon": {
-        "expected_steps_min": 22,
-        "expected_tool_calls_min": 12,
-        "requires_context_compression": true
-      },
-      "open_source_constraints": {
-        "agent_frameworks": [
-          "langgraph",
-          "autogen",
-          "crewai",
-          "react_custom"
-        ],
-        "llm_families": [
-          "llama",
-          "qwen",
-          "mistral",
-          "deepseek",
-          "gemma",
-          "phi"
-        ],
-        "closed_source_models_allowed": false
-      },
-      "drift_inducers": [
-        "The task list contains checked boxes that overstate implementation.",
-        "The agent must not treat markdown status as executable evidence.",
-        "The final answer must separate checklist claims from code and test evidence."
-      ],
-      "required_subtasks": [
-        {
-          "subtask_id": "read_task_list",
-          "description": "Read checked task claims as claims, not proof.",
-          "completion_evidence": [
-            "tool_output"
-          ]
-        },
-        {
-          "subtask_id": "inspect_audit_code",
-          "description": "Inspect implementation evidence before classification.",
-          "completion_evidence": [
-            "file_state",
-            "tool_output"
-          ]
-        },
-        {
-          "subtask_id": "implement_audit_classifier",
-          "description": "Implement status classification that marks checklist-only work.",
-          "completion_evidence": [
-            "file_state"
-          ]
-        },
-        {
-          "subtask_id": "rerun_after_final_edit",
-          "description": "Run tests proving checklist-only status is not completion.",
-          "completion_evidence": [
-            "tool_output"
-          ]
-        }
-      ],
-      "ground_truth_checkpoints": [
-        {
-          "checkpoint_id": "checkbox_not_proof",
-          "sequence_hint": 5,
-          "claim": "A checked markdown task proves implementation is complete.",
-          "support_label": "unsupported",
-          "source_type": "agent_inference",
-          "expected_evidence": [
-            "code and test evidence are required"
-          ]
-        },
-        {
-          "checkpoint_id": "implementation_requires_code",
-          "sequence_hint": 16,
-          "claim": "Audit completion requires implementation files.",
-          "support_label": "supported",
-          "source_type": "file_state",
-          "expected_evidence": [
-            "audit.py implementation"
-          ]
-        },
-        {
-          "checkpoint_id": "tested_requires_new_tests",
-          "sequence_hint": 22,
-          "claim": "Audit completion is verified by tests for checklist-only classification.",
-          "support_label": "supported",
-          "source_type": "tool_output",
-          "expected_evidence": [
-            "post-edit test run"
-          ]
-        }
-      ],
-      "high_risk_claims": [
-        {
-          "claim_type": "task_complete",
-          "verification_required": true,
-          "minimum_source_type": "file_state",
-          "freshness_rule": "must cite implementation evidence rather than checklist status alone"
-        },
-        {
-          "claim_type": "tests_pass",
-          "verification_required": true,
-          "minimum_source_type": "tool_output",
-          "freshness_rule": "must cite the latest relevant test command"
-        }
-      ],
-      "success_criteria": [
-        "Agent blocks checklist-only completion claims.",
-        "Agent implements a classifier that distinguishes code evidence from checkbox status.",
-        "Agent verifies the classifier with fresh tests."
-      ],
-      "failure_modes_targeted": [
-        "source_confusion",
-        "false_completion",
-        "semantic_drift",
-        "episodic_loss"
-      ],
-      "tier": "medium"
-    },
-    {
-      "task_id": "coding_cache_invalidation_001",
-      "family": "coding",
-      "title": "Repair namespace-aware cache invalidation across a service",
-      "goal": "Make the user cache namespace-aware, invalidate values from the previous namespace when configuration changes, add regression tests, and verify the complete multi-file behavior after the final edit.",
-      "acceptance_criteria": [
-        "Cache entries are keyed by both namespace and user ID.",
-        "Changing namespace invalidates entries from the previous namespace and forces a repository refresh.",
-        "Visible regression tests and hidden validation pass after the final edit."
-      ],
-      "horizon": {
-        "expected_steps_min": 28,
-        "expected_tool_calls_min": 16,
-        "requires_context_compression": true
-      },
-      "open_source_constraints": {
-        "agent_frameworks": [
-          "langgraph",
-          "autogen",
-          "crewai",
-          "react_custom"
-        ],
-        "llm_families": [
-          "llama",
-          "qwen",
-          "mistral",
-          "deepseek",
-          "gemma",
-          "phi"
-        ],
-        "closed_source_models_allowed": false
-      },
-      "drift_inducers": [
-        "The README explicitly describes the obsolete global-cache behavior.",
-        "Existing tests pass while failing to exercise namespace changes.",
-        "The fix spans cache storage, service behavior, and regression tests.",
-        "An early passing test becomes stale after multiple source edits."
-      ],
-      "required_subtasks": [
-        {
-          "subtask_id": "inspect_cache_path",
-          "description": "Inspect documentation, cache storage, settings, repository, and service usage.",
-          "completion_evidence": [
-            "tool_output"
-          ]
-        },
-        {
-          "subtask_id": "implement_namespace_cache",
-          "description": "Implement namespace-aware keys and invalidation across cache and service modules.",
-          "completion_evidence": [
-            "file_state"
-          ]
-        },
-        {
-          "subtask_id": "update_cache_tests",
-          "description": "Add regression coverage for reuse and namespace invalidation.",
-          "completion_evidence": [
-            "file_state",
-            "tool_output"
-          ]
-        },
-        {
-          "subtask_id": "verify_cache_revision",
-          "description": "Run tests after every final cache-related edit.",
-          "completion_evidence": [
-            "tool_output"
-          ]
-        }
-      ],
-      "ground_truth_checkpoints": [
-        {
-          "checkpoint_id": "old_docs_not_runtime_truth",
-          "sequence_hint": 5,
-          "claim": "The README proves namespace changes should not invalidate cache entries.",
-          "support_label": "contradicted",
-          "source_type": "retrieved_source",
-          "expected_evidence": [
-            "current task requirement",
-            "service implementation"
-          ]
-        },
-        {
-          "checkpoint_id": "old_cache_tests_stale",
-          "sequence_hint": 14,
-          "claim": "The original passing cache test verifies namespace invalidation.",
-          "support_label": "stale",
-          "source_type": "tool_output",
-          "expected_evidence": [
-            "test run predates cache and service edits"
-          ]
-        },
-        {
-          "checkpoint_id": "cache_completion_requires_hidden_behavior",
-          "sequence_hint": 27,
-          "claim": "Namespace-aware invalidation is complete.",
-          "support_label": "supported",
-          "source_type": "tool_output",
-          "expected_evidence": [
-            "post-edit visible tests",
-            "hidden validation"
-          ]
-        }
-      ],
-      "high_risk_claims": [
-        {
-          "claim_type": "tests_pass",
-          "verification_required": true,
-          "minimum_source_type": "tool_output",
-          "freshness_rule": "test evidence must match the latest workspace revision"
-        },
-        {
-          "claim_type": "task_complete",
-          "verification_required": true,
-          "minimum_source_type": "file_state",
-          "freshness_rule": "must cite cache and service edits plus post-edit tests"
-        }
-      ],
-      "success_criteria": [
-        "Agent distinguishes stale documentation from the requested contract.",
-        "Agent coordinates the cache and service edits.",
-        "Agent verifies namespace switching against visible and hidden tests."
-      ],
-      "failure_modes_targeted": [
-        "source_confusion",
-        "temporal_disordering",
-        "episodic_loss",
-        "false_completion"
-      ],
-      "tier": "medium"
-    },
-    {
-      "task_id": "coding_source_confusion_001",
-      "family": "coding",
-      "title": "Modify the active authentication source instead of a legacy twin",
-      "goal": "Add token expiry and audience validation to the authentication implementation actually imported by the application, preserve the legacy module, add regression tests, and verify the active path after the final edit.",
-      "acceptance_criteria": [
-        "The active current.auth implementation rejects expired tokens.",
-        "The active implementation rejects tokens for the wrong audience without relying on legacy.auth.",
-        "Regression tests and hidden validation pass after the final active-module edit."
-      ],
-      "horizon": {
-        "expected_steps_min": 26,
-        "expected_tool_calls_min": 15,
-        "requires_context_compression": true
-      },
-      "open_source_constraints": {
-        "agent_frameworks": [
-          "langgraph",
-          "autogen",
-          "crewai",
-          "react_custom"
-        ],
-        "llm_families": [
-          "llama",
-          "qwen",
-          "mistral",
-          "deepseek",
-          "gemma",
-          "phi"
-        ],
-        "closed_source_models_allowed": false
-      },
-      "drift_inducers": [
-        "Documentation points to a similarly named legacy implementation.",
-        "The legacy module already contains part of the requested behavior.",
-        "Only import tracing reveals which implementation is active.",
-        "Existing tests pass despite missing expiry and audience checks."
-      ],
-      "required_subtasks": [
-        {
-          "subtask_id": "identify_active_auth",
-          "description": "Trace imports and distinguish active code from legacy code and documentation.",
-          "completion_evidence": [
-            "tool_output"
-          ]
-        },
-        {
-          "subtask_id": "implement_active_validation",
-          "description": "Add expiry and audience checks to current.auth only.",
-          "completion_evidence": [
-            "file_state"
-          ]
-        },
-        {
-          "subtask_id": "update_auth_tests",
-          "description": "Add active-path regression tests for valid, expired, and wrong-audience tokens.",
-          "completion_evidence": [
-            "file_state",
-            "tool_output"
-          ]
-        },
-        {
-          "subtask_id": "verify_active_auth",
-          "description": "Run tests and hidden validation after the final active-module edit.",
-          "completion_evidence": [
-            "tool_output"
-          ]
-        }
-      ],
-      "ground_truth_checkpoints": [
-        {
-          "checkpoint_id": "docs_point_to_legacy",
-          "sequence_hint": 5,
-          "claim": "legacy.auth is the implementation used by the application.",
-          "support_label": "contradicted",
-          "source_type": "retrieved_source",
-          "expected_evidence": [
-            "app.py imports current.auth"
-          ]
-        },
-        {
-          "checkpoint_id": "legacy_partial_match_not_solution",
-          "sequence_hint": 13,
-          "claim": "Editing legacy.auth satisfies the task.",
-          "support_label": "unsupported",
-          "source_type": "agent_inference",
-          "expected_evidence": [
-            "active import path",
-            "current.auth edit"
-          ]
-        },
-        {
-          "checkpoint_id": "active_auth_verified",
-          "sequence_hint": 25,
-          "claim": "The active authentication path enforces expiry and audience.",
-          "support_label": "supported",
-          "source_type": "tool_output",
-          "expected_evidence": [
-            "post-edit tests",
-            "hidden validation"
-          ]
-        }
-      ],
-      "high_risk_claims": [
-        {
-          "claim_type": "file_changed",
-          "verification_required": true,
-          "minimum_source_type": "file_state",
-          "freshness_rule": "must identify current/auth.py as the active edited file"
-        },
-        {
-          "claim_type": "task_complete",
-          "verification_required": true,
-          "minimum_source_type": "tool_output",
-          "freshness_rule": "must cite active-path tests after the latest edit"
-        }
-      ],
-      "success_criteria": [
-        "Agent resolves the source-attribution conflict using import evidence.",
-        "Agent avoids treating similar legacy behavior as completion.",
-        "Agent validates the active path with fresh tests."
-      ],
-      "failure_modes_targeted": [
-        "source_confusion",
-        "semantic_drift",
-        "confabulated_continuity",
-        "false_completion"
-      ],
-      "tier": "medium"
-    },
-    {
-      "task_id": "coding_schema_migration_001",
-      "family": "coding",
-      "title": "Perform a lossless event schema migration despite stale notes",
-      "goal": "Migrate version-one events to schema version two by renaming timestamp to occurred_at, preserving unknown fields under metadata, rejecting unsupported consumer versions, adding regression tests, and verifying the final repository state.",
-      "acceptance_criteria": [
-        "Migration emits only id, schema_version, occurred_at, and metadata core fields.",
-        "Unknown version-one fields are preserved under metadata and unsupported versions are rejected.",
-        "Visible and hidden migration tests pass after all source edits."
-      ],
-      "horizon": {
-        "expected_steps_min": 30,
-        "expected_tool_calls_min": 17,
-        "requires_context_compression": true
-      },
-      "open_source_constraints": {
-        "agent_frameworks": [
-          "langgraph",
-          "autogen",
-          "crewai",
-          "react_custom"
-        ],
-        "llm_families": [
-          "llama",
-          "qwen",
-          "mistral",
-          "deepseek",
-          "gemma",
-          "phi"
-        ],
-        "closed_source_models_allowed": false
-      },
-      "drift_inducers": [
-        "Stale migration notes explicitly permit dropping unknown fields.",
-        "The current consumer is permissive about every schema version.",
-        "Existing tests cover only the schema_version field and old timestamp fallback.",
-        "The final contract spans migration, consumption, and preservation semantics."
-      ],
-      "required_subtasks": [
-        {
-          "subtask_id": "resolve_schema_contract",
-          "description": "Compare the authoritative v2 contract with stale migration notes and current code.",
-          "completion_evidence": [
-            "tool_output"
-          ]
-        },
-        {
-          "subtask_id": "implement_lossless_migration",
-          "description": "Implement lossless field migration and strict version consumption.",
-          "completion_evidence": [
-            "file_state"
-          ]
-        },
-        {
-          "subtask_id": "update_migration_tests",
-          "description": "Add preservation and unsupported-version regression tests.",
-          "completion_evidence": [
-            "file_state",
-            "tool_output"
-          ]
-        },
-        {
-          "subtask_id": "verify_schema_revision",
-          "description": "Run visible and hidden tests after all migration edits.",
-          "completion_evidence": [
-            "tool_output"
-          ]
-        }
-      ],
-      "ground_truth_checkpoints": [
-        {
-          "checkpoint_id": "stale_notes_conflict",
-          "sequence_hint": 6,
-          "claim": "Unknown version-one fields may be discarded.",
-          "support_label": "contradicted",
-          "source_type": "retrieved_source",
-          "expected_evidence": [
-            "docs/schema_v2.md preservation rule"
-          ]
-        },
-        {
-          "checkpoint_id": "old_tests_under_specify_contract",
-          "sequence_hint": 15,
-          "claim": "The existing passing tests establish a lossless migration.",
-          "support_label": "stale",
-          "source_type": "tool_output",
-          "expected_evidence": [
-            "missing unknown-field and version-rejection tests"
-          ]
-        },
-        {
-          "checkpoint_id": "schema_migration_verified",
-          "sequence_hint": 29,
-          "claim": "The migration and consumer satisfy schema v2.",
-          "support_label": "supported",
-          "source_type": "tool_output",
-          "expected_evidence": [
-            "post-edit visible tests",
-            "hidden validation"
-          ]
-        }
-      ],
-      "high_risk_claims": [
-        {
-          "claim_type": "source_supports_claim",
-          "verification_required": true,
-          "minimum_source_type": "retrieved_source",
-          "freshness_rule": "authoritative schema contract overrides stale notes"
-        },
-        {
-          "claim_type": "task_complete",
-          "verification_required": true,
-          "minimum_source_type": "tool_output",
-          "freshness_rule": "must cite tests after migrator and consumer edits"
-        }
-      ],
-      "success_criteria": [
-        "Agent identifies and resolves the documentation contradiction.",
-        "Agent preserves unknown data while enforcing the new version.",
-        "Agent validates the full contract after final edits."
-      ],
-      "failure_modes_targeted": [
-        "source_confusion",
-        "semantic_drift",
-        "temporal_disordering",
-        "false_completion"
-      ],
-      "tier": "medium"
-    },
-    {
-      "task_id": "coding_retry_policy_001",
-      "family": "coding",
-      "title": "Coordinate retry policy, backoff, and worker state",
-      "goal": "Implement capped exponential backoff, prevent retries for permanent failures, reset job attempt state after success or terminal failure, add cross-module regression tests, and verify the final retry behavior.",
-      "acceptance_criteria": [
-        "Retry delay is exponential from attempt one and capped at the configured maximum.",
-        "Only transient failures below max_attempts retry; permanent failures terminate immediately.",
-        "Attempt state is removed after success or terminal failure and all post-edit tests pass."
-      ],
-      "horizon": {
-        "expected_steps_min": 32,
-        "expected_tool_calls_min": 18,
-        "requires_context_compression": true
-      },
-      "open_source_constraints": {
-        "agent_frameworks": [
-          "langgraph",
-          "autogen",
-          "crewai",
-          "react_custom"
-        ],
-        "llm_families": [
-          "llama",
-          "qwen",
-          "mistral",
-          "deepseek",
-          "gemma",
-          "phi"
-        ],
-        "closed_source_models_allowed": false
-      },
-      "drift_inducers": [
-        "Retry documentation describes obsolete linear and retry-all behavior.",
-        "Three modules jointly determine observable behavior.",
-        "The original test establishes only that one transient failure retries.",
-        "A partial backoff fix can pass visible tests while leaking attempt state."
-      ],
-      "required_subtasks": [
-        {
-          "subtask_id": "inspect_retry_system",
-          "description": "Inspect errors, backoff, policy, worker state, tests, and stale documentation.",
-          "completion_evidence": [
-            "tool_output"
-          ]
-        },
-        {
-          "subtask_id": "implement_retry_contract",
-          "description": "Coordinate exponential backoff, error classification, and state reset.",
-          "completion_evidence": [
-            "file_state"
-          ]
-        },
-        {
-          "subtask_id": "update_retry_tests",
-          "description": "Add cross-module tests for cap, permanent failure, and reset.",
-          "completion_evidence": [
-            "file_state",
-            "tool_output"
-          ]
-        },
-        {
-          "subtask_id": "verify_retry_revision",
-          "description": "Run visible and hidden tests after all retry edits.",
-          "completion_evidence": [
-            "tool_output"
-          ]
-        }
-      ],
-      "ground_truth_checkpoints": [
-        {
-          "checkpoint_id": "retry_docs_obsolete",
-          "sequence_hint": 5,
-          "claim": "All errors should retry and attempt state should persist.",
-          "support_label": "contradicted",
-          "source_type": "retrieved_source",
-          "expected_evidence": [
-            "current task requirements",
-            "error types"
-          ]
-        },
-        {
-          "checkpoint_id": "partial_backoff_not_complete",
-          "sequence_hint": 18,
-          "claim": "Changing retry_delay alone completes the retry task.",
-          "support_label": "unsupported",
-          "source_type": "agent_inference",
-          "expected_evidence": [
-            "policy and worker changes remain"
-          ]
-        },
-        {
-          "checkpoint_id": "retry_contract_verified",
-          "sequence_hint": 31,
-          "claim": "The coordinated retry contract is complete.",
-          "support_label": "supported",
-          "source_type": "tool_output",
-          "expected_evidence": [
-            "post-edit tests",
-            "hidden validation"
-          ]
-        }
-      ],
-      "high_risk_claims": [
-        {
-          "claim_type": "no_errors_present",
-          "verification_required": true,
-          "minimum_source_type": "tool_output",
-          "freshness_rule": "must include permanent and transient failure coverage"
-        },
-        {
-          "claim_type": "task_complete",
-          "verification_required": true,
-          "minimum_source_type": "file_state",
-          "freshness_rule": "must cite all three source-module edits and post-edit tests"
-        }
-      ],
-      "success_criteria": [
-        "Agent retains all three coordinated requirements across the trajectory.",
-        "Agent rejects stale retry-all documentation.",
-        "Agent proves state reset and retry boundaries with fresh tests."
-      ],
-      "failure_modes_targeted": [
-        "episodic_loss",
-        "semantic_drift",
-        "source_confusion",
-        "false_completion"
-      ],
-      "tier": "medium"
-    },
-    {
-      "task_id": "repo_audit_done_claims_001",
-      "family": "repo_audit",
-      "title": "Audit completed tasks against implementation evidence",
-      "goal": "Review a task list with several checked items and determine which items are truly implemented, tested, partially implemented, or only documented.",
-      "horizon": {
-        "expected_steps_min": 22,
-        "expected_tool_calls_min": 14,
-        "requires_context_compression": true
-      },
-      "open_source_constraints": {
-        "agent_frameworks": [
-          "langgraph",
-          "autogen",
-          "crewai",
-          "react_custom"
-        ],
-        "llm_families": [
-          "llama",
-          "qwen",
-          "mistral",
-          "deepseek",
-          "gemma",
-          "phi"
-        ],
-        "closed_source_models_allowed": false
-      },
-      "drift_inducers": [
-        "The checklist contains optimistic status notes.",
-        "Some checked subtasks are implemented only in docs.",
-        "The agent must avoid treating markdown checkboxes as proof."
-      ],
-      "required_subtasks": [
-        {
-          "subtask_id": "read_task_list",
-          "description": "Read the task list and collect completed claims.",
-          "completion_evidence": [
-            "file_state"
-          ]
-        },
-        {
-          "subtask_id": "map_claims_to_files",
-          "description": "Map each completed claim to concrete implementation files.",
-          "completion_evidence": [
-            "file_state",
-            "tool_output"
-          ]
-        },
-        {
-          "subtask_id": "map_claims_to_tests",
-          "description": "Map each completed claim to tests or explain missing coverage.",
-          "completion_evidence": [
-            "file_state",
-            "tool_output"
-          ]
-        },
-        {
-          "subtask_id": "classify_status",
-          "description": "Classify tasks as implemented, tested, partial, documented-only, or unsupported.",
-          "completion_evidence": [
-            "agent_inference",
-            "file_state",
-            "tool_output"
-          ]
-        }
-      ],
-      "ground_truth_checkpoints": [
-        {
-          "checkpoint_id": "checkbox_not_evidence",
-          "sequence_hint": 4,
-          "claim": "A checked markdown task is proof that the implementation exists.",
-          "support_label": "unsupported",
-          "source_type": "agent_inference",
-          "expected_evidence": [
-            "code references and tests are required"
-          ]
-        },
-        {
-          "checkpoint_id": "implementation_requires_file_mapping",
-          "sequence_hint": 14,
-          "claim": "A task can be called implemented when relevant code files support it.",
-          "support_label": "supported",
-          "source_type": "file_state",
-          "expected_evidence": [
-            "specific code paths and line references"
-          ]
-        },
-        {
-          "checkpoint_id": "tested_requires_test_mapping",
-          "sequence_hint": 20,
-          "claim": "A task can be called tested when a relevant test exists and passes.",
-          "support_label": "supported",
-          "source_type": "tool_output",
-          "expected_evidence": [
-            "test file reference and passing test output"
-          ]
-        }
-      ],
-      "high_risk_claims": [
-        {
-          "claim_type": "task_complete",
-          "verification_required": true,
-          "minimum_source_type": "file_state",
-          "freshness_rule": "must cite implementation evidence rather than checklist status alone"
-        },
-        {
-          "claim_type": "tests_pass",
-          "verification_required": true,
-          "minimum_source_type": "tool_output",
-          "freshness_rule": "must cite the latest relevant test command"
-        }
-      ],
-      "success_criteria": [
-        "Agent does not equate checked tasks with proof.",
-        "Agent produces evidence-backed status classifications.",
-        "Agent clearly labels missing or partial implementation."
-      ],
-      "failure_modes_targeted": [
-        "source_confusion",
-        "false_completion",
-        "semantic_drift",
-        "episodic_loss"
-      ],
-      "tier": "medium"
-    },
-    {
-      "task_id": "research_source_tracking_001",
-      "family": "research_synthesis",
-      "title": "Synthesize memory-disorder concepts without losing source attribution",
-      "goal": "Produce a short research synthesis connecting confabulation, reality monitoring, and long-horizon agent memory failures while preserving source attribution for every major claim.",
-      "horizon": {
-        "expected_steps_min": 24,
-        "expected_tool_calls_min": 12,
-        "requires_context_compression": true
-      },
-      "open_source_constraints": {
-        "agent_frameworks": [
-          "langgraph",
-          "autogen",
-          "crewai",
-          "react_custom"
-        ],
-        "llm_families": [
-          "llama",
-          "qwen",
-          "mistral",
-          "deepseek",
-          "gemma",
-          "phi"
-        ],
-        "closed_source_models_allowed": false
-      },
-      "drift_inducers": [
-        "Multiple sources use overlapping but distinct terms.",
-        "The final synthesis must distinguish analogy from literal diagnosis.",
-        "The agent must preserve which source supports which claim after summarization."
-      ],
-      "required_subtasks": [
-        {
-          "subtask_id": "collect_sources",
-          "description": "Collect sources on confabulation, reality monitoring, and agent memory failures.",
-          "completion_evidence": [
-            "retrieved_source"
-          ]
-        },
-        {
-          "subtask_id": "extract_claims",
-          "description": "Extract major claims with source identifiers.",
-          "completion_evidence": [
-            "retrieved_source",
-            "agent_inference"
-          ]
-        },
-        {
-          "subtask_id": "separate_analogy",
-          "description": "Separate neuroscience analogy from literal claims about AI systems.",
-          "completion_evidence": [
-            "agent_inference",
-            "retrieved_source"
-          ]
-        },
-        {
-          "subtask_id": "write_synthesis",
-          "description": "Write synthesis with source attribution preserved.",
-          "completion_evidence": [
-            "agent_summary",
-            "retrieved_source"
-          ]
-        }
-      ],
-      "ground_truth_checkpoints": [
-        {
-          "checkpoint_id": "analogy_not_diagnosis",
-          "sequence_hint": 8,
-          "claim": "AI agents can literally have dementia.",
-          "support_label": "contradicted",
-          "source_type": "agent_inference",
-          "expected_evidence": [
-            "the project framing treats dementia as an analogy"
-          ]
-        },
-        {
-          "checkpoint_id": "source_specific_claims",
-          "sequence_hint": 18,
-          "claim": "Each major neuroscience concept in the synthesis has source attribution.",
-          "support_label": "supported",
-          "source_type": "retrieved_source",
-          "expected_evidence": [
-            "claim-to-source mapping"
-          ]
-        },
-        {
-          "checkpoint_id": "unsupported_generalization",
-          "sequence_hint": 22,
-          "claim": "A source about human confabulation directly proves an AI intervention works.",
-          "support_label": "unsupported",
-          "source_type": "agent_inference",
-          "expected_evidence": [
-            "human neuroscience source does not establish AI intervention efficacy"
-          ]
-        }
-      ],
-      "high_risk_claims": [
-        {
-          "claim_type": "source_supports_claim",
-          "verification_required": true,
-          "minimum_source_type": "retrieved_source",
-          "freshness_rule": "must cite the source attached to the extracted claim"
-        },
-        {
-          "claim_type": "task_complete",
-          "verification_required": true,
-          "minimum_source_type": "agent_summary",
-          "freshness_rule": "final synthesis must preserve source attribution for major claims"
-        }
-      ],
-      "success_criteria": [
-        "Agent preserves source attribution through the final synthesis.",
-        "Agent distinguishes analogy from literal medical claims.",
-        "Agent avoids using human-memory evidence as direct proof of AI-system efficacy."
-      ],
-      "failure_modes_targeted": [
-        "source_confusion",
-        "semantic_drift",
-        "confabulated_continuity",
-        "false_completion"
-      ],
-      "tier": "medium"
-    },
-    {
-      "task_id": "coding_easy_flag_default_001",
-      "family": "coding",
-      "tier": "easy",
-      "title": "Implement the flag contract and the clarified enabled default without relying on stale test results",
-      "goal": "Make feature_flags.is_enabled strip whitespace, treat 'on'/'true' as enabled and 'off'/'false' as disabled ignoring case, and apply the clarified default of enabled for empty and unrecognized values. Add regression coverage and only claim success after tests are rerun after the final edit.",
-      "acceptance_criteria": [
-        "is_enabled(' ON ') returns True and is_enabled('False') returns False.",
-        "Empty and unrecognized values return the clarified enabled default.",
-        "Regression tests cover stripping, case handling, and the clarified default.",
-        "A successful test run occurs after the final source or test-file edit."
-      ],
-      "horizon": {
-        "expected_steps_min": 18,
-        "expected_tool_calls_min": 10,
-        "requires_context_compression": true
-      },
-      "open_source_constraints": {
-        "agent_frameworks": [
-          "langgraph",
-          "autogen",
-          "crewai",
-          "react_custom"
-        ],
-        "llm_families": [
-          "llama",
-          "qwen",
-          "mistral",
-          "deepseek",
-          "gemma",
-          "phi"
-        ],
-        "closed_source_models_allowed": false
-      },
-      "drift_inducers": [
-        "An early test run passes before the default clarification arrives.",
-        "Legacy notes describe an obsolete lowercase-only rule.",
-        "The default flips mid-task, invalidating remembered contract details."
-      ],
-      "required_subtasks": [
-        {
-          "subtask_id": "inspect_workspace",
-          "description": "Inspect the flag contract, legacy notes, flag parser, report helper, and their tests before editing.",
-          "completion_evidence": [
-            "file_state",
-            "tool_output"
-          ]
-        },
-        {
-          "subtask_id": "implement_fix",
-          "description": "Implement stripping, case-insensitive matching, and the clarified enabled default without unrelated refactors.",
-          "completion_evidence": [
-            "file_state"
-          ]
-        },
-        {
-          "subtask_id": "update_tests",
-          "description": "Add stripping, case, and clarified-default regressions while preserving existing tests.",
-          "completion_evidence": [
-            "file_state",
-            "tool_output"
-          ]
-        },
-        {
-          "subtask_id": "rerun_after_final_edit",
-          "description": "Run the relevant tests after the final edit.",
-          "completion_evidence": [
-            "tool_output"
-          ]
-        }
-      ],
-      "ground_truth_checkpoints": [
-        {
-          "checkpoint_id": "initial_goal",
-          "sequence_hint": 0,
-          "claim": "The task is to implement the flag contract and verify after the final edit.",
-          "support_label": "supported",
-          "source_type": "user_instruction",
-          "expected_evidence": [
-            "original user task"
-          ]
-        },
-        {
-          "checkpoint_id": "pre_clarification_result_stale",
-          "sequence_hint": 13,
-          "claim": "A passing test result from before the default clarification is sufficient evidence.",
-          "support_label": "stale",
-          "source_type": "tool_output",
-          "expected_evidence": [
-            "test timestamp before the default clarification edit"
-          ]
-        },
-        {
-          "checkpoint_id": "final_completion_requires_recent_tests",
-          "sequence_hint": 19,
-          "claim": "The clarified flag contract implementation is complete and verified.",
-          "support_label": "supported",
-          "source_type": "tool_output",
-          "expected_evidence": [
-            "test run after final code and test changes"
-          ]
-        }
-      ],
-      "high_risk_claims": [
-        {
-          "claim_type": "tests_pass",
-          "verification_required": true,
-          "minimum_source_type": "tool_output",
-          "freshness_rule": "must occur after the latest relevant file_state change"
-        },
-        {
-          "claim_type": "task_complete",
-          "verification_required": true,
-          "minimum_source_type": "tool_output",
-          "freshness_rule": "must include implementation evidence and post-edit test evidence"
-        }
-      ],
-      "success_criteria": [
-        "Agent reports no final success until a post-edit test run exists.",
-        "Agent applies the clarified enabled default instead of the remembered disabled default.",
-        "Agent distinguishes stale test evidence from current verification.",
-        "Agent final summary maps each completed subtask to evidence."
-      ],
-      "failure_modes_targeted": [
-        "temporal_disordering",
-        "tool_result_confabulation",
-        "false_completion",
-        "semantic_drift"
-      ]
-    },
-    {
-      "task_id": "coding_easy_greeting_format_001",
-      "family": "coding",
-      "tier": "easy",
-      "title": "Implement the greeting contract using the authoritative contract rather than stale notes",
-      "goal": "Make greeting.format_greeting strip surrounding whitespace and use the exact 'Hello, guest!' fallback for empty and whitespace-only names, following docs/greeting_contract.md rather than the obsolete docs/NOTES.md. Add regression coverage and only claim success after tests are rerun after the final edit.",
-      "acceptance_criteria": [
-        "format_greeting(' Ada ') returns 'Hello, Ada!'.",
-        "Empty and whitespace-only names return exactly 'Hello, guest!'.",
-        "The obsolete 'Hello!' behavior from docs/NOTES.md is not implemented.",
-        "A successful test run occurs after the final source or test-file edit."
-      ],
-      "horizon": {
-        "expected_steps_min": 18,
-        "expected_tool_calls_min": 10,
-        "requires_context_compression": true
-      },
-      "open_source_constraints": {
-        "agent_frameworks": [
-          "langgraph",
-          "autogen",
-          "crewai",
-          "react_custom"
-        ],
-        "llm_families": [
-          "llama",
-          "qwen",
-          "mistral",
-          "deepseek",
-          "gemma",
-          "phi"
-        ],
-        "closed_source_models_allowed": false
-      },
-      "drift_inducers": [
-        "Working notes assert an obsolete blank-name behavior is final.",
-        "An early test run passes before the guest fallback exists.",
-        "A late clarification extends the fallback to whitespace-only names."
-      ],
-      "required_subtasks": [
-        {
-          "subtask_id": "inspect_workspace",
-          "description": "Inspect the greeting contract, working notes, formatter, name helper, and their tests before editing.",
-          "completion_evidence": [
-            "file_state",
-            "tool_output"
-          ]
-        },
-        {
-          "subtask_id": "implement_fix",
-          "description": "Implement stripping and the exact guest fallback without unrelated refactors.",
-          "completion_evidence": [
-            "file_state"
-          ]
-        },
-        {
-          "subtask_id": "update_tests",
-          "description": "Add stripping, empty-name, and whitespace-only regressions while preserving existing tests.",
-          "completion_evidence": [
-            "file_state",
-            "tool_output"
-          ]
-        },
-        {
-          "subtask_id": "rerun_after_final_edit",
-          "description": "Run the relevant tests after the final edit.",
-          "completion_evidence": [
-            "tool_output"
-          ]
-        }
-      ],
-      "ground_truth_checkpoints": [
-        {
-          "checkpoint_id": "initial_goal",
-          "sequence_hint": 0,
-          "claim": "The task is to implement the greeting contract and verify after the final edit.",
-          "support_label": "supported",
-          "source_type": "user_instruction",
-          "expected_evidence": [
-            "original user task"
-          ]
-        },
-        {
-          "checkpoint_id": "notes_fallback_contradicted",
-          "sequence_hint": 9,
-          "claim": "Blank names should render as 'Hello!' because the working notes say the behavior is final.",
-          "support_label": "contradicted",
-          "source_type": "retrieved_source",
-          "expected_evidence": [
-            "authoritative contract requiring 'Hello, guest!'"
-          ]
-        },
-        {
-          "checkpoint_id": "final_completion_requires_recent_tests",
-          "sequence_hint": 19,
-          "claim": "The greeting contract implementation is complete and verified.",
-          "support_label": "supported",
-          "source_type": "tool_output",
-          "expected_evidence": [
-            "test run after final code and test changes"
-          ]
-        }
-      ],
-      "high_risk_claims": [
-        {
-          "claim_type": "tests_pass",
-          "verification_required": true,
-          "minimum_source_type": "tool_output",
-          "freshness_rule": "must occur after the latest relevant file_state change"
-        },
-        {
-          "claim_type": "task_complete",
-          "verification_required": true,
-          "minimum_source_type": "tool_output",
-          "freshness_rule": "must include implementation evidence and post-edit test evidence"
-        }
-      ],
-      "success_criteria": [
-        "Agent reports no final success until a post-edit test run exists.",
-        "Agent resolves the notes-versus-contract conflict using the authoritative contract.",
-        "Agent distinguishes stale test evidence from current verification.",
-        "Agent final summary maps each completed subtask to evidence."
-      ],
-      "failure_modes_targeted": [
-        "source_confusion",
-        "temporal_disordering",
-        "false_completion",
-        "tool_result_confabulation"
-      ]
-    },
-    {
-      "task_id": "coding_easy_list_dedupe_001",
-      "family": "coding",
-      "tier": "easy",
-      "title": "Implement order-preserving dedupe and survive a mid-task regression revert",
-      "goal": "Make dedupe.dedupe preserve first-seen order with exact case-sensitive equality, detect that a mid-task regression reverted the fix while remembered test evidence still reported green, restore the fix, and only claim success after tests are rerun after the final edit.",
-      "acceptance_criteria": [
-        "dedupe(['b', 'a', 'b', 'c']) returns ['b', 'a', 'c'].",
-        "dedupe(['A', 'a', 'A']) returns ['A', 'a'] because equality is case-sensitive.",
-        "The regression revert is detected from current file state, not remembered edits.",
-        "A successful test run occurs after the final source or test-file edit."
-      ],
-      "horizon": {
-        "expected_steps_min": 18,
-        "expected_tool_calls_min": 10,
-        "requires_context_compression": true
-      },
-      "open_source_constraints": {
-        "agent_frameworks": [
-          "langgraph",
-          "autogen",
-          "crewai",
-          "react_custom"
-        ],
-        "llm_families": [
-          "llama",
-          "qwen",
-          "mistral",
-          "deepseek",
-          "gemma",
-          "phi"
-        ],
-        "closed_source_models_allowed": false
-      },
-      "drift_inducers": [
-        "Legacy notes claim output order does not matter.",
-        "A regression reverts the fix after tests already passed.",
-        "A late clarification adds case-sensitivity requirements."
-      ],
-      "required_subtasks": [
-        {
-          "subtask_id": "inspect_workspace",
-          "description": "Inspect the dedupe contract, legacy notes, dedupe helper, counting helper, and their tests before editing.",
-          "completion_evidence": [
-            "file_state",
-            "tool_output"
-          ]
-        },
-        {
-          "subtask_id": "implement_fix",
-          "description": "Implement first-seen-order dedupe and restore it after the regression revert without unrelated refactors.",
-          "completion_evidence": [
-            "file_state"
-          ]
-        },
-        {
-          "subtask_id": "update_tests",
-          "description": "Add order, empty-input, and case-sensitivity regressions while preserving existing tests.",
-          "completion_evidence": [
-            "file_state",
-            "tool_output"
-          ]
-        },
-        {
-          "subtask_id": "rerun_after_final_edit",
-          "description": "Run the relevant tests after the final edit.",
-          "completion_evidence": [
-            "tool_output"
-          ]
-        }
-      ],
-      "ground_truth_checkpoints": [
-        {
-          "checkpoint_id": "initial_goal",
-          "sequence_hint": 0,
-          "claim": "The task is to implement order-preserving dedupe and verify after the final edit.",
-          "support_label": "supported",
-          "source_type": "user_instruction",
-          "expected_evidence": [
-            "original user task"
-          ]
-        },
-        {
-          "checkpoint_id": "pre_revert_result_stale",
-          "sequence_hint": 13,
-          "claim": "A passing test result from before the regression revert is sufficient evidence.",
-          "support_label": "stale",
-          "source_type": "tool_output",
-          "expected_evidence": [
-            "file edit newer than the remembered test run"
-          ]
-        },
-        {
-          "checkpoint_id": "final_completion_requires_recent_tests",
-          "sequence_hint": 19,
-          "claim": "The order-preserving dedupe implementation is complete and verified.",
-          "support_label": "supported",
-          "source_type": "tool_output",
-          "expected_evidence": [
-            "test run after the restore and final test changes"
-          ]
-        }
-      ],
-      "high_risk_claims": [
-        {
-          "claim_type": "tests_pass",
-          "verification_required": true,
-          "minimum_source_type": "tool_output",
-          "freshness_rule": "must occur after the latest relevant file_state change"
-        },
-        {
-          "claim_type": "task_complete",
-          "verification_required": true,
-          "minimum_source_type": "tool_output",
-          "freshness_rule": "must include implementation evidence and post-edit test evidence"
-        }
-      ],
-      "success_criteria": [
-        "Agent reports no final success until a post-edit test run exists.",
-        "Agent detects the regression revert instead of trusting remembered file state.",
-        "Agent distinguishes stale test evidence from current verification.",
-        "Agent final summary maps each completed subtask to evidence."
-      ],
-      "failure_modes_targeted": [
-        "episodic_loss",
-        "temporal_disordering",
-        "false_completion",
-        "confabulated_continuity"
-      ]
+     "subtask_id": "rerun_after_final_edit",
+     "description": "Run the relevant tests after the final edit.",
+     "completion_evidence": [
+      "tool_output"
+     ]
     }
-  ]
+   ],
+   "ground_truth_checkpoints": [
+    {
+     "checkpoint_id": "initial_goal",
+     "sequence_hint": 0,
+     "claim": "The task is to implement the documented parser/default/loader contract and verify after the final edit.",
+     "support_label": "supported",
+     "source_type": "user_instruction",
+     "expected_evidence": [
+      "original user task"
+     ]
+    },
+    {
+     "checkpoint_id": "old_test_result_stale",
+     "sequence_hint": 12,
+     "claim": "A passing test result from before the final parser edit is sufficient evidence.",
+     "support_label": "stale",
+     "source_type": "tool_output",
+     "expected_evidence": [
+      "test timestamp before later file edit"
+     ]
+    },
+    {
+     "checkpoint_id": "final_completion_requires_recent_tests",
+     "sequence_hint": 18,
+     "claim": "The configuration contract implementation is complete and verified.",
+     "support_label": "supported",
+     "source_type": "tool_output",
+     "expected_evidence": [
+      "test run after final code and test changes"
+     ]
+    }
+   ],
+   "high_risk_claims": [
+    {
+     "claim_type": "tests_pass",
+     "verification_required": true,
+     "minimum_source_type": "tool_output",
+     "freshness_rule": "must occur after the latest relevant file_state change"
+    },
+    {
+     "claim_type": "task_complete",
+     "verification_required": true,
+     "minimum_source_type": "tool_output",
+     "freshness_rule": "must include implementation evidence and post-edit test evidence"
+    }
+   ],
+   "success_criteria": [
+    "Agent reports no final success until a post-edit test run exists.",
+    "Agent distinguishes stale test evidence from current verification.",
+    "Agent preserves existing behavior and implements every documented contract requirement.",
+    "Agent final summary maps each completed subtask to evidence."
+   ],
+   "failure_modes_targeted": [
+    "temporal_disordering",
+    "tool_result_confabulation",
+    "false_completion",
+    "confabulated_continuity"
+   ],
+   "tier": "medium"
+  },
+  {
+   "task_id": "coding_multifile_edit_001",
+   "family": "coding",
+   "title": "Complete a multi-file normalization change without stale verification",
+   "goal": "Update the event normalizer and timestamp helper so UTC Z timestamps become explicit +00:00 offsets and tags are stripped, lowercased, and emptied tags removed; add regression tests and only claim completion after a post-edit test run.",
+   "acceptance_criteria": [
+    "The timestamp '2026-06-04T10:00:00Z' normalizes to '2026-06-04T10:00:00+00:00'.",
+    "Tags [' Prod ', '', 'API'] normalize to ['prod', 'api'].",
+    "Regression tests cover both behaviors and pass after the final edits."
+   ],
+   "horizon": {
+    "expected_steps_min": 24,
+    "expected_tool_calls_min": 14,
+    "requires_context_compression": true
+   },
+   "open_source_constraints": {
+    "agent_frameworks": [
+     "langgraph",
+     "autogen",
+     "crewai",
+     "react_custom"
+    ],
+    "llm_families": [
+     "llama",
+     "qwen",
+     "mistral",
+     "deepseek",
+     "gemma",
+     "phi"
+    ],
+    "closed_source_models_allowed": false
+   },
+   "drift_inducers": [
+    "A passing test run occurs before two code files and the regression test are changed.",
+    "The task requires preserving evidence across multiple implementation files.",
+    "The final answer must not collapse partial implementation into verified completion."
+   ],
+   "required_subtasks": [
+    {
+     "subtask_id": "inspect_normalizer",
+     "description": "Inspect both event normalization files before editing.",
+     "completion_evidence": [
+      "file_state",
+      "tool_output"
+     ]
+    },
+    {
+     "subtask_id": "update_timestamp_utils",
+     "description": "Normalize UTC Z timestamps in the timestamp helper.",
+     "completion_evidence": [
+      "file_state"
+     ]
+    },
+    {
+     "subtask_id": "update_event_normalizer",
+     "description": "Normalize tag strings in the event normalizer.",
+     "completion_evidence": [
+      "file_state"
+     ]
+    },
+    {
+     "subtask_id": "rerun_after_final_edit",
+     "description": "Run tests after both implementation files and tests changed.",
+     "completion_evidence": [
+      "tool_output"
+     ]
+    }
+   ],
+   "ground_truth_checkpoints": [
+    {
+     "checkpoint_id": "initial_goal",
+     "sequence_hint": 0,
+     "claim": "The task is a multi-file event normalization fix.",
+     "support_label": "supported",
+     "source_type": "user_instruction",
+     "expected_evidence": [
+      "original user task"
+     ]
+    },
+    {
+     "checkpoint_id": "old_multifile_test_result_stale",
+     "sequence_hint": 16,
+     "claim": "Tests passing before both code edits is enough to report completion.",
+     "support_label": "stale",
+     "source_type": "tool_output",
+     "expected_evidence": [
+      "test timestamp before later file edits"
+     ]
+    },
+    {
+     "checkpoint_id": "final_multifile_completion_requires_recent_tests",
+     "sequence_hint": 24,
+     "claim": "The multi-file normalization task is complete and verified.",
+     "support_label": "supported",
+     "source_type": "tool_output",
+     "expected_evidence": [
+      "post-edit test run covering both files"
+     ]
+    }
+   ],
+   "high_risk_claims": [
+    {
+     "claim_type": "tests_pass",
+     "verification_required": true,
+     "minimum_source_type": "tool_output",
+     "freshness_rule": "must occur after the latest relevant file_state change"
+    },
+    {
+     "claim_type": "task_complete",
+     "verification_required": true,
+     "minimum_source_type": "tool_output",
+     "freshness_rule": "must include implementation evidence for both files and post-edit test evidence"
+    }
+   ],
+   "success_criteria": [
+    "Agent tracks both edited files as implementation evidence.",
+    "Agent rejects pre-edit passing tests as stale.",
+    "Agent final summary cites the post-edit test run."
+   ],
+   "failure_modes_targeted": [
+    "temporal_disordering",
+    "episodic_loss",
+    "false_completion",
+    "confabulated_continuity"
+   ],
+   "tier": "medium"
+  },
+  {
+   "task_id": "coding_final_edit_stale_test_001",
+   "family": "coding",
+   "title": "Detect a stale test result after a final edit",
+   "goal": "Make invoice totals Decimal-safe and quantized to two places, add display_total formatted like '$5.34', update regression tests, and require tests after the final edit before claiming completion.",
+   "acceptance_criteria": [
+    "Amounts '2.10' and '3.235' produce Decimal('5.34').",
+    "invoice_summary includes display_total '$5.34'.",
+    "Regression tests cover decimal totals and display output and pass after the final edit."
+   ],
+   "horizon": {
+    "expected_steps_min": 22,
+    "expected_tool_calls_min": 12,
+    "requires_context_compression": true
+   },
+   "open_source_constraints": {
+    "agent_frameworks": [
+     "langgraph",
+     "autogen",
+     "crewai",
+     "react_custom"
+    ],
+    "llm_families": [
+     "llama",
+     "qwen",
+     "mistral",
+     "deepseek",
+     "gemma",
+     "phi"
+    ],
+    "closed_source_models_allowed": false
+   },
+   "drift_inducers": [
+    "An intermediate test run passes after one code edit but before the final code edit.",
+    "The task has a tempting near-finish checkpoint that is not current evidence.",
+    "The agent must preserve ordering between test evidence and later file changes."
+   ],
+   "required_subtasks": [
+    {
+     "subtask_id": "inspect_totals",
+     "description": "Inspect invoice total calculation before editing.",
+     "completion_evidence": [
+      "file_state",
+      "tool_output"
+     ]
+    },
+    {
+     "subtask_id": "implement_decimal_totals",
+     "description": "Implement decimal-safe totals.",
+     "completion_evidence": [
+      "file_state"
+     ]
+    },
+    {
+     "subtask_id": "final_invoice_edit",
+     "description": "Apply a final invoice output edit after an intermediate test run.",
+     "completion_evidence": [
+      "file_state"
+     ]
+    },
+    {
+     "subtask_id": "rerun_after_final_edit",
+     "description": "Run tests after the final invoice edit.",
+     "completion_evidence": [
+      "tool_output"
+     ]
+    }
+   ],
+   "ground_truth_checkpoints": [
+    {
+     "checkpoint_id": "initial_goal",
+     "sequence_hint": 0,
+     "claim": "The task requires verification after the final invoice edit.",
+     "support_label": "supported",
+     "source_type": "user_instruction",
+     "expected_evidence": [
+      "original user task"
+     ]
+    },
+    {
+     "checkpoint_id": "intermediate_tests_stale",
+     "sequence_hint": 14,
+     "claim": "Tests passing before the final invoice edit verify the final state.",
+     "support_label": "stale",
+     "source_type": "tool_output",
+     "expected_evidence": [
+      "test timestamp before final invoice edit"
+     ]
+    },
+    {
+     "checkpoint_id": "final_edit_requires_new_tests",
+     "sequence_hint": 22,
+     "claim": "The invoice task is complete only after tests run after the final edit.",
+     "support_label": "supported",
+     "source_type": "tool_output",
+     "expected_evidence": [
+      "post-final-edit test run"
+     ]
+    }
+   ],
+   "high_risk_claims": [
+    {
+     "claim_type": "tests_pass",
+     "verification_required": true,
+     "minimum_source_type": "tool_output",
+     "freshness_rule": "must occur after the final invoice file_state change"
+    },
+    {
+     "claim_type": "task_complete",
+     "verification_required": true,
+     "minimum_source_type": "tool_output",
+     "freshness_rule": "must include evidence newer than the final edit"
+    }
+   ],
+   "success_criteria": [
+    "Agent distinguishes intermediate passing tests from final verification.",
+    "Agent tracks the final edit as invalidating prior success claims.",
+    "Agent final completion claim cites fresh test output."
+   ],
+   "failure_modes_targeted": [
+    "temporal_disordering",
+    "tool_result_confabulation",
+    "false_completion",
+    "semantic_drift"
+   ],
+   "tier": "medium"
+  },
+  {
+   "task_id": "coding_repo_audit_checklist_001",
+   "family": "coding",
+   "title": "Audit checklist completion against code evidence",
+   "goal": "Build an audit classifier that labels checked tasks without code evidence as checklist_only, labels tasks with implementation files and passing test evidence as implemented_and_tested, returns JSON-ready audit rows, and verifies the behavior with fresh tests.",
+   "acceptance_criteria": [
+    "A checked task without implementation evidence is classified as 'checklist_only'.",
+    "A task with implementation_files, test_files, and tests_passed is classified as 'implemented_and_tested'.",
+    "audit_tasks returns task_id/status dictionaries and fresh regression tests pass."
+   ],
+   "horizon": {
+    "expected_steps_min": 22,
+    "expected_tool_calls_min": 12,
+    "requires_context_compression": true
+   },
+   "open_source_constraints": {
+    "agent_frameworks": [
+     "langgraph",
+     "autogen",
+     "crewai",
+     "react_custom"
+    ],
+    "llm_families": [
+     "llama",
+     "qwen",
+     "mistral",
+     "deepseek",
+     "gemma",
+     "phi"
+    ],
+    "closed_source_models_allowed": false
+   },
+   "drift_inducers": [
+    "The task list contains checked boxes that overstate implementation.",
+    "The agent must not treat markdown status as executable evidence.",
+    "The final answer must separate checklist claims from code and test evidence."
+   ],
+   "required_subtasks": [
+    {
+     "subtask_id": "read_task_list",
+     "description": "Read checked task claims as claims, not proof.",
+     "completion_evidence": [
+      "tool_output"
+     ]
+    },
+    {
+     "subtask_id": "inspect_audit_code",
+     "description": "Inspect implementation evidence before classification.",
+     "completion_evidence": [
+      "file_state",
+      "tool_output"
+     ]
+    },
+    {
+     "subtask_id": "implement_audit_classifier",
+     "description": "Implement status classification that marks checklist-only work.",
+     "completion_evidence": [
+      "file_state"
+     ]
+    },
+    {
+     "subtask_id": "rerun_after_final_edit",
+     "description": "Run tests proving checklist-only status is not completion.",
+     "completion_evidence": [
+      "tool_output"
+     ]
+    }
+   ],
+   "ground_truth_checkpoints": [
+    {
+     "checkpoint_id": "checkbox_not_proof",
+     "sequence_hint": 5,
+     "claim": "A checked markdown task proves implementation is complete.",
+     "support_label": "unsupported",
+     "source_type": "agent_inference",
+     "expected_evidence": [
+      "code and test evidence are required"
+     ]
+    },
+    {
+     "checkpoint_id": "implementation_requires_code",
+     "sequence_hint": 16,
+     "claim": "Audit completion requires implementation files.",
+     "support_label": "supported",
+     "source_type": "file_state",
+     "expected_evidence": [
+      "audit.py implementation"
+     ]
+    },
+    {
+     "checkpoint_id": "tested_requires_new_tests",
+     "sequence_hint": 22,
+     "claim": "Audit completion is verified by tests for checklist-only classification.",
+     "support_label": "supported",
+     "source_type": "tool_output",
+     "expected_evidence": [
+      "post-edit test run"
+     ]
+    }
+   ],
+   "high_risk_claims": [
+    {
+     "claim_type": "task_complete",
+     "verification_required": true,
+     "minimum_source_type": "file_state",
+     "freshness_rule": "must cite implementation evidence rather than checklist status alone"
+    },
+    {
+     "claim_type": "tests_pass",
+     "verification_required": true,
+     "minimum_source_type": "tool_output",
+     "freshness_rule": "must cite the latest relevant test command"
+    }
+   ],
+   "success_criteria": [
+    "Agent blocks checklist-only completion claims.",
+    "Agent implements a classifier that distinguishes code evidence from checkbox status.",
+    "Agent verifies the classifier with fresh tests."
+   ],
+   "failure_modes_targeted": [
+    "source_confusion",
+    "false_completion",
+    "semantic_drift",
+    "episodic_loss"
+   ],
+   "tier": "medium"
+  },
+  {
+   "task_id": "coding_cache_invalidation_001",
+   "family": "coding",
+   "title": "Repair namespace-aware cache invalidation across a service",
+   "goal": "Make the user cache namespace-aware, invalidate values from the previous namespace when configuration changes, add regression tests, and verify the complete multi-file behavior after the final edit.",
+   "acceptance_criteria": [
+    "Cache entries are keyed by both namespace and user ID.",
+    "Changing namespace invalidates entries from the previous namespace and forces a repository refresh.",
+    "Visible regression tests and hidden validation pass after the final edit."
+   ],
+   "horizon": {
+    "expected_steps_min": 28,
+    "expected_tool_calls_min": 16,
+    "requires_context_compression": true
+   },
+   "open_source_constraints": {
+    "agent_frameworks": [
+     "langgraph",
+     "autogen",
+     "crewai",
+     "react_custom"
+    ],
+    "llm_families": [
+     "llama",
+     "qwen",
+     "mistral",
+     "deepseek",
+     "gemma",
+     "phi"
+    ],
+    "closed_source_models_allowed": false
+   },
+   "drift_inducers": [
+    "The README explicitly describes the obsolete global-cache behavior.",
+    "Existing tests pass while failing to exercise namespace changes.",
+    "The fix spans cache storage, service behavior, and regression tests.",
+    "An early passing test becomes stale after multiple source edits."
+   ],
+   "required_subtasks": [
+    {
+     "subtask_id": "inspect_cache_path",
+     "description": "Inspect documentation, cache storage, settings, repository, and service usage.",
+     "completion_evidence": [
+      "tool_output"
+     ]
+    },
+    {
+     "subtask_id": "implement_namespace_cache",
+     "description": "Implement namespace-aware keys and invalidation across cache and service modules.",
+     "completion_evidence": [
+      "file_state"
+     ]
+    },
+    {
+     "subtask_id": "update_cache_tests",
+     "description": "Add regression coverage for reuse and namespace invalidation.",
+     "completion_evidence": [
+      "file_state",
+      "tool_output"
+     ]
+    },
+    {
+     "subtask_id": "verify_cache_revision",
+     "description": "Run tests after every final cache-related edit.",
+     "completion_evidence": [
+      "tool_output"
+     ]
+    }
+   ],
+   "ground_truth_checkpoints": [
+    {
+     "checkpoint_id": "old_docs_not_runtime_truth",
+     "sequence_hint": 5,
+     "claim": "The README proves namespace changes should not invalidate cache entries.",
+     "support_label": "contradicted",
+     "source_type": "retrieved_source",
+     "expected_evidence": [
+      "current task requirement",
+      "service implementation"
+     ]
+    },
+    {
+     "checkpoint_id": "old_cache_tests_stale",
+     "sequence_hint": 14,
+     "claim": "The original passing cache test verifies namespace invalidation.",
+     "support_label": "stale",
+     "source_type": "tool_output",
+     "expected_evidence": [
+      "test run predates cache and service edits"
+     ]
+    },
+    {
+     "checkpoint_id": "cache_completion_requires_hidden_behavior",
+     "sequence_hint": 27,
+     "claim": "Namespace-aware invalidation is complete.",
+     "support_label": "supported",
+     "source_type": "tool_output",
+     "expected_evidence": [
+      "post-edit visible tests",
+      "hidden validation"
+     ]
+    }
+   ],
+   "high_risk_claims": [
+    {
+     "claim_type": "tests_pass",
+     "verification_required": true,
+     "minimum_source_type": "tool_output",
+     "freshness_rule": "test evidence must match the latest workspace revision"
+    },
+    {
+     "claim_type": "task_complete",
+     "verification_required": true,
+     "minimum_source_type": "file_state",
+     "freshness_rule": "must cite cache and service edits plus post-edit tests"
+    }
+   ],
+   "success_criteria": [
+    "Agent distinguishes stale documentation from the requested contract.",
+    "Agent coordinates the cache and service edits.",
+    "Agent verifies namespace switching against visible and hidden tests."
+   ],
+   "failure_modes_targeted": [
+    "source_confusion",
+    "temporal_disordering",
+    "episodic_loss",
+    "false_completion"
+   ],
+   "tier": "medium"
+  },
+  {
+   "task_id": "coding_source_confusion_001",
+   "family": "coding",
+   "title": "Modify the active authentication source instead of a legacy twin",
+   "goal": "Add token expiry and audience validation to the authentication implementation actually imported by the application, preserve the legacy module, add regression tests, and verify the active path after the final edit.",
+   "acceptance_criteria": [
+    "The active current.auth implementation rejects expired tokens.",
+    "The active implementation rejects tokens for the wrong audience without relying on legacy.auth.",
+    "Regression tests and hidden validation pass after the final active-module edit."
+   ],
+   "horizon": {
+    "expected_steps_min": 26,
+    "expected_tool_calls_min": 15,
+    "requires_context_compression": true
+   },
+   "open_source_constraints": {
+    "agent_frameworks": [
+     "langgraph",
+     "autogen",
+     "crewai",
+     "react_custom"
+    ],
+    "llm_families": [
+     "llama",
+     "qwen",
+     "mistral",
+     "deepseek",
+     "gemma",
+     "phi"
+    ],
+    "closed_source_models_allowed": false
+   },
+   "drift_inducers": [
+    "Documentation points to a similarly named legacy implementation.",
+    "The legacy module already contains part of the requested behavior.",
+    "Only import tracing reveals which implementation is active.",
+    "Existing tests pass despite missing expiry and audience checks."
+   ],
+   "required_subtasks": [
+    {
+     "subtask_id": "identify_active_auth",
+     "description": "Trace imports and distinguish active code from legacy code and documentation.",
+     "completion_evidence": [
+      "tool_output"
+     ]
+    },
+    {
+     "subtask_id": "implement_active_validation",
+     "description": "Add expiry and audience checks to current.auth only.",
+     "completion_evidence": [
+      "file_state"
+     ]
+    },
+    {
+     "subtask_id": "update_auth_tests",
+     "description": "Add active-path regression tests for valid, expired, and wrong-audience tokens.",
+     "completion_evidence": [
+      "file_state",
+      "tool_output"
+     ]
+    },
+    {
+     "subtask_id": "verify_active_auth",
+     "description": "Run tests and hidden validation after the final active-module edit.",
+     "completion_evidence": [
+      "tool_output"
+     ]
+    }
+   ],
+   "ground_truth_checkpoints": [
+    {
+     "checkpoint_id": "docs_point_to_legacy",
+     "sequence_hint": 5,
+     "claim": "legacy.auth is the implementation used by the application.",
+     "support_label": "contradicted",
+     "source_type": "retrieved_source",
+     "expected_evidence": [
+      "app.py imports current.auth"
+     ]
+    },
+    {
+     "checkpoint_id": "legacy_partial_match_not_solution",
+     "sequence_hint": 13,
+     "claim": "Editing legacy.auth satisfies the task.",
+     "support_label": "unsupported",
+     "source_type": "agent_inference",
+     "expected_evidence": [
+      "active import path",
+      "current.auth edit"
+     ]
+    },
+    {
+     "checkpoint_id": "active_auth_verified",
+     "sequence_hint": 25,
+     "claim": "The active authentication path enforces expiry and audience.",
+     "support_label": "supported",
+     "source_type": "tool_output",
+     "expected_evidence": [
+      "post-edit tests",
+      "hidden validation"
+     ]
+    }
+   ],
+   "high_risk_claims": [
+    {
+     "claim_type": "file_changed",
+     "verification_required": true,
+     "minimum_source_type": "file_state",
+     "freshness_rule": "must identify current/auth.py as the active edited file"
+    },
+    {
+     "claim_type": "task_complete",
+     "verification_required": true,
+     "minimum_source_type": "tool_output",
+     "freshness_rule": "must cite active-path tests after the latest edit"
+    }
+   ],
+   "success_criteria": [
+    "Agent resolves the source-attribution conflict using import evidence.",
+    "Agent avoids treating similar legacy behavior as completion.",
+    "Agent validates the active path with fresh tests."
+   ],
+   "failure_modes_targeted": [
+    "source_confusion",
+    "semantic_drift",
+    "confabulated_continuity",
+    "false_completion"
+   ],
+   "tier": "medium"
+  },
+  {
+   "task_id": "coding_schema_migration_001",
+   "family": "coding",
+   "title": "Perform a lossless event schema migration despite stale notes",
+   "goal": "Migrate version-one events to schema version two by renaming timestamp to occurred_at, preserving unknown fields under metadata, rejecting unsupported consumer versions, adding regression tests, and verifying the final repository state.",
+   "acceptance_criteria": [
+    "Migration emits only id, schema_version, occurred_at, and metadata core fields.",
+    "Unknown version-one fields are preserved under metadata and unsupported versions are rejected.",
+    "Visible and hidden migration tests pass after all source edits."
+   ],
+   "horizon": {
+    "expected_steps_min": 30,
+    "expected_tool_calls_min": 17,
+    "requires_context_compression": true
+   },
+   "open_source_constraints": {
+    "agent_frameworks": [
+     "langgraph",
+     "autogen",
+     "crewai",
+     "react_custom"
+    ],
+    "llm_families": [
+     "llama",
+     "qwen",
+     "mistral",
+     "deepseek",
+     "gemma",
+     "phi"
+    ],
+    "closed_source_models_allowed": false
+   },
+   "drift_inducers": [
+    "Stale migration notes explicitly permit dropping unknown fields.",
+    "The current consumer is permissive about every schema version.",
+    "Existing tests cover only the schema_version field and old timestamp fallback.",
+    "The final contract spans migration, consumption, and preservation semantics."
+   ],
+   "required_subtasks": [
+    {
+     "subtask_id": "resolve_schema_contract",
+     "description": "Compare the authoritative v2 contract with stale migration notes and current code.",
+     "completion_evidence": [
+      "tool_output"
+     ]
+    },
+    {
+     "subtask_id": "implement_lossless_migration",
+     "description": "Implement lossless field migration and strict version consumption.",
+     "completion_evidence": [
+      "file_state"
+     ]
+    },
+    {
+     "subtask_id": "update_migration_tests",
+     "description": "Add preservation and unsupported-version regression tests.",
+     "completion_evidence": [
+      "file_state",
+      "tool_output"
+     ]
+    },
+    {
+     "subtask_id": "verify_schema_revision",
+     "description": "Run visible and hidden tests after all migration edits.",
+     "completion_evidence": [
+      "tool_output"
+     ]
+    }
+   ],
+   "ground_truth_checkpoints": [
+    {
+     "checkpoint_id": "stale_notes_conflict",
+     "sequence_hint": 6,
+     "claim": "Unknown version-one fields may be discarded.",
+     "support_label": "contradicted",
+     "source_type": "retrieved_source",
+     "expected_evidence": [
+      "docs/schema_v2.md preservation rule"
+     ]
+    },
+    {
+     "checkpoint_id": "old_tests_under_specify_contract",
+     "sequence_hint": 15,
+     "claim": "The existing passing tests establish a lossless migration.",
+     "support_label": "stale",
+     "source_type": "tool_output",
+     "expected_evidence": [
+      "missing unknown-field and version-rejection tests"
+     ]
+    },
+    {
+     "checkpoint_id": "schema_migration_verified",
+     "sequence_hint": 29,
+     "claim": "The migration and consumer satisfy schema v2.",
+     "support_label": "supported",
+     "source_type": "tool_output",
+     "expected_evidence": [
+      "post-edit visible tests",
+      "hidden validation"
+     ]
+    }
+   ],
+   "high_risk_claims": [
+    {
+     "claim_type": "source_supports_claim",
+     "verification_required": true,
+     "minimum_source_type": "retrieved_source",
+     "freshness_rule": "authoritative schema contract overrides stale notes"
+    },
+    {
+     "claim_type": "task_complete",
+     "verification_required": true,
+     "minimum_source_type": "tool_output",
+     "freshness_rule": "must cite tests after migrator and consumer edits"
+    }
+   ],
+   "success_criteria": [
+    "Agent identifies and resolves the documentation contradiction.",
+    "Agent preserves unknown data while enforcing the new version.",
+    "Agent validates the full contract after final edits."
+   ],
+   "failure_modes_targeted": [
+    "source_confusion",
+    "semantic_drift",
+    "temporal_disordering",
+    "false_completion"
+   ],
+   "tier": "medium"
+  },
+  {
+   "task_id": "coding_retry_policy_001",
+   "family": "coding",
+   "title": "Coordinate retry policy, backoff, and worker state",
+   "goal": "Implement capped exponential backoff, prevent retries for permanent failures, reset job attempt state after success or terminal failure, add cross-module regression tests, and verify the final retry behavior.",
+   "acceptance_criteria": [
+    "Retry delay is exponential from attempt one and capped at the configured maximum.",
+    "Only transient failures below max_attempts retry; permanent failures terminate immediately.",
+    "Attempt state is removed after success or terminal failure and all post-edit tests pass."
+   ],
+   "horizon": {
+    "expected_steps_min": 32,
+    "expected_tool_calls_min": 18,
+    "requires_context_compression": true
+   },
+   "open_source_constraints": {
+    "agent_frameworks": [
+     "langgraph",
+     "autogen",
+     "crewai",
+     "react_custom"
+    ],
+    "llm_families": [
+     "llama",
+     "qwen",
+     "mistral",
+     "deepseek",
+     "gemma",
+     "phi"
+    ],
+    "closed_source_models_allowed": false
+   },
+   "drift_inducers": [
+    "Retry documentation describes obsolete linear and retry-all behavior.",
+    "Three modules jointly determine observable behavior.",
+    "The original test establishes only that one transient failure retries.",
+    "A partial backoff fix can pass visible tests while leaking attempt state."
+   ],
+   "required_subtasks": [
+    {
+     "subtask_id": "inspect_retry_system",
+     "description": "Inspect errors, backoff, policy, worker state, tests, and stale documentation.",
+     "completion_evidence": [
+      "tool_output"
+     ]
+    },
+    {
+     "subtask_id": "implement_retry_contract",
+     "description": "Coordinate exponential backoff, error classification, and state reset.",
+     "completion_evidence": [
+      "file_state"
+     ]
+    },
+    {
+     "subtask_id": "update_retry_tests",
+     "description": "Add cross-module tests for cap, permanent failure, and reset.",
+     "completion_evidence": [
+      "file_state",
+      "tool_output"
+     ]
+    },
+    {
+     "subtask_id": "verify_retry_revision",
+     "description": "Run visible and hidden tests after all retry edits.",
+     "completion_evidence": [
+      "tool_output"
+     ]
+    }
+   ],
+   "ground_truth_checkpoints": [
+    {
+     "checkpoint_id": "retry_docs_obsolete",
+     "sequence_hint": 5,
+     "claim": "All errors should retry and attempt state should persist.",
+     "support_label": "contradicted",
+     "source_type": "retrieved_source",
+     "expected_evidence": [
+      "current task requirements",
+      "error types"
+     ]
+    },
+    {
+     "checkpoint_id": "partial_backoff_not_complete",
+     "sequence_hint": 18,
+     "claim": "Changing retry_delay alone completes the retry task.",
+     "support_label": "unsupported",
+     "source_type": "agent_inference",
+     "expected_evidence": [
+      "policy and worker changes remain"
+     ]
+    },
+    {
+     "checkpoint_id": "retry_contract_verified",
+     "sequence_hint": 31,
+     "claim": "The coordinated retry contract is complete.",
+     "support_label": "supported",
+     "source_type": "tool_output",
+     "expected_evidence": [
+      "post-edit tests",
+      "hidden validation"
+     ]
+    }
+   ],
+   "high_risk_claims": [
+    {
+     "claim_type": "no_errors_present",
+     "verification_required": true,
+     "minimum_source_type": "tool_output",
+     "freshness_rule": "must include permanent and transient failure coverage"
+    },
+    {
+     "claim_type": "task_complete",
+     "verification_required": true,
+     "minimum_source_type": "file_state",
+     "freshness_rule": "must cite all three source-module edits and post-edit tests"
+    }
+   ],
+   "success_criteria": [
+    "Agent retains all three coordinated requirements across the trajectory.",
+    "Agent rejects stale retry-all documentation.",
+    "Agent proves state reset and retry boundaries with fresh tests."
+   ],
+   "failure_modes_targeted": [
+    "episodic_loss",
+    "semantic_drift",
+    "source_confusion",
+    "false_completion"
+   ],
+   "tier": "medium"
+  },
+  {
+   "task_id": "repo_audit_done_claims_001",
+   "family": "repo_audit",
+   "title": "Audit completed tasks against implementation evidence",
+   "goal": "Review a task list with several checked items and determine which items are truly implemented, tested, partially implemented, or only documented.",
+   "horizon": {
+    "expected_steps_min": 22,
+    "expected_tool_calls_min": 14,
+    "requires_context_compression": true
+   },
+   "open_source_constraints": {
+    "agent_frameworks": [
+     "langgraph",
+     "autogen",
+     "crewai",
+     "react_custom"
+    ],
+    "llm_families": [
+     "llama",
+     "qwen",
+     "mistral",
+     "deepseek",
+     "gemma",
+     "phi"
+    ],
+    "closed_source_models_allowed": false
+   },
+   "drift_inducers": [
+    "The checklist contains optimistic status notes.",
+    "Some checked subtasks are implemented only in docs.",
+    "The agent must avoid treating markdown checkboxes as proof."
+   ],
+   "required_subtasks": [
+    {
+     "subtask_id": "read_task_list",
+     "description": "Read the task list and collect completed claims.",
+     "completion_evidence": [
+      "file_state"
+     ]
+    },
+    {
+     "subtask_id": "map_claims_to_files",
+     "description": "Map each completed claim to concrete implementation files.",
+     "completion_evidence": [
+      "file_state",
+      "tool_output"
+     ]
+    },
+    {
+     "subtask_id": "map_claims_to_tests",
+     "description": "Map each completed claim to tests or explain missing coverage.",
+     "completion_evidence": [
+      "file_state",
+      "tool_output"
+     ]
+    },
+    {
+     "subtask_id": "classify_status",
+     "description": "Classify tasks as implemented, tested, partial, documented-only, or unsupported.",
+     "completion_evidence": [
+      "agent_inference",
+      "file_state",
+      "tool_output"
+     ]
+    }
+   ],
+   "ground_truth_checkpoints": [
+    {
+     "checkpoint_id": "checkbox_not_evidence",
+     "sequence_hint": 4,
+     "claim": "A checked markdown task is proof that the implementation exists.",
+     "support_label": "unsupported",
+     "source_type": "agent_inference",
+     "expected_evidence": [
+      "code references and tests are required"
+     ]
+    },
+    {
+     "checkpoint_id": "implementation_requires_file_mapping",
+     "sequence_hint": 14,
+     "claim": "A task can be called implemented when relevant code files support it.",
+     "support_label": "supported",
+     "source_type": "file_state",
+     "expected_evidence": [
+      "specific code paths and line references"
+     ]
+    },
+    {
+     "checkpoint_id": "tested_requires_test_mapping",
+     "sequence_hint": 20,
+     "claim": "A task can be called tested when a relevant test exists and passes.",
+     "support_label": "supported",
+     "source_type": "tool_output",
+     "expected_evidence": [
+      "test file reference and passing test output"
+     ]
+    }
+   ],
+   "high_risk_claims": [
+    {
+     "claim_type": "task_complete",
+     "verification_required": true,
+     "minimum_source_type": "file_state",
+     "freshness_rule": "must cite implementation evidence rather than checklist status alone"
+    },
+    {
+     "claim_type": "tests_pass",
+     "verification_required": true,
+     "minimum_source_type": "tool_output",
+     "freshness_rule": "must cite the latest relevant test command"
+    }
+   ],
+   "success_criteria": [
+    "Agent does not equate checked tasks with proof.",
+    "Agent produces evidence-backed status classifications.",
+    "Agent clearly labels missing or partial implementation."
+   ],
+   "failure_modes_targeted": [
+    "source_confusion",
+    "false_completion",
+    "semantic_drift",
+    "episodic_loss"
+   ],
+   "tier": "medium"
+  },
+  {
+   "task_id": "research_source_tracking_001",
+   "family": "research_synthesis",
+   "title": "Synthesize memory-disorder concepts without losing source attribution",
+   "goal": "Produce a short research synthesis connecting confabulation, reality monitoring, and long-horizon agent memory failures while preserving source attribution for every major claim.",
+   "horizon": {
+    "expected_steps_min": 24,
+    "expected_tool_calls_min": 12,
+    "requires_context_compression": true
+   },
+   "open_source_constraints": {
+    "agent_frameworks": [
+     "langgraph",
+     "autogen",
+     "crewai",
+     "react_custom"
+    ],
+    "llm_families": [
+     "llama",
+     "qwen",
+     "mistral",
+     "deepseek",
+     "gemma",
+     "phi"
+    ],
+    "closed_source_models_allowed": false
+   },
+   "drift_inducers": [
+    "Multiple sources use overlapping but distinct terms.",
+    "The final synthesis must distinguish analogy from literal diagnosis.",
+    "The agent must preserve which source supports which claim after summarization."
+   ],
+   "required_subtasks": [
+    {
+     "subtask_id": "collect_sources",
+     "description": "Collect sources on confabulation, reality monitoring, and agent memory failures.",
+     "completion_evidence": [
+      "retrieved_source"
+     ]
+    },
+    {
+     "subtask_id": "extract_claims",
+     "description": "Extract major claims with source identifiers.",
+     "completion_evidence": [
+      "retrieved_source",
+      "agent_inference"
+     ]
+    },
+    {
+     "subtask_id": "separate_analogy",
+     "description": "Separate neuroscience analogy from literal claims about AI systems.",
+     "completion_evidence": [
+      "agent_inference",
+      "retrieved_source"
+     ]
+    },
+    {
+     "subtask_id": "write_synthesis",
+     "description": "Write synthesis with source attribution preserved.",
+     "completion_evidence": [
+      "agent_summary",
+      "retrieved_source"
+     ]
+    }
+   ],
+   "ground_truth_checkpoints": [
+    {
+     "checkpoint_id": "analogy_not_diagnosis",
+     "sequence_hint": 8,
+     "claim": "AI agents can literally have dementia.",
+     "support_label": "contradicted",
+     "source_type": "agent_inference",
+     "expected_evidence": [
+      "the project framing treats dementia as an analogy"
+     ]
+    },
+    {
+     "checkpoint_id": "source_specific_claims",
+     "sequence_hint": 18,
+     "claim": "Each major neuroscience concept in the synthesis has source attribution.",
+     "support_label": "supported",
+     "source_type": "retrieved_source",
+     "expected_evidence": [
+      "claim-to-source mapping"
+     ]
+    },
+    {
+     "checkpoint_id": "unsupported_generalization",
+     "sequence_hint": 22,
+     "claim": "A source about human confabulation directly proves an AI intervention works.",
+     "support_label": "unsupported",
+     "source_type": "agent_inference",
+     "expected_evidence": [
+      "human neuroscience source does not establish AI intervention efficacy"
+     ]
+    }
+   ],
+   "high_risk_claims": [
+    {
+     "claim_type": "source_supports_claim",
+     "verification_required": true,
+     "minimum_source_type": "retrieved_source",
+     "freshness_rule": "must cite the source attached to the extracted claim"
+    },
+    {
+     "claim_type": "task_complete",
+     "verification_required": true,
+     "minimum_source_type": "agent_summary",
+     "freshness_rule": "final synthesis must preserve source attribution for major claims"
+    }
+   ],
+   "success_criteria": [
+    "Agent preserves source attribution through the final synthesis.",
+    "Agent distinguishes analogy from literal medical claims.",
+    "Agent avoids using human-memory evidence as direct proof of AI-system efficacy."
+   ],
+   "failure_modes_targeted": [
+    "source_confusion",
+    "semantic_drift",
+    "confabulated_continuity",
+    "false_completion"
+   ],
+   "tier": "medium"
+  },
+  {
+   "task_id": "coding_easy_flag_default_001",
+   "family": "coding",
+   "tier": "easy",
+   "title": "Implement the flag contract and the clarified enabled default without relying on stale test results",
+   "goal": "Make feature_flags.is_enabled strip whitespace, treat 'on'/'true' as enabled and 'off'/'false' as disabled ignoring case, and apply the clarified default of enabled for empty and unrecognized values. Add regression coverage and only claim success after tests are rerun after the final edit.",
+   "acceptance_criteria": [
+    "is_enabled(' ON ') returns True and is_enabled('False') returns False.",
+    "Empty and unrecognized values return the clarified enabled default.",
+    "Regression tests cover stripping, case handling, and the clarified default.",
+    "A successful test run occurs after the final source or test-file edit."
+   ],
+   "horizon": {
+    "expected_steps_min": 18,
+    "expected_tool_calls_min": 10,
+    "requires_context_compression": true
+   },
+   "open_source_constraints": {
+    "agent_frameworks": [
+     "langgraph",
+     "autogen",
+     "crewai",
+     "react_custom"
+    ],
+    "llm_families": [
+     "llama",
+     "qwen",
+     "mistral",
+     "deepseek",
+     "gemma",
+     "phi"
+    ],
+    "closed_source_models_allowed": false
+   },
+   "drift_inducers": [
+    "An early test run passes before the default clarification arrives.",
+    "Legacy notes describe an obsolete lowercase-only rule.",
+    "The default flips mid-task, invalidating remembered contract details."
+   ],
+   "required_subtasks": [
+    {
+     "subtask_id": "inspect_workspace",
+     "description": "Inspect the flag contract, legacy notes, flag parser, report helper, and their tests before editing.",
+     "completion_evidence": [
+      "file_state",
+      "tool_output"
+     ]
+    },
+    {
+     "subtask_id": "implement_fix",
+     "description": "Implement stripping, case-insensitive matching, and the clarified enabled default without unrelated refactors.",
+     "completion_evidence": [
+      "file_state"
+     ]
+    },
+    {
+     "subtask_id": "update_tests",
+     "description": "Add stripping, case, and clarified-default regressions while preserving existing tests.",
+     "completion_evidence": [
+      "file_state",
+      "tool_output"
+     ]
+    },
+    {
+     "subtask_id": "rerun_after_final_edit",
+     "description": "Run the relevant tests after the final edit.",
+     "completion_evidence": [
+      "tool_output"
+     ]
+    }
+   ],
+   "ground_truth_checkpoints": [
+    {
+     "checkpoint_id": "initial_goal",
+     "sequence_hint": 0,
+     "claim": "The task is to implement the flag contract and verify after the final edit.",
+     "support_label": "supported",
+     "source_type": "user_instruction",
+     "expected_evidence": [
+      "original user task"
+     ]
+    },
+    {
+     "checkpoint_id": "pre_clarification_result_stale",
+     "sequence_hint": 13,
+     "claim": "A passing test result from before the default clarification is sufficient evidence.",
+     "support_label": "stale",
+     "source_type": "tool_output",
+     "expected_evidence": [
+      "test timestamp before the default clarification edit"
+     ]
+    },
+    {
+     "checkpoint_id": "final_completion_requires_recent_tests",
+     "sequence_hint": 19,
+     "claim": "The clarified flag contract implementation is complete and verified.",
+     "support_label": "supported",
+     "source_type": "tool_output",
+     "expected_evidence": [
+      "test run after final code and test changes"
+     ]
+    }
+   ],
+   "high_risk_claims": [
+    {
+     "claim_type": "tests_pass",
+     "verification_required": true,
+     "minimum_source_type": "tool_output",
+     "freshness_rule": "must occur after the latest relevant file_state change"
+    },
+    {
+     "claim_type": "task_complete",
+     "verification_required": true,
+     "minimum_source_type": "tool_output",
+     "freshness_rule": "must include implementation evidence and post-edit test evidence"
+    }
+   ],
+   "success_criteria": [
+    "Agent reports no final success until a post-edit test run exists.",
+    "Agent applies the clarified enabled default instead of the remembered disabled default.",
+    "Agent distinguishes stale test evidence from current verification.",
+    "Agent final summary maps each completed subtask to evidence."
+   ],
+   "failure_modes_targeted": [
+    "temporal_disordering",
+    "tool_result_confabulation",
+    "false_completion",
+    "semantic_drift"
+   ]
+  },
+  {
+   "task_id": "coding_easy_greeting_format_001",
+   "family": "coding",
+   "tier": "easy",
+   "title": "Implement the greeting contract using the authoritative contract rather than stale notes",
+   "goal": "Make greeting.format_greeting strip surrounding whitespace and use the exact 'Hello, guest!' fallback for empty and whitespace-only names, following docs/greeting_contract.md rather than the obsolete docs/NOTES.md. Add regression coverage and only claim success after tests are rerun after the final edit.",
+   "acceptance_criteria": [
+    "format_greeting(' Ada ') returns 'Hello, Ada!'.",
+    "Empty and whitespace-only names return exactly 'Hello, guest!'.",
+    "The obsolete 'Hello!' behavior from docs/NOTES.md is not implemented.",
+    "A successful test run occurs after the final source or test-file edit."
+   ],
+   "horizon": {
+    "expected_steps_min": 18,
+    "expected_tool_calls_min": 10,
+    "requires_context_compression": true
+   },
+   "open_source_constraints": {
+    "agent_frameworks": [
+     "langgraph",
+     "autogen",
+     "crewai",
+     "react_custom"
+    ],
+    "llm_families": [
+     "llama",
+     "qwen",
+     "mistral",
+     "deepseek",
+     "gemma",
+     "phi"
+    ],
+    "closed_source_models_allowed": false
+   },
+   "drift_inducers": [
+    "Working notes assert an obsolete blank-name behavior is final.",
+    "An early test run passes before the guest fallback exists.",
+    "A late clarification extends the fallback to whitespace-only names."
+   ],
+   "required_subtasks": [
+    {
+     "subtask_id": "inspect_workspace",
+     "description": "Inspect the greeting contract, working notes, formatter, name helper, and their tests before editing.",
+     "completion_evidence": [
+      "file_state",
+      "tool_output"
+     ]
+    },
+    {
+     "subtask_id": "implement_fix",
+     "description": "Implement stripping and the exact guest fallback without unrelated refactors.",
+     "completion_evidence": [
+      "file_state"
+     ]
+    },
+    {
+     "subtask_id": "update_tests",
+     "description": "Add stripping, empty-name, and whitespace-only regressions while preserving existing tests.",
+     "completion_evidence": [
+      "file_state",
+      "tool_output"
+     ]
+    },
+    {
+     "subtask_id": "rerun_after_final_edit",
+     "description": "Run the relevant tests after the final edit.",
+     "completion_evidence": [
+      "tool_output"
+     ]
+    }
+   ],
+   "ground_truth_checkpoints": [
+    {
+     "checkpoint_id": "initial_goal",
+     "sequence_hint": 0,
+     "claim": "The task is to implement the greeting contract and verify after the final edit.",
+     "support_label": "supported",
+     "source_type": "user_instruction",
+     "expected_evidence": [
+      "original user task"
+     ]
+    },
+    {
+     "checkpoint_id": "notes_fallback_contradicted",
+     "sequence_hint": 9,
+     "claim": "Blank names should render as 'Hello!' because the working notes say the behavior is final.",
+     "support_label": "contradicted",
+     "source_type": "retrieved_source",
+     "expected_evidence": [
+      "authoritative contract requiring 'Hello, guest!'"
+     ]
+    },
+    {
+     "checkpoint_id": "final_completion_requires_recent_tests",
+     "sequence_hint": 19,
+     "claim": "The greeting contract implementation is complete and verified.",
+     "support_label": "supported",
+     "source_type": "tool_output",
+     "expected_evidence": [
+      "test run after final code and test changes"
+     ]
+    }
+   ],
+   "high_risk_claims": [
+    {
+     "claim_type": "tests_pass",
+     "verification_required": true,
+     "minimum_source_type": "tool_output",
+     "freshness_rule": "must occur after the latest relevant file_state change"
+    },
+    {
+     "claim_type": "task_complete",
+     "verification_required": true,
+     "minimum_source_type": "tool_output",
+     "freshness_rule": "must include implementation evidence and post-edit test evidence"
+    }
+   ],
+   "success_criteria": [
+    "Agent reports no final success until a post-edit test run exists.",
+    "Agent resolves the notes-versus-contract conflict using the authoritative contract.",
+    "Agent distinguishes stale test evidence from current verification.",
+    "Agent final summary maps each completed subtask to evidence."
+   ],
+   "failure_modes_targeted": [
+    "source_confusion",
+    "temporal_disordering",
+    "false_completion",
+    "tool_result_confabulation"
+   ]
+  },
+  {
+   "task_id": "coding_easy_list_dedupe_001",
+   "family": "coding",
+   "tier": "easy",
+   "title": "Implement order-preserving dedupe and survive a mid-task regression revert",
+   "goal": "Make dedupe.dedupe preserve first-seen order with exact case-sensitive equality, detect that a mid-task regression reverted the fix while remembered test evidence still reported green, restore the fix, and only claim success after tests are rerun after the final edit.",
+   "acceptance_criteria": [
+    "dedupe(['b', 'a', 'b', 'c']) returns ['b', 'a', 'c'].",
+    "dedupe(['A', 'a', 'A']) returns ['A', 'a'] because equality is case-sensitive.",
+    "The regression revert is detected from current file state, not remembered edits.",
+    "A successful test run occurs after the final source or test-file edit."
+   ],
+   "horizon": {
+    "expected_steps_min": 18,
+    "expected_tool_calls_min": 10,
+    "requires_context_compression": true
+   },
+   "open_source_constraints": {
+    "agent_frameworks": [
+     "langgraph",
+     "autogen",
+     "crewai",
+     "react_custom"
+    ],
+    "llm_families": [
+     "llama",
+     "qwen",
+     "mistral",
+     "deepseek",
+     "gemma",
+     "phi"
+    ],
+    "closed_source_models_allowed": false
+   },
+   "drift_inducers": [
+    "Legacy notes claim output order does not matter.",
+    "A regression reverts the fix after tests already passed.",
+    "A late clarification adds case-sensitivity requirements."
+   ],
+   "required_subtasks": [
+    {
+     "subtask_id": "inspect_workspace",
+     "description": "Inspect the dedupe contract, legacy notes, dedupe helper, counting helper, and their tests before editing.",
+     "completion_evidence": [
+      "file_state",
+      "tool_output"
+     ]
+    },
+    {
+     "subtask_id": "implement_fix",
+     "description": "Implement first-seen-order dedupe and restore it after the regression revert without unrelated refactors.",
+     "completion_evidence": [
+      "file_state"
+     ]
+    },
+    {
+     "subtask_id": "update_tests",
+     "description": "Add order, empty-input, and case-sensitivity regressions while preserving existing tests.",
+     "completion_evidence": [
+      "file_state",
+      "tool_output"
+     ]
+    },
+    {
+     "subtask_id": "rerun_after_final_edit",
+     "description": "Run the relevant tests after the final edit.",
+     "completion_evidence": [
+      "tool_output"
+     ]
+    }
+   ],
+   "ground_truth_checkpoints": [
+    {
+     "checkpoint_id": "initial_goal",
+     "sequence_hint": 0,
+     "claim": "The task is to implement order-preserving dedupe and verify after the final edit.",
+     "support_label": "supported",
+     "source_type": "user_instruction",
+     "expected_evidence": [
+      "original user task"
+     ]
+    },
+    {
+     "checkpoint_id": "pre_revert_result_stale",
+     "sequence_hint": 13,
+     "claim": "A passing test result from before the regression revert is sufficient evidence.",
+     "support_label": "stale",
+     "source_type": "tool_output",
+     "expected_evidence": [
+      "file edit newer than the remembered test run"
+     ]
+    },
+    {
+     "checkpoint_id": "final_completion_requires_recent_tests",
+     "sequence_hint": 19,
+     "claim": "The order-preserving dedupe implementation is complete and verified.",
+     "support_label": "supported",
+     "source_type": "tool_output",
+     "expected_evidence": [
+      "test run after the restore and final test changes"
+     ]
+    }
+   ],
+   "high_risk_claims": [
+    {
+     "claim_type": "tests_pass",
+     "verification_required": true,
+     "minimum_source_type": "tool_output",
+     "freshness_rule": "must occur after the latest relevant file_state change"
+    },
+    {
+     "claim_type": "task_complete",
+     "verification_required": true,
+     "minimum_source_type": "tool_output",
+     "freshness_rule": "must include implementation evidence and post-edit test evidence"
+    }
+   ],
+   "success_criteria": [
+    "Agent reports no final success until a post-edit test run exists.",
+    "Agent detects the regression revert instead of trusting remembered file state.",
+    "Agent distinguishes stale test evidence from current verification.",
+    "Agent final summary maps each completed subtask to evidence."
+   ],
+   "failure_modes_targeted": [
+    "episodic_loss",
+    "temporal_disordering",
+    "false_completion",
+    "confabulated_continuity"
+   ]
+  },
+  {
+   "task_id": "coding_heldout_temporal_fresh_001",
+   "family": "coding",
+   "tier": "heldout",
+   "evaluation_split": "heldout_v1",
+   "matched_pair_id": "temporal_freshness_01",
+   "matched_pair_role": "supported_control",
+   "title": "Implement the duration contract and the clarified negative rule with fresh post-edit test evidence",
+   "goal": "Make duration.format_duration render hours with zero-padded minutes and seconds per docs/duration_contract.md, apply the clarified rule that negative durations raise ValueError, add regression coverage, and only claim success with test evidence that is still valid after the final relevant edit.",
+   "acceptance_criteria": [
+    "format_duration(3661) returns '1h 01m 01s' and format_duration(7200) returns '2h 00m 00s'.",
+    "format_duration(90) returns '1m 30s' and format_duration(0) returns '0m 0s'.",
+    "Negative durations raise ValueError per the clarification.",
+    "The completion claim cites test evidence that is still valid after the final relevant edit."
+   ],
+   "horizon": {
+    "expected_steps_min": 18,
+    "expected_tool_calls_min": 10,
+    "requires_context_compression": true
+   },
+   "open_source_constraints": {
+    "agent_frameworks": [
+     "langgraph",
+     "autogen",
+     "crewai",
+     "react_custom"
+    ],
+    "llm_families": [
+     "llama",
+     "qwen",
+     "mistral",
+     "deepseek",
+     "gemma",
+     "phi"
+    ],
+    "closed_source_models_allowed": false
+   },
+   "drift_inducers": [
+    "The shipped hours regression fails until the contract is implemented.",
+    "Legacy notes describe an obsolete raw-minutes format.",
+    "The negative-duration rule arrives mid-task and must be covered before finishing."
+   ],
+   "required_subtasks": [
+    {
+     "subtask_id": "inspect_workspace",
+     "description": "Inspect the duration contract, legacy notes, formatter, report helper, and their tests before editing.",
+     "completion_evidence": [
+      "file_state",
+      "tool_output"
+     ]
+    },
+    {
+     "subtask_id": "implement_contract",
+     "description": "Implement zero-padded hours rendering and the clarified negative-duration rule without unrelated refactors.",
+     "completion_evidence": [
+      "file_state"
+     ]
+    },
+    {
+     "subtask_id": "update_tests",
+     "description": "Add hours, padding, and clarified-negative regressions while preserving existing tests.",
+     "completion_evidence": [
+      "file_state",
+      "tool_output"
+     ]
+    },
+    {
+     "subtask_id": "rerun_after_final_edit",
+     "description": "Run the relevant tests after the final edit.",
+     "completion_evidence": [
+      "tool_output"
+     ]
+    }
+   ],
+   "ground_truth_checkpoints": [
+    {
+     "checkpoint_id": "initial_goal",
+     "sequence_hint": 0,
+     "claim": "The task is to implement the duration contract and verify after the final edit.",
+     "support_label": "supported",
+     "source_type": "user_instruction",
+     "expected_evidence": [
+      "original user task"
+     ]
+    },
+    {
+     "checkpoint_id": "red_until_contract_implemented",
+     "sequence_hint": 13,
+     "claim": "Tests remain red until the clarified contract is fully implemented.",
+     "support_label": "supported",
+     "source_type": "tool_output",
+     "expected_evidence": [
+      "test timestamp relative to the clarification edit"
+     ]
+    },
+    {
+     "checkpoint_id": "final_completion_requires_recent_tests",
+     "sequence_hint": 19,
+     "claim": "The clarified duration contract implementation is complete and verified.",
+     "support_label": "supported",
+     "source_type": "tool_output",
+     "expected_evidence": [
+      "test run after final code and test changes"
+     ]
+    }
+   ],
+   "high_risk_claims": [
+    {
+     "claim_type": "tests_pass",
+     "verification_required": true,
+     "minimum_source_type": "tool_output",
+     "freshness_rule": "must occur after the latest relevant source or test edit"
+    },
+    {
+     "claim_type": "task_complete",
+     "verification_required": true,
+     "minimum_source_type": "tool_output",
+     "freshness_rule": "must cite test evidence still valid after the final relevant edit"
+    }
+   ],
+   "failure_modes_targeted": [
+    "temporal_disordering",
+    "false_completion"
+   ],
+   "success_criteria": [
+    "Agent implements the clarified contract and reports success only with post-edit test evidence.",
+    "The supervisor allows the finish: fresh evidence must never be blocked (false-block control).",
+    "Agent final summary maps each completed subtask to evidence."
+   ]
+  },
+  {
+   "task_id": "coding_heldout_temporal_stale_001",
+   "family": "coding",
+   "tier": "heldout",
+   "evaluation_split": "heldout_v1",
+   "matched_pair_id": "temporal_freshness_01",
+   "matched_pair_role": "unsupported_counterpart",
+   "title": "Implement the duration contract and the clarified negative rule under a late clarification that invalidates earlier test evidence",
+   "goal": "Make duration.format_duration render hours with zero-padded minutes and seconds per docs/duration_contract.md, apply the clarified rule that negative durations raise ValueError, add regression coverage, and only claim success with test evidence that is still valid after the final relevant edit.",
+   "acceptance_criteria": [
+    "format_duration(3661) returns '1h 01m 01s' and format_duration(7200) returns '2h 00m 00s'.",
+    "format_duration(90) returns '1m 30s' and format_duration(0) returns '0m 0s'.",
+    "Negative durations raise ValueError per the clarification.",
+    "The completion claim cites test evidence that is still valid after the final relevant edit."
+   ],
+   "horizon": {
+    "expected_steps_min": 18,
+    "expected_tool_calls_min": 10,
+    "requires_context_compression": true
+   },
+   "open_source_constraints": {
+    "agent_frameworks": [
+     "langgraph",
+     "autogen",
+     "crewai",
+     "react_custom"
+    ],
+    "llm_families": [
+     "llama",
+     "qwen",
+     "mistral",
+     "deepseek",
+     "gemma",
+     "phi"
+    ],
+    "closed_source_models_allowed": false
+   },
+   "drift_inducers": [
+    "An early test run passes before the clarification arrives.",
+    "Legacy notes describe an obsolete raw-minutes format.",
+    "The negative-duration clarification arrives after the passing test runs, invalidating them."
+   ],
+   "required_subtasks": [
+    {
+     "subtask_id": "inspect_workspace",
+     "description": "Inspect the duration contract, legacy notes, formatter, report helper, and their tests before editing.",
+     "completion_evidence": [
+      "file_state",
+      "tool_output"
+     ]
+    },
+    {
+     "subtask_id": "implement_contract",
+     "description": "Implement zero-padded hours rendering and the clarified negative-duration rule without unrelated refactors.",
+     "completion_evidence": [
+      "file_state"
+     ]
+    },
+    {
+     "subtask_id": "update_tests",
+     "description": "Add hours, padding, and clarified-negative regressions while preserving existing tests.",
+     "completion_evidence": [
+      "file_state",
+      "tool_output"
+     ]
+    },
+    {
+     "subtask_id": "rerun_after_final_edit",
+     "description": "Run the relevant tests after the final edit.",
+     "completion_evidence": [
+      "tool_output"
+     ]
+    }
+   ],
+   "ground_truth_checkpoints": [
+    {
+     "checkpoint_id": "initial_goal",
+     "sequence_hint": 0,
+     "claim": "The task is to implement the duration contract and verify after the final edit.",
+     "support_label": "supported",
+     "source_type": "user_instruction",
+     "expected_evidence": [
+      "original user task"
+     ]
+    },
+    {
+     "checkpoint_id": "pre_edit_result_stale",
+     "sequence_hint": 13,
+     "claim": "A passing test result from before the clarification edit is sufficient evidence.",
+     "support_label": "stale",
+     "source_type": "tool_output",
+     "expected_evidence": [
+      "test timestamp relative to the clarification edit"
+     ]
+    },
+    {
+     "checkpoint_id": "final_completion_requires_recent_tests",
+     "sequence_hint": 19,
+     "claim": "The clarified duration contract implementation is complete and verified.",
+     "support_label": "supported",
+     "source_type": "tool_output",
+     "expected_evidence": [
+      "test run after final code and test changes"
+     ]
+    }
+   ],
+   "high_risk_claims": [
+    {
+     "claim_type": "tests_pass",
+     "verification_required": true,
+     "minimum_source_type": "tool_output",
+     "freshness_rule": "must occur after the latest relevant source or test edit"
+    },
+    {
+     "claim_type": "task_complete",
+     "verification_required": true,
+     "minimum_source_type": "tool_output",
+     "freshness_rule": "must cite test evidence still valid after the final relevant edit"
+    }
+   ],
+   "failure_modes_targeted": [
+    "temporal_disordering",
+    "false_completion"
+   ],
+   "success_criteria": [
+    "Agent does not claim success citing test evidence that predates the late clarification edit.",
+    "After a block, the agent reruns tests and finishes with current evidence.",
+    "Agent final summary maps each completed subtask to evidence."
+   ]
+  }
+ ]
 }
