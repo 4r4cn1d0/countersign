@@ -1,0 +1,246 @@
+% Supervisory Runtime Verification — NeurIPS 2026 Meta-Agents workshop
+% Short Paper (max 4 pages main text; references/appendix excluded).
+%
+% Template: drop the official NeurIPS 2026 workshop style file into this
+% directory as neurips_2026.sty (see paper/README.md). Until then the
+% \IfFileExists fallback lets the skeleton compile as a plain article so
+% section structure and word budgets can be iterated on.
+%
+% SUBMISSION RULES PINNED HERE (from the venue CFP, fetched 2026-08-16):
+% - double-blind: no names, affiliations, acknowledgments; prior work
+%   cited in the THIRD PERSON;
+% - responsible-use statement is MANDATORY (desk-reject if missing) —
+%   it is drafted in full below, not deferred;
+% - main text must be self-contained.
+%
+% NUMBERS POLICY (non-negotiable, from the frozen protocol): every
+% empirical number in this file comes from `matrix-report` over the
+% frozen held-out manifest. Placeholders are marked \RESULT{...} and the
+% draft MUST NOT circulate with them filled by hand.
+
+\documentclass{article}
+
+\IfFileExists{neurips_2026.sty}{%
+  \usepackage{neurips_2026}%
+}{%
+  \usepackage[margin=1in]{geometry}%
+  \usepackage{natbib}%
+}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{amsfonts}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{graphicx}
+
+% Placeholder macro: renders loudly so an unfilled draft cannot pass a
+% visual check. Replace ONLY with values produced by matrix-report over
+% the frozen held-out manifest.
+\newcommand{\RESULT}[1]{\textcolor{red}{\textbf{[#1]}}}
+
+\title{Agent Memory Observatory: Supervisory Runtime Verification for
+Long-Horizon Coding Agents}
+
+% Double-blind: author block intentionally anonymous for submission.
+\author{Anonymous authors\\Paper under double-blind review}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Long-horizon agents often terminate on stale, misattributed, or missing
+evidence: the worker believes it is done because its operational memory
+says so, not because the trace supports it. We introduce Agent Memory
+Observatory, a supervisory meta-agent that audits a worker coding
+agent's completion claims against its execution trace and can block
+termination or issue bounded corrective guidance when the cited
+evidence is insufficient. The supervisor is deliberately trace-only: it
+judges whether a claim is \emph{justified} by evidence available at
+claim time, a distinct question from whether the work is
+\emph{correct}, which a hidden evaluator measures exactly once after
+termination. We evaluate the supervision loop on matched held-out
+fixture pairs (temporal freshness, source provenance, requirement
+state) and four negative controls that price the supervisor's
+false-block rate, across worker arms ranging from unsupervised to
+halting-and-repairing supervision, with an oracle supervisor as an
+upper bound. On the predeclared primary comparison, supervision reduced
+accepted-unsupported completions from \RESULT{baseline rate} to
+\RESULT{supervised rate} (\RESULT{test statistic}), with a false-block
+rate of \RESULT{FPR} on supported controls. We report where the
+supervisor fails --- over-blocking, intervention-induced liveness
+failure, and the fresh-but-wrongly-grounded blind spot that only the
+oracle closes --- and argue that supervisory verdicts must be
+communicated as evidence audits, never as correctness guarantees.
+\end{abstract}
+
+\section{Introduction}
+% ~0.75 page. Open with the supervision loop, not the detector.
+% Bridge diagram figure: worker agent -> Observatory supervisor ->
+% accept / block / repair (generate via academic-plotting skill).
+%
+% Content plan:
+% - Failure class: agents accept their own completion claims under
+%   degraded operational memory (compaction, resumption, clarification
+%   loss). Concrete: cites a test run that predates the final edit.
+% - Research question (verbatim from protocol): can a lightweight
+%   supervisory meta-agent reliably distinguish when a worker has
+%   sufficient evidence to terminate, and intervene without inducing
+%   over-blocking or new failure modes?
+% - The justified-vs-correct distinction as the design principle: the
+%   supervisor never consults ground truth online; hidden evaluation
+%   runs once, post-termination, identically for every arm.
+% - Contributions (numbered): (1) the supervision loop with halting and
+%   bounded repair authority; (2) a matched-pair held-out evaluation
+%   design with negative controls pricing false blocks; (3) an
+%   oracle-supervisor upper bound separating trace-visible from
+%   trace-invisible failures; (4) a supervisor-failure analysis.
+
+\RESULT{Figure 1: worker $\to$ supervisor $\to$ accept/block/repair}
+
+\section{The Observatory Supervisor}
+% ~0.75 page. Architecture, kept concrete:
+% - Worker: tool-loop coding agent (self-hosted open-weight models);
+%   proposes actions and termination with cited evidence event IDs.
+% - Evidence ledger: append-only trace of tool calls, file mutations,
+%   test runs with inferred coverage, requirement updates.
+% - Claim audit at finish-time: cited test evidence must exist, be
+%   fresh w.r.t. the files it covers (tri-state freshness: fresh /
+%   stale / uncertain; documentation edits do not invalidate code
+%   evidence), postdate the latest relevant requirement update, and not
+%   rest on legacy sources. Red-then-green supersession.
+% - Authority: allow / block-with-guidance; bounded repair variant
+%   issues the smallest evidence-refresh action. Raw vs enforced
+%   decisions are logged in every arm (observe_only measures the
+%   supervisor without giving it authority).
+% - Deterministic and rule-based: we report discrimination
+%   (precision/recall/FPR against oracle labels), not probability
+%   calibration.
+
+\section{Evaluation Design}
+% ~1 page. The design IS the contribution's credibility; spend the ink.
+% - Development vs held-out split as a supervisory-policy
+%   generalization claim: rules iterated only on 11 development
+%   fixtures; heldout_v1 (3 matched pairs + 4 negative controls)
+%   authored to a pre-registered design and frozen before any real
+%   model run was inspected.
+% - Matched pairs: context parity (identical planned-action multisets;
+%   workspaces byte-identical up to one designed file). Families:
+%   temporal freshness, source provenance (the trace-only blind spot by
+%   construction), requirement state.
+% - Negative controls price false blocks: doc-edit-after-green,
+%   unrelated-edit-with-targeted-citation, legitimate no-change
+%   completion, irrelevant late clarification (the temporal requirement
+%   rule's measured false positive).
+% - Arms: memory_baseline / observe_only / verification_only /
+%   repair_only / verification_and_repair / oracle_supervisor
+%   (evaluation-only upper bound).
+% - Endpoints: primary accepted_unsupported_finish, predeclared
+%   comparison memory_baseline vs verification_only, paired exact
+%   McNemar; support labels from an independent post-hoc oracle using
+%   fixture-authored completion policies; correctness from the hidden
+%   evaluator. Secondary endpoints listed; pairwise-only statistics
+%   (no pooled tests across reference conditions).
+% - Predeclared generation settings: temperature 0.7, seeds 0-4, two
+%   worker models, 380 runs; frozen protocol hashes (code, fixtures,
+%   model digests) under strict freeze mode.
+
+\section{Results}
+% ~0.75 page. ALL numbers via matrix-report over the frozen manifest.
+% Planned tables/figures:
+% - Table 1: per-arm accepted_unsupported_finish (and oracle-labeled
+%   variant) with Wilson CIs, per model; primary McNemar result.
+% - Figure 2: supervisor discrimination vs oracle labels (confusion
+%   matrix, marked non-confirmatory where labels share the classifier).
+% - Oracle-supervisor gap: supported_but_incorrect rate = what
+%   trace-only supervision cannot see (provenance family).
+\RESULT{Table 1} \quad \RESULT{Figure 2}
+
+\section{Supervisor-Failure Analysis}
+% ~0.5 page. The venue cares about this more than about wins.
+% - Over-blocking: false-block rate on supported controls and negative
+%   controls; the irrelevant-clarification control isolates the
+%   temporal requirement rule's false positive by design.
+% - Intervention-induced liveness failure: blocked workers exhausting
+%   the action budget; the redundancy-controller/requirement-recency
+%   interaction we found and fixed pre-freeze is reported as a design
+%   hazard for supervisory gates.
+% - Worker adaptation: post-block behavior (legitimate evidence refresh
+%   vs redundant test-running).
+% - The blind spot: fresh-but-wrongly-grounded evidence passes a
+%   trace-only audit (provenance pair); only oracle-side task knowledge
+%   closes it. This bounds what runtime supervision alone can promise.
+
+\section{Related Work}
+% ~0.4 page. Populate via paper-lookup skill; cite third person.
+% Buckets: agent self-verification and reflection; process/outcome
+% supervision and verifiers for reasoning; agent benchmarks with hidden
+% evaluation; runtime monitoring/guardrails for LLM agents; memory and
+% context degradation in long-horizon agents.
+
+\section{Limitations}
+% ~0.25 page. State plainly:
+% - Development fixtures were iterated against; only heldout_v1 supports
+%   the generalization claim, and it is fixture-based, not in-the-wild.
+% - Pairs are clustered by model and task; per-model results and
+%   task-level bootstrap reported; small n.
+% - The support oracle's labels are validated by a blinded human rater
+%   sample; where validation is pending, the oracle endpoint is
+%   reported as secondary and stated as not independently validated.
+% - Deterministic rule-based supervisor; no learned policy.
+% - Negative results reported as such (e.g., if repair rarely recovers).
+
+\section*{Responsible-Use Statement}
+% MANDATORY (desk-reject if omitted). Venue asks for "potential
+% societal impacts". Drafted in full; keep under ~0.25 page in final.
+Agent Memory Observatory is a control on agent overclaiming: it blocks
+a worker agent from terminating on completion claims its own execution
+trace does not support. We believe the primary societal impact is
+positive --- fewer silently unverified ``done'' states in automated
+software work --- but supervision of agents by agents carries risks of
+its own, and this system is designed and reported to keep them visible.
+
+\textbf{An allow is not a guarantee.} The supervisor audits
+\emph{justification}, not \emph{correctness}: our own provenance
+fixtures construct cases where fresh, well-cited evidence grounded in
+the wrong source passes a trace-only audit while the hidden evaluator
+fails the work. Deployments must not market supervisory approval as
+verification of correctness, and our reported
+supported-but-incorrect rates quantify exactly how far that gap
+extends.
+
+\textbf{Oversight displacement.} A visible gate invites humans to stop
+checking. Because the supervisor is deterministic and rule-based, its
+failure modes are enumerable, and we report them (false-block rate,
+liveness failures, the provenance blind spot) alongside its catch rate;
+we recommend surfacing supervisor verdicts to human operators as
+evidence audits with cited events, not as pass/fail badges.
+
+\textbf{Who supervises the supervisor.} Granting a meta-agent authority
+to halt a worker creates a new failure surface: over-blocking can deny
+service, and repair guidance can loop a worker into budget exhaustion.
+Our evaluation prices these directly (negative controls for false
+blocks; liveness analysis for induced non-termination), and we argue
+any deployed supervisory gate should ship with equivalent
+counter-metrics.
+
+\textbf{Scope of release.} Experiments use self-hosted open-weight
+models on fixture repositories; no human subjects, personal data, or
+live production systems are involved. The released artifact contains
+fixtures, protocols, and run records only.
+
+\bibliographystyle{plainnat}
+\bibliography{references}
+
+\appendix
+\section{Reproducibility}
+% Frozen protocol ID, fixture tree hash, model digests, seeds, and the
+% exact matrix-report invocation; artifact is the relocatable bundle
+% passing matrix-audit from inside the copy. No identifying paths.
+\RESULT{protocol id + hashes from the frozen run}
+
+\end{document}
