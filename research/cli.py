@@ -395,6 +395,14 @@ def main(argv: list[str] | None = None) -> int:
     )
     validation_agreement_parser.add_argument("--rater1", required=True)
     validation_agreement_parser.add_argument("--rater2")
+    validation_agreement_parser.add_argument(
+        "--proposal-rater1",
+        help="Filled per-proposal support CSV (proposal_labels_rater1.csv).",
+    )
+    validation_agreement_parser.add_argument(
+        "--proposal-rater2",
+        help="Second rater's overlap proposal CSV.",
+    )
     validation_agreement_parser.add_argument("--out")
     validation_agreement_parser.add_argument(
         "--format",
@@ -663,6 +671,12 @@ def _validation_agreement_command(args: argparse.Namespace) -> None:
         Path(args.sample_manifest),
         Path(args.rater1),
         Path(args.rater2) if args.rater2 else None,
+        proposal_rater1_csv=(
+            Path(args.proposal_rater1) if args.proposal_rater1 else None
+        ),
+        proposal_rater2_csv=(
+            Path(args.proposal_rater2) if args.proposal_rater2 else None
+        ),
     )
     if args.out:
         Path(args.out).write_text(

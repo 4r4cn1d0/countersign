@@ -211,3 +211,87 @@ def _fill_labels(csv_path: Path, label_fn) -> None:
             labels = label_fn(row["run_id"])
             row.update(labels)
             writer.writerow(row)
+
+
+def test_proposal_labels_anchor_oracle_and_verifier(tmp_path: Path):
+    """Level-up item 4: one human pass over per-proposal support labels
+    anchors BOTH automatic signals (oracle label + raw verifier
+    decision). The rater CSV must stay blind (no reference labels)."""
+    manifest_path = _run_matrix(tmp_path)
+    out_dir = tmp_path / "human_validation"
+    written = write_validation_sample(
+        manifest_path,
+        out_dir,
+        fraction=1.0,
+        overlap_fraction=1.0,
+        seed=3,
+    )
+    for key in ("proposal_labels_rater1", "proposal_labels_rater2"):
+        assert Path(written[key]).is_file()
+
+    sample = json.loads(
+        Path(written["sample_manifest"]).read_text(encoding="utf-8")
+    )
+    reference = {}
+    for record in sample["sampled"]:
+        assert "finish_proposals" in record
+        for proposal in record["finish_proposals"]:
+            assert proposal["reference"]["oracle_label"] in {
+                "supported",
+                "unsupported",
+                "uncertain",
+                None,
+            }
+            reference[
+                (record["run_id"], proposal["proposal_event_id"])
+            ] = proposal["reference"]
+    assert reference, "sampled runs must contain finish proposals"
+
+    with Path(written["proposal_labels_rater1"]).open(
+        encoding="utf-8", newline=""
+    ) as handle:
+        rows = list(csv.DictReader(handle))
+    assert rows
+    # Blinding: the rater CSV never carries the answers.
+    for row in rows:
+        assert "oracle_label" not in row
+        assert "verifier_raw_decision" not in row
+        assert row["proposal_support"] == ""
+
+    # Fill rater 1 with the oracle's own labels -> perfect human-vs-
+    # oracle agreement; human-vs-verifier then measures the verifier
+    # against those same human labels.
+    def fill(csv_path: Path) -> None:
+        with csv_path.open(encoding="utf-8", newline="") as handle:
+            filled = list(csv.DictReader(handle))
+        for row in filled:
+            key = (row["run_id"], row["proposal_event_id"])
+            row["proposal_support"] = (
+                reference[key]["oracle_label"] or "uncertain"
+            )
+        with csv_path.open("w", encoding="utf-8", newline="") as handle:
+            writer = csv.DictWriter(
+                handle, fieldnames=list(filled[0].keys())
+            )
+            writer.writeheader()
+            writer.writerows(filled)
+
+    fill(Path(written["proposal_labels_rater1"]))
+    fill(Path(written["proposal_labels_rater2"]))
+
+    report = compute_validation_agreement(
+        Path(written["sample_manifest"]),
+        Path(written["labels_rater1"]),
+        Path(written["labels_rater2"]),
+        proposal_rater1_csv=Path(written["proposal_labels_rater1"]),
+        proposal_rater2_csv=Path(written["proposal_labels_rater2"]),
+    )
+    proposal_agreement = report["proposal_agreement"]
+    assert proposal_agreement is not None
+    assert proposal_agreement["labeled_proposals"] == len(reference)
+    assert proposal_agreement["unlabeled_proposals"] == 0
+    assert proposal_agreement["human_vs_oracle"]["agreement"] == 1.0
+    # Verifier comparison excludes human-uncertain rows by design.
+    comparable = proposal_agreement["human_vs_verifier_raw"]["compared"]
+    assert comparable <= proposal_agreement["labeled_proposals"]
+    assert proposal_agreement["inter_rater"]["agreement"] == 1.0
