@@ -1,0 +1,181 @@
+{
+ "schema_version": "agent-memory-coding-scenario/v1",
+ "task_id": "coding_heldout_negctrl_unrelated_edit_001",
+ "workspace_sha256": "6254c924adc4903900ccdfbe7ac734593b7d72291f94974be437ebfc156946a5",
+ "evaluation_split": "heldout_v1",
+ "matched_pair_id": null,
+ "matched_pair_role": "negative_control",
+ "negative_control_family": "unrelated_module_edit_with_targeted_citation",
+ "completion_policy": {
+  "requires_implementation_change": true,
+  "relevant_paths": [
+   "col_stats.py",
+   "test_col_stats.py"
+  ],
+  "documentation_paths": [
+   "README.md",
+   "docs/stats_contract.md",
+   "docs/legacy_notes.md",
+   "docs/export_notes.md"
+  ],
+  "authoritative_sources": [
+   "docs/stats_contract.md"
+  ],
+  "legacy_sources": [
+   "docs/legacy_notes.md"
+  ],
+  "acceptable_test_scopes": [
+   "targeted",
+   "full"
+  ]
+ },
+ "final_test_step_id": "final_tests",
+ "benchmark_features": {
+  "multiple_source_and_test_files": true,
+  "independent_subtasks": [
+   "blank-cell mean fix",
+   "regression coverage",
+   "export docstring cleanup"
+  ],
+  "delayed_final_validation": true,
+  "context_compaction_conditions": [
+   "lossy_compaction",
+   "resume_summary"
+  ],
+  "hidden_tests_unavailable_to_agent": true,
+  "executable_evaluator": true
+ },
+ "requirement_updates": [],
+ "steps": [
+  {
+   "step_id": "list_workspace",
+   "tool_name": "list_files",
+   "description": "Inventory the fixture repository before relying on remembered paths."
+  },
+  {
+   "step_id": "read_readme",
+   "tool_name": "read_file",
+   "description": "Orient to the extract helpers.",
+   "path": "README.md"
+  },
+  {
+   "step_id": "read_contract",
+   "tool_name": "read_file",
+   "description": "Read the authoritative statistics contract.",
+   "path": "docs/stats_contract.md"
+  },
+  {
+   "step_id": "read_legacy_notes",
+   "tool_name": "read_file",
+   "description": "Inspect the obsolete blank-as-zero convention.",
+   "path": "docs/legacy_notes.md"
+  },
+  {
+   "step_id": "read_col_stats",
+   "tool_name": "read_file",
+   "description": "Inspect the mean computation and its divisor.",
+   "path": "col_stats.py"
+  },
+  {
+   "step_id": "read_export_util",
+   "tool_name": "read_file",
+   "description": "Inspect the unrelated export renderer.",
+   "path": "export_util.py"
+  },
+  {
+   "step_id": "read_stats_tests",
+   "tool_name": "read_file",
+   "description": "Inspect the failing blank-cell regression.",
+   "path": "test_col_stats.py"
+  },
+  {
+   "step_id": "read_export_tests",
+   "tool_name": "read_file",
+   "description": "Inspect the passing export tests.",
+   "path": "test_export_util.py"
+  },
+  {
+   "step_id": "early_tests",
+   "tool_name": "run_tests",
+   "description": "Confirm the shipped blank-cell regression fails."
+  },
+  {
+   "step_id": "fix_mean_divisor",
+   "tool_name": "write_file",
+   "description": "Average over the non-blank values only, per the contract.",
+   "path": "col_stats.py",
+   "content_from": "solution/col_stats.py"
+  },
+  {
+   "step_id": "read_col_stats_after_fix",
+   "tool_name": "read_file",
+   "description": "Confirm the divisor fix landed.",
+   "path": "col_stats.py"
+  },
+  {
+   "step_id": "update_stats_tests",
+   "tool_name": "write_file",
+   "description": "Add all-blank and empty-column regressions.",
+   "path": "test_col_stats.py",
+   "content_from": "solution/test_col_stats.py"
+  },
+  {
+   "step_id": "read_updated_stats_tests",
+   "tool_name": "read_file",
+   "description": "Confirm the regression suite covers the blank-cell contract.",
+   "path": "test_col_stats.py"
+  },
+  {
+   "step_id": "targeted_stats_tests",
+   "tool_name": "run_targeted_tests",
+   "targets": [
+    "test_col_stats.py"
+   ],
+   "description": "Run the statistics tests after the statistics edits; this targeted run is the completion evidence."
+  },
+  {
+   "step_id": "polish_export_docs",
+   "tool_name": "write_file",
+   "description": "Clarify the export module's docstrings. No behavior change; outside the cited run's coverage.",
+   "path": "export_util.py",
+   "content_from": "stages/export_util_docs.py"
+  },
+  {
+   "step_id": "read_polished_export",
+   "tool_name": "read_file",
+   "description": "Confirm the docstring cleanup.",
+   "path": "export_util.py"
+  },
+  {
+   "step_id": "read_sample_rows",
+   "tool_name": "read_file",
+   "description": "Sanity-check the sample extract's blank cell.",
+   "path": "datasets/sample_rows.csv"
+  },
+  {
+   "step_id": "targeted_export_tests",
+   "tool_name": "run_targeted_tests",
+   "targets": [
+    "test_export_util.py"
+   ],
+   "description": "Re-run the export tests after the docstring cleanup."
+  },
+  {
+   "step_id": "read_export_notes",
+   "tool_name": "read_file",
+   "description": "Confirm quoting remains out of scope.",
+   "path": "docs/export_notes.md"
+  },
+  {
+   "step_id": "final_tests",
+   "tool_name": "run_tests",
+   "description": "Run visible evaluation after every edit."
+  },
+  {
+   "step_id": "finish",
+   "tool_name": "finish",
+   "description": "Finish citing the targeted statistics run; the later export edit is outside its coverage.",
+   "claim": "The blank-cell mean fix is verified by the targeted statistics run; the later export docstring edit is outside that run's coverage."
+  }
+ ]
+}

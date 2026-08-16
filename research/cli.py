@@ -155,8 +155,19 @@ def main(argv: list[str] | None = None) -> int:
     matrix_parser.add_argument("--task", action="append", dest="tasks")
     matrix_parser.add_argument(
         "--tier",
-        choices=["easy", "medium"],
+        choices=["easy", "medium", "heldout"],
         help="Run all coding tasks in this tier (combines with --task).",
+    )
+    matrix_parser.add_argument(
+        "--strict-freeze",
+        action="store_true",
+        help=(
+            "Refuse to start unless the frozen protocol is airtight: "
+            "existing git revision, clean working tree, resolved "
+            "verifier-policy and scenario-tree hashes, stamped controller "
+            "policy version, and (for real runtimes) every selected "
+            "model's digest. Required for the held-out final run."
+        ),
     )
     matrix_parser.add_argument(
         "--model",
@@ -531,6 +542,7 @@ def _matrix_command(args: argparse.Namespace) -> None:
         probe_max_tokens=args.probe_max_tokens,
         memory_repair=args.memory_repair,
         interventions=args.interventions,
+        strict_freeze=args.strict_freeze,
     )
     _emit(manifest, args.format, title="Model Matrix")
     if args.fail_under_minimum and not manifest["meets_minimum_successful_models"]:

@@ -316,6 +316,90 @@ def build_experiment_protocol(
     }
 
 
+def strict_freeze_violations(
+    protocol: dict,
+    *,
+    runtime: str,
+) -> list[str]:
+    """Enumerate why a protocol is NOT fit to be a frozen final-run record.
+
+    Strict mode is the roadmap item-10 contract for the held-out final
+    run: the protocol must pin an existing commit with a clean working
+    tree, every verifier-policy hash and the scenario-tree hash must have
+    resolved, the controller policy version must be stamped, and — for
+    real model runtimes — every selected model's digest must have been
+    found. Anything less and the "frozen" protocol cannot actually
+    reproduce the code and models it claims to freeze.
+    """
+
+    violations: list[str] = []
+    integrity = protocol.get("integrity", {})
+
+    if not protocol.get("source_revision"):
+        violations.append(
+            "no git revision: the protocol cannot pin the code it froze"
+        )
+
+    tree_status = integrity.get("clean_working_tree") or {}
+    if not tree_status.get("checked"):
+        violations.append(
+            "working-tree cleanliness could not be checked (not a git "
+            "checkout, or git unavailable)"
+        )
+    elif not tree_status.get("clean"):
+        dirty = tree_status.get("dirty_paths", [])
+        shown = ", ".join(dirty[:5]) + (
+            f", … ({len(dirty) - 5} more)" if len(dirty) > 5 else ""
+        )
+        violations.append(
+            "working tree is dirty — the pinned revision does not match "
+            f"the code that would run: {shown}"
+        )
+
+    for path, digest in sorted(
+        (integrity.get("verifier_policy_hashes") or {}).items()
+    ):
+        if not digest:
+            violations.append(
+                f"verifier policy file did not resolve to a hash: {path}"
+            )
+
+    if not integrity.get("scenario_tree_sha256"):
+        violations.append(
+            "scenario tree hash missing: the fixture set is not pinned"
+        )
+
+    if not integrity.get("controller_policy_version"):
+        violations.append("controller_policy_version is not stamped")
+
+    if "ollama" in (runtime or ""):
+        model_digests = integrity.get("model_digests") or {}
+        if not model_digests:
+            violations.append(
+                "real-model runtime with no model digests recorded"
+            )
+        for name, digest in sorted(model_digests.items()):
+            if not digest:
+                violations.append(
+                    f"model digest not found for {name!r} — the exact "
+                    "weights are not pinned"
+                )
+
+    return violations
+
+
+def assert_strict_freeze(protocol: dict, *, runtime: str) -> None:
+    """Refuse to start a strict-freeze run unless the protocol is airtight."""
+
+    violations = strict_freeze_violations(protocol, runtime=runtime)
+    if violations:
+        raise RuntimeError(
+            "strict freeze mode refused to start "
+            f"({len(violations)} violation(s)):\n- "
+            + "\n- ".join(violations)
+        )
+
+
 def write_frozen_protocol(path: Path, protocol: dict) -> None:
     """Write a protocol once and reject incompatible reuse of an output directory."""
 

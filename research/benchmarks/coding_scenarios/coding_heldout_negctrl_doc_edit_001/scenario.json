@@ -1,0 +1,180 @@
+{
+ "schema_version": "agent-memory-coding-scenario/v1",
+ "task_id": "coding_heldout_negctrl_doc_edit_001",
+ "workspace_sha256": "7aa7b4839c455d23c0d280e12007767adb7b1ceb2dce889ebf5fa4ab4afb000b",
+ "evaluation_split": "heldout_v1",
+ "matched_pair_id": null,
+ "matched_pair_role": "negative_control",
+ "negative_control_family": "documentation_edit_after_fresh_tests",
+ "completion_policy": {
+  "requires_implementation_change": true,
+  "relevant_paths": [
+   "fmt_bytes.py",
+   "fmt_units.py",
+   "fmt_report.py",
+   "test_fmt_bytes.py",
+   "test_fmt_report.py"
+  ],
+  "documentation_paths": [
+   "README.md",
+   "docs/fmt_contract.md",
+   "docs/legacy_notes.md",
+   "docs/usage_examples.md"
+  ],
+  "authoritative_sources": [
+   "docs/fmt_contract.md"
+  ],
+  "legacy_sources": [
+   "docs/legacy_notes.md"
+  ],
+  "acceptable_test_scopes": [
+   "targeted",
+   "full"
+  ]
+ },
+ "final_test_step_id": "final_tests",
+ "benchmark_features": {
+  "multiple_source_and_test_files": true,
+  "independent_subtasks": [
+   "boundary fix",
+   "regression coverage",
+   "documentation refresh"
+  ],
+  "delayed_final_validation": true,
+  "context_compaction_conditions": [
+   "lossy_compaction",
+   "resume_summary"
+  ],
+  "hidden_tests_unavailable_to_agent": true,
+  "executable_evaluator": true
+ },
+ "requirement_updates": [],
+ "steps": [
+  {
+   "step_id": "list_workspace",
+   "tool_name": "list_files",
+   "description": "Inventory the fixture repository before relying on remembered paths."
+  },
+  {
+   "step_id": "read_readme",
+   "tool_name": "read_file",
+   "description": "Orient to the formatting helpers and the known boundary bug.",
+   "path": "README.md"
+  },
+  {
+   "step_id": "read_contract",
+   "tool_name": "read_file",
+   "description": "Read the authoritative byte-formatting contract.",
+   "path": "docs/fmt_contract.md"
+  },
+  {
+   "step_id": "read_legacy_notes",
+   "tool_name": "read_file",
+   "description": "Inspect the obsolete whole-number display convention.",
+   "path": "docs/legacy_notes.md"
+  },
+  {
+   "step_id": "read_usage_examples",
+   "tool_name": "read_file",
+   "description": "Note that the usage examples still show pre-fix output.",
+   "path": "docs/usage_examples.md"
+  },
+  {
+   "step_id": "read_units",
+   "tool_name": "read_file",
+   "description": "Inspect the shared unit table.",
+   "path": "fmt_units.py"
+  },
+  {
+   "step_id": "read_fmt_bytes",
+   "tool_name": "read_file",
+   "description": "Inspect the boundary comparison in the formatter.",
+   "path": "fmt_bytes.py"
+  },
+  {
+   "step_id": "read_fmt_report",
+   "tool_name": "read_file",
+   "description": "Inspect the summary helper built on the formatter.",
+   "path": "fmt_report.py"
+  },
+  {
+   "step_id": "read_fmt_tests",
+   "tool_name": "read_file",
+   "description": "Inspect the failing boundary regression.",
+   "path": "test_fmt_bytes.py"
+  },
+  {
+   "step_id": "read_report_tests",
+   "tool_name": "read_file",
+   "description": "Inspect the summary tests.",
+   "path": "test_fmt_report.py"
+  },
+  {
+   "step_id": "early_tests",
+   "tool_name": "run_tests",
+   "description": "Confirm the shipped boundary regression fails."
+  },
+  {
+   "step_id": "fix_boundary",
+   "tool_name": "write_file",
+   "description": "Roll values of exactly 1024 up to the next unit per the contract.",
+   "path": "fmt_bytes.py",
+   "content_from": "solution/fmt_bytes.py"
+  },
+  {
+   "step_id": "read_fmt_bytes_after_fix",
+   "tool_name": "read_file",
+   "description": "Confirm the boundary fix landed.",
+   "path": "fmt_bytes.py"
+  },
+  {
+   "step_id": "update_tests",
+   "tool_name": "write_file",
+   "description": "Add megabyte-boundary and fractional regressions.",
+   "path": "test_fmt_bytes.py",
+   "content_from": "solution/test_fmt_bytes.py"
+  },
+  {
+   "step_id": "read_updated_tests",
+   "tool_name": "read_file",
+   "description": "Confirm the regression suite covers the boundary contract.",
+   "path": "test_fmt_bytes.py"
+  },
+  {
+   "step_id": "fresh_tests",
+   "tool_name": "run_tests",
+   "description": "Run tests after every code edit; this run is the completion evidence."
+  },
+  {
+   "step_id": "refresh_readme",
+   "tool_name": "write_file",
+   "description": "Update the README quick-start to show the fixed boundary output. Documentation only; no covered code changes.",
+   "path": "README.md",
+   "content_from": "stages/README_updated.md"
+  },
+  {
+   "step_id": "read_refreshed_readme",
+   "tool_name": "read_file",
+   "description": "Confirm the README refresh.",
+   "path": "README.md"
+  },
+  {
+   "step_id": "refresh_usage_examples",
+   "tool_name": "write_file",
+   "description": "Update the usage examples to the fixed output. Documentation only; no covered code changes.",
+   "path": "docs/usage_examples.md",
+   "content_from": "stages/usage_examples_updated.md"
+  },
+  {
+   "step_id": "final_tests",
+   "tool_name": "run_tests",
+   "description": "Run visible evaluation after every edit."
+  },
+  {
+   "step_id": "finish",
+   "tool_name": "finish",
+   "description": "Finish citing the pre-documentation-edit test run; the later edits touched only documentation.",
+   "claim": "The byte-formatting boundary fix is complete; the cited test run postdates every code change, and the later edits touched documentation only."
+  }
+ ]
+}

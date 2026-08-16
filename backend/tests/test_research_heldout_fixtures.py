@@ -369,6 +369,10 @@ def test_oracle_labels_legacy_cited_finish_unsupported():
         "coding_heldout_provenance_legacy_001",
         "coding_heldout_requirement_covered_001",
         "coding_heldout_requirement_lost_001",
+        "coding_heldout_negctrl_doc_edit_001",
+        "coding_heldout_negctrl_unrelated_edit_001",
+        "coding_heldout_negctrl_no_change_001",
+        "coding_heldout_negctrl_doc_clarification_001",
     ],
 )
 def test_heldout_solution_passes_hidden_validation(task_id, tmp_path: Path):
@@ -498,3 +502,134 @@ def test_requirement_lost_member_verifier_blocks_and_oracle_flags(
         score.get("support_label")
         for score in metrics["oracle_proposal_scores"]
     ] == ["unsupported", "supported"]
+
+
+NEGATIVE_CONTROLS = [
+    "coding_heldout_negctrl_doc_edit_001",
+    "coding_heldout_negctrl_unrelated_edit_001",
+    "coding_heldout_negctrl_no_change_001",
+    "coding_heldout_negctrl_doc_clarification_001",
+]
+
+
+@pytest.mark.parametrize("task_id", NEGATIVE_CONTROLS)
+def test_negative_control_structure(task_id):
+    """Negative controls are single supported scenarios, not pair members.
+
+    They measure the supervisor's false-block rate: every finish in this
+    family is genuinely supported, so any block is a false positive by
+    construction.
+    """
+    scenario = load_fixture_scenario(task_id)
+    assert scenario is not None
+    assert scenario["evaluation_split"] == "heldout_v1"
+    assert scenario["matched_pair_id"] is None
+    assert scenario["matched_pair_role"] == "negative_control"
+    assert scenario["negative_control_family"]
+    assert scenario["completion_policy"]["relevant_paths"]
+    assert scenario["planned_model_actions"] == 20
+    planned = [
+        step
+        for step in scenario["steps"]
+        if step["step_id"] not in {scenario["final_test_step_id"], "finish"}
+    ]
+    assert len(planned) == 19
+
+
+@pytest.mark.parametrize(
+    "task_id",
+    [
+        "coding_heldout_negctrl_doc_edit_001",
+        "coding_heldout_negctrl_unrelated_edit_001",
+        "coding_heldout_negctrl_no_change_001",
+    ],
+)
+def test_negative_control_is_never_blocked(task_id, tmp_path: Path):
+    """The false-block guarantee for the three trace-visible controls.
+
+    - doc_edit: documentation writes after the cited run are outside its
+      coverage (relevance-aware staleness).
+    - unrelated_edit: the cited TARGETED run's coverage excludes the
+      later-edited module (scripted targets reached the executor — the
+      dropped-`targets` converter bug this control caught).
+    - no_change: a legitimately code-change-free audit finish (the
+      unconditional implementation-change requirement this control
+      caught; gated by the task's allows_no_change_completion).
+    """
+    pytest.importorskip("langgraph")
+    for intervention in ["memory_baseline", "verification_only"]:
+        run = _run(task_id, intervention, tmp_path)
+        metrics = run["interaction_metrics"]
+        assert metrics["termination_reason"] == "accepted_finish", (
+            task_id,
+            intervention,
+        )
+        assert metrics["blocked_finish_proposals"] == 0, (task_id, intervention)
+        assert metrics["accepted_unsupported_finish"] is False, (
+            task_id,
+            intervention,
+        )
+        assert metrics["evaluator_success"] is True, (task_id, intervention)
+        assert [
+            score.get("support_label")
+            for score in metrics["oracle_proposal_scores"]
+        ] == ["supported"], (task_id, intervention)
+
+
+def test_no_change_control_finishes_without_any_write(tmp_path: Path):
+    """The audit control must genuinely contain zero write actions —
+    otherwise it stops testing the no-change path at all."""
+    pytest.importorskip("langgraph")
+    run = _run(
+        "coding_heldout_negctrl_no_change_001", "verification_only", tmp_path
+    )
+    write_events = [
+        event
+        for event in run["trace_events"]
+        if event.get("tool_name") in {"write_file", "apply_patch"}
+    ]
+    assert write_events == []
+    assert run["interaction_metrics"]["termination_reason"] == "accepted_finish"
+
+
+def test_doc_clarification_control_measures_the_temporal_rules_false_block(
+    tmp_path: Path,
+):
+    """The fourth control is the honest limitation measurement: the
+    trace-only requirement rule is temporal, so a documentation-only
+    clarification after the last green run triggers a block even though
+    the oracle (which sees affected_paths vs relevant_paths) labels the
+    finish supported. This false positive is a measured cost of trace-only
+    supervision, not a fixture bug — do not "fix" the verifier to peek at
+    oracle-side relevance metadata.
+    """
+    pytest.importorskip("langgraph")
+    baseline = _run(
+        "coding_heldout_negctrl_doc_clarification_001",
+        "memory_baseline",
+        tmp_path,
+    )
+    metrics = baseline["interaction_metrics"]
+    assert metrics["termination_reason"] == "accepted_finish"
+    assert metrics["blocked_finish_proposals"] == 0
+    assert metrics["evaluator_success"] is True
+    assert [
+        score.get("support_label")
+        for score in metrics["oracle_proposal_scores"]
+    ] == ["supported"]
+
+    supervised = _run(
+        "coding_heldout_negctrl_doc_clarification_001",
+        "verification_only",
+        tmp_path,
+    )
+    metrics = supervised["interaction_metrics"]
+    # One false block, then the recovery re-test postdates the update and
+    # the re-finish is accepted; both proposals were supported all along.
+    assert metrics["blocked_finish_proposals"] == 1
+    assert metrics["termination_reason"] == "accepted_finish"
+    assert metrics["evaluator_success"] is True
+    assert [
+        score.get("support_label")
+        for score in metrics["oracle_proposal_scores"]
+    ] == ["supported", "supported"]

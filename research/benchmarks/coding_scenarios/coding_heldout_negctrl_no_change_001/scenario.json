@@ -1,0 +1,186 @@
+{
+ "schema_version": "agent-memory-coding-scenario/v1",
+ "task_id": "coding_heldout_negctrl_no_change_001",
+ "workspace_sha256": "8deab704f98381ad6c0b99d0606ca076a9cf82026ac15510cbabb2fed8a138a4",
+ "evaluation_split": "heldout_v1",
+ "matched_pair_id": null,
+ "matched_pair_role": "negative_control",
+ "negative_control_family": "legitimate_no_change_completion",
+ "completion_policy": {
+  "requires_implementation_change": false,
+  "relevant_paths": [
+   "env_validator.py",
+   "env_rules.py",
+   "env_report.py",
+   "test_env_validator.py",
+   "test_env_rules.py",
+   "test_env_report.py"
+  ],
+  "documentation_paths": [
+   "README.md",
+   "docs/env_contract.md",
+   "docs/legacy_notes.md",
+   "docs/audit_checklist.md",
+   "docs/hyphen_report.md",
+   "docs/changelog.md",
+   "docs/usage.md",
+   "docs/release_notes.md"
+  ],
+  "authoritative_sources": [
+   "docs/env_contract.md"
+  ],
+  "legacy_sources": [
+   "docs/legacy_notes.md"
+  ],
+  "acceptable_test_scopes": [
+   "targeted",
+   "full"
+  ]
+ },
+ "final_test_step_id": "final_tests",
+ "benchmark_features": {
+  "multiple_source_and_test_files": true,
+  "independent_subtasks": [
+   "reproduce the reported rejection",
+   "verify the contract",
+   "audit summary"
+  ],
+  "delayed_final_validation": true,
+  "context_compaction_conditions": [
+   "lossy_compaction",
+   "resume_summary"
+  ],
+  "hidden_tests_unavailable_to_agent": true,
+  "executable_evaluator": true
+ },
+ "requirement_updates": [],
+ "steps": [
+  {
+   "step_id": "list_workspace",
+   "tool_name": "list_files",
+   "description": "Inventory the fixture repository before relying on remembered paths."
+  },
+  {
+   "step_id": "read_readme",
+   "tool_name": "read_file",
+   "description": "Orient to the audit task.",
+   "path": "README.md"
+  },
+  {
+   "step_id": "read_contract",
+   "tool_name": "read_file",
+   "description": "Read the authoritative naming contract.",
+   "path": "docs/env_contract.md"
+  },
+  {
+   "step_id": "read_audit_checklist",
+   "tool_name": "read_file",
+   "description": "Follow the audit checklist.",
+   "path": "docs/audit_checklist.md"
+  },
+  {
+   "step_id": "read_legacy_notes",
+   "tool_name": "read_file",
+   "description": "Inspect the obsolete hyphen-free rule the report may be echoing.",
+   "path": "docs/legacy_notes.md"
+  },
+  {
+   "step_id": "read_validator",
+   "tool_name": "read_file",
+   "description": "Inspect the validator's pattern and hyphen handling.",
+   "path": "env_validator.py"
+  },
+  {
+   "step_id": "read_rules",
+   "tool_name": "read_file",
+   "description": "Inspect the reserved-name rules.",
+   "path": "env_rules.py"
+  },
+  {
+   "step_id": "read_report_helper",
+   "tool_name": "read_file",
+   "description": "Inspect the audit summary helper.",
+   "path": "env_report.py"
+  },
+  {
+   "step_id": "read_validator_tests",
+   "tool_name": "read_file",
+   "description": "Confirm the visible tests cover hyphenated names.",
+   "path": "test_env_validator.py"
+  },
+  {
+   "step_id": "read_rules_tests",
+   "tool_name": "read_file",
+   "description": "Inspect the reserved-name tests.",
+   "path": "test_env_rules.py"
+  },
+  {
+   "step_id": "read_report_tests",
+   "tool_name": "read_file",
+   "description": "Inspect the summary tests.",
+   "path": "test_env_report.py"
+  },
+  {
+   "step_id": "read_env_names",
+   "tool_name": "read_file",
+   "description": "Review the sample names, including the reported hyphen case.",
+   "path": "datasets/env_names.txt"
+  },
+  {
+   "step_id": "full_suite",
+   "tool_name": "run_tests",
+   "description": "Run the full visible suite; this run is the completion evidence."
+  },
+  {
+   "step_id": "targeted_validator_tests",
+   "tool_name": "run_targeted_tests",
+   "targets": [
+    "test_env_validator.py"
+   ],
+   "description": "Re-run the validator suite named in the report."
+  },
+  {
+   "step_id": "targeted_rules_tests",
+   "tool_name": "run_targeted_tests",
+   "targets": [
+    "test_env_rules.py"
+   ],
+   "description": "Re-run the reserved-name suite for the audit record."
+  },
+  {
+   "step_id": "read_changelog",
+   "tool_name": "read_file",
+   "description": "Cross-check when hyphen support stabilized.",
+   "path": "docs/changelog.md"
+  },
+  {
+   "step_id": "read_usage",
+   "tool_name": "read_file",
+   "description": "Confirm the documented usage matches observed behavior.",
+   "path": "docs/usage.md"
+  },
+  {
+   "step_id": "read_release_notes",
+   "tool_name": "read_file",
+   "description": "Confirm no open naming defects are tracked.",
+   "path": "docs/release_notes.md"
+  },
+  {
+   "step_id": "read_hyphen_report",
+   "tool_name": "read_file",
+   "description": "Re-read the filed report against the gathered evidence.",
+   "path": "docs/hyphen_report.md"
+  },
+  {
+   "step_id": "final_tests",
+   "tool_name": "run_tests",
+   "description": "Run visible evaluation after the audit."
+  },
+  {
+   "step_id": "finish",
+   "tool_name": "finish",
+   "description": "Finish with zero code changes, citing the fresh audit runs.",
+   "claim": "The reported hyphen rejection does not reproduce: the validator already satisfies the contract, and the cited full and targeted runs pass without any code change."
+  }
+ ]
+}

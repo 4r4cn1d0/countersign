@@ -1137,3 +1137,149 @@ def test_cli_matrix_list_outputs_configured_models():
 
     assert "qwen2.5-coder:7b" in result.stdout
     assert "deepseek-r1:8b" in result.stdout
+
+
+def test_strict_freeze_violations_enumerates_each_defect():
+    from research.runner.experiment_protocol import strict_freeze_violations
+
+    broken = {
+        "source_revision": None,
+        "integrity": {
+            "clean_working_tree": {
+                "checked": True,
+                "clean": False,
+                "dirty_paths": ["research/runner/claims.py"],
+            },
+            "verifier_policy_hashes": {
+                "research/runner/verification.py": "abc",
+                "research/runner/benchmark_runner.py": None,
+            },
+            "scenario_tree_sha256": None,
+            "controller_policy_version": None,
+            "model_digests": {"qwen2.5-coder:14b": None},
+        },
+    }
+    violations = strict_freeze_violations(broken, runtime="ollama")
+    text = "\n".join(violations)
+    assert "no git revision" in text
+    assert "working tree is dirty" in text
+    assert "research/runner/claims.py" in text
+    assert "benchmark_runner.py" in text
+    assert "scenario tree hash missing" in text
+    assert "controller_policy_version" in text
+    assert "qwen2.5-coder:14b" in text
+
+    clean = {
+        "source_revision": "deadbeef",
+        "integrity": {
+            "clean_working_tree": {
+                "checked": True,
+                "clean": True,
+                "dirty_paths": [],
+            },
+            "verifier_policy_hashes": {
+                "research/runner/verification.py": "abc",
+            },
+            "scenario_tree_sha256": "def",
+            "controller_policy_version": "v4-oracle-arm-flag",
+            "model_digests": {"qwen2.5-coder:14b": "sha256:123"},
+        },
+    }
+    assert strict_freeze_violations(clean, runtime="ollama") == []
+    # A deterministic runtime has no weights to pin, so absent digests
+    # are not a violation there.
+    clean["integrity"]["model_digests"] = {}
+    assert strict_freeze_violations(clean, runtime="deterministic") == []
+    assert strict_freeze_violations(clean, runtime="ollama") != []
+
+
+def test_model_matrix_strict_freeze_refuses_dirty_tree(
+    tmp_path: Path, monkeypatch
+):
+    """Strict mode must refuse BEFORE writing a protocol or running
+    anything — a frozen bundle whose own integrity block says 'dirty
+    tree' is not a freeze record at all."""
+    import research.runner.experiment_protocol as protocol_module
+
+    monkeypatch.setattr(
+        protocol_module,
+        "clean_working_tree_status",
+        lambda: {
+            "checked": True,
+            "clean": False,
+            "dirty_paths": ["research/runner/claims.py"],
+        },
+    )
+    matrix_path = tmp_path / "matrix.json"
+    matrix_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "agent-memory-model-matrix/v0.1",
+                "runtime": "deterministic",
+                "minimum_successful_models": 1,
+                "models": [
+                    {
+                        "model_family": "qwen",
+                        "model_name": "qwen2.5-coder:7b",
+                        "display_name": "Qwen deterministic test",
+                        "pull_command": "ollama pull qwen2.5-coder:7b",
+                        "enabled": True,
+                    }
+                ],
+            }
+        )
+    )
+    out_dir = tmp_path / "out"
+    with pytest.raises(RuntimeError, match="strict freeze mode refused"):
+        run_model_matrix(
+            out_dir,
+            matrix_path=matrix_path,
+            task_ids=["coding_stale_tests_001"],
+            variants=["baseline", "verified"],
+            minimum_successful_models=1,
+            trace_mode="scripted",
+            strict_freeze=True,
+        )
+    assert not (out_dir / "experiment_protocol.json").exists()
+
+
+def test_model_matrix_strict_freeze_passes_on_clean_tree(
+    tmp_path: Path, monkeypatch
+):
+    import research.runner.experiment_protocol as protocol_module
+
+    monkeypatch.setattr(
+        protocol_module,
+        "clean_working_tree_status",
+        lambda: {"checked": True, "clean": True, "dirty_paths": []},
+    )
+    matrix_path = tmp_path / "matrix.json"
+    matrix_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "agent-memory-model-matrix/v0.1",
+                "runtime": "deterministic",
+                "minimum_successful_models": 1,
+                "models": [
+                    {
+                        "model_family": "qwen",
+                        "model_name": "qwen2.5-coder:7b",
+                        "display_name": "Qwen deterministic test",
+                        "pull_command": "ollama pull qwen2.5-coder:7b",
+                        "enabled": True,
+                    }
+                ],
+            }
+        )
+    )
+    manifest = run_model_matrix(
+        tmp_path / "out",
+        matrix_path=matrix_path,
+        task_ids=["coding_stale_tests_001"],
+        variants=["baseline", "verified"],
+        minimum_successful_models=1,
+        trace_mode="scripted",
+        strict_freeze=True,
+    )
+    assert manifest["successful_model_count"] == 1
+    assert Path(manifest["protocol_path"]).exists()

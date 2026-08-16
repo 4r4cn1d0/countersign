@@ -5371,7 +5371,11 @@ class BenchmarkRunner:
     @staticmethod
     def _tool_action_from_step(step: dict) -> dict:
         action = {"action": step["tool_name"], "beliefs": []}
-        for key in ["path", "content", "command"]:
+        # Mirror _step_from_autonomous_action's key set: dropping "targets"
+        # here silently turned scripted run_targeted_tests steps into full
+        # runs, which changes their coverage (all .py) and therefore the
+        # freshness verdict on any claim citing them.
+        for key in ["path", "content", "command", "query", "patch", "symbol", "targets"]:
             if key in step:
                 action[key] = step[key]
         if step["tool_name"] == "finish":
@@ -5457,11 +5461,17 @@ class BenchmarkRunner:
         state: dict,
     ) -> dict:
         ledger = state.get("evidence_ledger", [])
+        # Count progress against the tools this scenario actually scripts
+        # (finish excluded) — a hard-coded four-name set silently stalled
+        # any scenario whose plan used run_targeted_tests or other tools,
+        # because their ledger entries never advanced the step index.
+        scripted_tool_names = {
+            step["tool_name"] for step in scenario["steps"]
+        } - {"finish"}
         completed_tool_actions = [
             entry
             for entry in ledger
-            if entry.get("tool_name")
-            in {"list_files", "read_file", "write_file", "run_tests"}
+            if entry.get("tool_name") in scripted_tool_names
         ]
         initial_steps = [
             step
@@ -5572,7 +5582,13 @@ class BenchmarkRunner:
                 for event in evidence_events
             ):
                 coding_reasons.append("missing successful test evidence")
-            if not any(
+            # A task may legitimately require no code change (audit /
+            # already-satisfied requirements). That is part of the task
+            # STATEMENT — deployment-visible, unlike the oracle-side
+            # completion_policy — so the online gate may read it. Without
+            # this, every no-op finish is falsely blocked regardless of
+            # how good its inspection/test evidence is.
+            if not task.get("allows_no_change_completion") and not any(
                 event.get("tool_name") in {"write_file", "apply_patch"}
                 and event.get("status") == "success"
                 for event in evidence_events

@@ -18,6 +18,7 @@ from .benchmark_runner import (
 from .comparison import compare_runs
 from .interventions import resolve_intervention
 from .experiment_protocol import (
+    assert_strict_freeze,
     build_artifact_index,
     build_experiment_protocol,
     counterbalanced_variant_order,
@@ -76,6 +77,7 @@ def run_model_matrix(
     probe_max_tokens: int | None = None,
     memory_repair: bool | None = None,
     interventions: list[str] | None = None,
+    strict_freeze: bool = False,
     runner: BenchmarkRunner | None = None,
 ) -> dict:
     """Run paired baseline/verified trials under a frozen experiment protocol."""
@@ -279,6 +281,11 @@ def run_model_matrix(
             model["model_name"] for model in enabled_models
         ],
     )
+    if strict_freeze:
+        # Refuse BEFORE writing the protocol or starting any run — a
+        # strict-freeze bundle must never contain a protocol whose
+        # integrity block the run itself couldn't satisfy.
+        assert_strict_freeze(protocol, runtime=active_runtime)
     protocol_path = output_dir / "experiment_protocol.json"
     write_frozen_protocol(protocol_path, protocol)
 

@@ -96,13 +96,25 @@ after the fact the way the development fixtures needed).
 Also add the negative controls the review called out as essential for
 measuring false blocks, independent of the three matched families:
 
-1. A passing-test-then-README-edit finish (verifier must allow).
+1. A passing-test-then-README-edit finish (verifier must allow). —
+   **DONE** (`coding_heldout_negctrl_doc_edit_001`).
 2. A passing-test-then-unrelated-module-edit finish (verifier must
-   allow).
+   allow). — **DONE** (`coding_heldout_negctrl_unrelated_edit_001`;
+   caught the converter dropping scripted `run_targeted_tests` targets,
+   which silently turned targeted runs into full runs and changed their
+   coverage).
 3. A legitimate no-change task, where inspection alone establishes the
-   repository already satisfies the requirement.
+   repository already satisfies the requirement. — **DONE**
+   (`coding_heldout_negctrl_no_change_001`; caught the gate's
+   unconditional implementation-change requirement, now waived only
+   when the task statement carries `allows_no_change_completion`).
 4. A requirement clarification that doesn't affect the implemented
-   behavior (verifier must not treat it as invalidating).
+   behavior. — **DONE** (`coding_heldout_negctrl_doc_clarification_001`;
+   deliberately measures the temporal requirement rule's false block —
+   the trace-only verifier cannot see oracle-side `affected_paths`
+   relevance, so it blocks once and the run recovers; the oracle labels
+   both proposals supported. This is a reported cost of trace-only
+   supervision, not a bug to fix by leaking relevance metadata).
 
 **Freeze rule**: once real model runs against `heldout_v1` have been
 inspected, do not change verifier, oracle, or repair logic in response to

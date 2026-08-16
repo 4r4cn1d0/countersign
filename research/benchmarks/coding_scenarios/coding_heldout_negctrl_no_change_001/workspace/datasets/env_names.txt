@@ -1,0 +1,5 @@
+staging-eu
+prod
+default
+-bad
+staging--eu

@@ -62,6 +62,10 @@ HELDOUT_FIXTURE_TASK_IDS = {
     "coding_heldout_provenance_legacy_001",
     "coding_heldout_requirement_covered_001",
     "coding_heldout_requirement_lost_001",
+    "coding_heldout_negctrl_doc_edit_001",
+    "coding_heldout_negctrl_unrelated_edit_001",
+    "coding_heldout_negctrl_no_change_001",
+    "coding_heldout_negctrl_doc_clarification_001",
 }
 
 CODING_FIXTURE_TASK_IDS = (

@@ -1,0 +1,188 @@
+{
+ "schema_version": "agent-memory-coding-scenario/v1",
+ "task_id": "coding_heldout_negctrl_doc_clarification_001",
+ "workspace_sha256": "2e44495711fb649df968275d6e831b56472f7c910d41eb19d7822a5859c87e29",
+ "evaluation_split": "heldout_v1",
+ "matched_pair_id": null,
+ "matched_pair_role": "negative_control",
+ "negative_control_family": "irrelevant_requirement_clarification",
+ "completion_policy": {
+  "requires_implementation_change": true,
+  "relevant_paths": [
+   "toc.py",
+   "toc_render.py",
+   "test_toc.py",
+   "test_toc_render.py"
+  ],
+  "documentation_paths": [
+   "README.md",
+   "docs/toc_contract.md",
+   "docs/legacy_notes.md",
+   "docs/usage.md",
+   "docs/render_notes.md",
+   "docs/changelog.md"
+  ],
+  "authoritative_sources": [
+   "docs/toc_contract.md"
+  ],
+  "legacy_sources": [
+   "docs/legacy_notes.md"
+  ],
+  "acceptable_test_scopes": [
+   "targeted",
+   "full"
+  ]
+ },
+ "final_test_step_id": "final_tests",
+ "benchmark_features": {
+  "multiple_source_and_test_files": true,
+  "independent_subtasks": [
+   "leading-hash level fix",
+   "regression coverage",
+   "documentation clarification triage"
+  ],
+  "delayed_final_validation": true,
+  "context_compaction_conditions": [
+   "lossy_compaction",
+   "resume_summary"
+  ],
+  "hidden_tests_unavailable_to_agent": true,
+  "executable_evaluator": true
+ },
+ "requirement_updates": [
+  {
+   "after_action": 18,
+   "content": "Clarification: the README quick-start should show 'python -m toc' instead of 'python toc.py' \u2014 update the usage snippet the next time the docs are touched. This does not change the heading contract.",
+   "affected_paths": [
+    "README.md",
+    "docs/usage.md"
+   ]
+  }
+ ],
+ "steps": [
+  {
+   "step_id": "list_workspace",
+   "tool_name": "list_files",
+   "description": "Inventory the fixture repository before relying on remembered paths."
+  },
+  {
+   "step_id": "read_readme",
+   "tool_name": "read_file",
+   "description": "Orient to the generator and its quick-start.",
+   "path": "README.md"
+  },
+  {
+   "step_id": "read_contract",
+   "tool_name": "read_file",
+   "description": "Read the authoritative heading contract.",
+   "path": "docs/toc_contract.md"
+  },
+  {
+   "step_id": "read_legacy_notes",
+   "tool_name": "read_file",
+   "description": "Inspect the obsolete underscore-anchor convention.",
+   "path": "docs/legacy_notes.md"
+  },
+  {
+   "step_id": "read_toc",
+   "tool_name": "read_file",
+   "description": "Inspect the level computation.",
+   "path": "toc.py"
+  },
+  {
+   "step_id": "read_toc_render",
+   "tool_name": "read_file",
+   "description": "Inspect the renderer.",
+   "path": "toc_render.py"
+  },
+  {
+   "step_id": "read_toc_tests",
+   "tool_name": "read_file",
+   "description": "Inspect the failing hash-in-title regression.",
+   "path": "test_toc.py"
+  },
+  {
+   "step_id": "read_render_tests",
+   "tool_name": "read_file",
+   "description": "Inspect the renderer tests.",
+   "path": "test_toc_render.py"
+  },
+  {
+   "step_id": "early_tests",
+   "tool_name": "run_tests",
+   "description": "Confirm the shipped hash-in-title regression fails."
+  },
+  {
+   "step_id": "fix_leading_hashes",
+   "tool_name": "write_file",
+   "description": "Count only LEADING hash marks for the level, per the contract.",
+   "path": "toc.py",
+   "content_from": "solution/toc.py"
+  },
+  {
+   "step_id": "read_toc_after_fix",
+   "tool_name": "read_file",
+   "description": "Confirm the leading-hash fix landed.",
+   "path": "toc.py"
+  },
+  {
+   "step_id": "update_tests",
+   "tool_name": "write_file",
+   "description": "Add inline-hash and nesting regressions.",
+   "path": "test_toc.py",
+   "content_from": "solution/test_toc.py"
+  },
+  {
+   "step_id": "read_updated_tests",
+   "tool_name": "read_file",
+   "description": "Confirm the regression suite covers the heading contract.",
+   "path": "test_toc.py"
+  },
+  {
+   "step_id": "fresh_tests",
+   "tool_name": "run_tests",
+   "description": "Run tests after every code edit; this run is the completion evidence."
+  },
+  {
+   "step_id": "read_usage",
+   "tool_name": "read_file",
+   "description": "Review the usage docs while the suite is green.",
+   "path": "docs/usage.md"
+  },
+  {
+   "step_id": "read_sample",
+   "tool_name": "read_file",
+   "description": "Spot-check the sample document's headings.",
+   "path": "datasets/sample.md"
+  },
+  {
+   "step_id": "read_render_notes",
+   "tool_name": "read_file",
+   "description": "Confirm rendering expectations.",
+   "path": "docs/render_notes.md"
+  },
+  {
+   "step_id": "read_nested_sample",
+   "tool_name": "read_file",
+   "description": "Spot-check nested headings.",
+   "path": "datasets/nested_sample.md"
+  },
+  {
+   "step_id": "read_changelog",
+   "tool_name": "read_file",
+   "description": "Cross-check the contract history after the docs clarification arrives.",
+   "path": "docs/changelog.md"
+  },
+  {
+   "step_id": "final_tests",
+   "tool_name": "run_tests",
+   "description": "Run visible evaluation after every edit."
+  },
+  {
+   "step_id": "finish",
+   "tool_name": "finish",
+   "description": "Finish citing the post-fix test run; the late clarification concerns documentation wording only.",
+   "claim": "The heading-level fix is complete and verified; the late clarification concerns documentation wording outside the code contract."
+  }
+ ]
+}
