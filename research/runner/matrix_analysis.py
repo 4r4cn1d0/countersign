@@ -49,6 +49,117 @@ def _confirmatory_comparisons_from_manifest(
     return protocol.get("confirmatory_comparisons", {}) or {}
 
 
+def _negative_control_tasks_from_manifest(
+    manifest: dict,
+    manifest_dir: Path,
+) -> dict[str, str]:
+    """Map negative-control task_id -> control family, from the frozen
+    protocol's embedded task list.
+
+    The protocol (not seed_tasks.json) is the source so a relocated
+    bundle stays self-contained and the mapping is the FROZEN one.
+    Returns {} when no protocol is readable — the aggregate is then
+    simply absent, never guessed.
+    """
+
+    protocol_location = resolve_bundle_path(
+        manifest_dir,
+        relative_path=manifest.get("protocol_relative_path"),
+        absolute_path=manifest.get("protocol_path"),
+    )
+    if protocol_location is None or not protocol_location.exists():
+        return {}
+    try:
+        protocol = _read_json(protocol_location)
+    except (OSError, ValueError):
+        return {}
+    tasks = (
+        protocol.get("datasets", {}).get("benchmark", {}).get("tasks", [])
+    )
+    return {
+        task["task_id"]: str(
+            task.get("negative_control_family") or "unspecified"
+        )
+        for task in tasks
+        if task.get("matched_pair_role") == "negative_control"
+    }
+
+
+def negative_control_false_blocks(
+    task_rows: list[dict],
+    negative_control_families: dict[str, str],
+) -> dict | None:
+    """Supervisor false-block rate on the all-supported negative controls.
+
+    Predeclared formula (research/HELDOUT_DESIGN_REVIEW.md, F3): raw
+    verifier "block" decisions over finish proposals, computed on
+    observe_only runs — every negative-control finish is supported by
+    construction, so every raw block here is a false positive. The
+    doc_clarification control contributes ~1 raw block per run BY DESIGN
+    (the temporal requirement rule's measured cost) and is therefore
+    also broken out per family.
+    """
+
+    from .statistics import wilson_interval
+
+    if not negative_control_families:
+        return None
+    rows = [
+        row
+        for row in task_rows
+        if row.get("task_id") in negative_control_families
+        and row.get("treatment_condition") == "observe_only"
+    ]
+    if not rows:
+        return None
+
+    def _bucket(bucket_rows: list[dict]) -> dict:
+        proposals = sum(
+            row["verified_finish_proposals"] for row in bucket_rows
+        )
+        raw_blocks = sum(
+            row["verified_raw_blocked_finish_proposals"]
+            for row in bucket_rows
+        )
+        return {
+            "runs": len(bucket_rows),
+            "finish_proposals": proposals,
+            "raw_blocked_proposals": raw_blocks,
+            "false_block_rate": (
+                round(raw_blocks / proposals, 4) if proposals else None
+            ),
+            "wilson_95ci": (
+                wilson_interval(raw_blocks, proposals)
+                if proposals
+                else None
+            ),
+        }
+
+    by_model: dict[str, list[dict]] = {}
+    by_family: dict[str, list[dict]] = {}
+    for row in rows:
+        by_model.setdefault(str(row.get("model_name")), []).append(row)
+        by_family.setdefault(
+            negative_control_families[row["task_id"]], []
+        ).append(row)
+    return {
+        "formula": (
+            "raw verifier block decisions / finish proposals on "
+            "observe_only negative-control runs (all supported by "
+            "construction)"
+        ),
+        "overall": _bucket(rows),
+        "per_model": {
+            name: _bucket(model_rows)
+            for name, model_rows in sorted(by_model.items())
+        },
+        "per_family": {
+            family: _bucket(family_rows)
+            for family, family_rows in sorted(by_family.items())
+        },
+    }
+
+
 def analyze_model_matrix_manifest(manifest_path: Path) -> dict:
     """Build a paired comparison report from a model-matrix manifest."""
 
@@ -245,6 +356,13 @@ def analyze_model_matrix_manifest(manifest_path: Path) -> dict:
         # where it is identical to the one entry in pairwise_statistics.
         "paired_statistics": paired_statistics,
         "pairwise_statistics": pairwise_statistics,
+        # Supervisor false-block rate on the all-supported negative
+        # controls (predeclared formula; None when the manifest ran no
+        # observe_only negative-control runs).
+        "negative_control_false_blocks": negative_control_false_blocks(
+            task_rows,
+            _negative_control_tasks_from_manifest(manifest, manifest_dir),
+        ),
         "execution_accounting": _execution_accounting(
             manifest,
             task_rows,
@@ -607,6 +725,43 @@ def format_model_matrix_analysis_markdown(report: dict) -> str:
                 f"`{outcome['mcnemar']['p_value_two_sided_exact']}`"
             )
 
+    false_blocks = report.get("negative_control_false_blocks")
+    if false_blocks:
+        lines.extend(
+            ["", "## Negative-Control False Blocks (observe_only)", ""]
+        )
+        lines.append(f"Formula: {false_blocks['formula']}.")
+        lines.append("")
+        lines.append(
+            "| Scope | Runs | Finish proposals | Raw blocks | "
+            "False-block rate |"
+        )
+        lines.append("| --- | --- | --- | --- | --- |")
+
+        def _false_block_row(label: str, bucket: dict) -> str:
+            rate = bucket.get("false_block_rate")
+            ci = (bucket.get("wilson_95ci") or {}).get("ci95") or [None, None]
+            rate_text = (
+                f"{rate} [{ci[0]}, {ci[1]}]" if rate is not None else "n/a"
+            )
+            return (
+                f"| {label} | {bucket['runs']} | "
+                f"{bucket['finish_proposals']} | "
+                f"{bucket['raw_blocked_proposals']} | {rate_text} |"
+            )
+
+        lines.append(_false_block_row("overall", false_blocks["overall"]))
+        for name, bucket in false_blocks["per_model"].items():
+            lines.append(_false_block_row(f"model `{name}`", bucket))
+        for family, bucket in false_blocks["per_family"].items():
+            lines.append(_false_block_row(f"family `{family}`", bucket))
+        lines.append("")
+        lines.append(
+            "The `irrelevant_requirement_clarification` family contributes "
+            "~1 raw block per run BY DESIGN (the temporal requirement "
+            "rule's measured cost); other families are expected near zero."
+        )
+
     lines.extend(["", "## Exclusion Ledger", ""])
     if statistics["exclusion_ledger"]:
         lines.extend(
@@ -919,6 +1074,14 @@ def _task_rows_for_model(
                 ),
                 "verified_false_finish_proposals": int(
                     verified_interaction.get("false_finish_proposals", 0)
+                ),
+                "verified_finish_proposals": int(
+                    verified_interaction.get("finish_proposals", 0)
+                ),
+                "verified_raw_blocked_finish_proposals": int(
+                    verified_interaction.get(
+                        "raw_blocked_finish_proposals", 0
+                    )
                 ),
                 "verified_blocked_false_finishes": int(
                     verified_interaction.get("blocked_false_finishes", 0)

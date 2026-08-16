@@ -2779,6 +2779,21 @@ class BenchmarkRunner:
             "finish_proposals": len(proposals),
             "false_finish_proposals": len(false_proposals),
             "blocked_finish_proposals": len(blocked_proposals),
+            # Raw verifier judgment, independent of enforcement — in
+            # observe_only nothing is ever enforced-blocked, so the
+            # false-block rate on negative controls must be computed from
+            # this count, not blocked_finish_proposals.
+            "raw_blocked_finish_proposals": sum(
+                1
+                for event in events
+                if event.get("event_type") == "verification_decision"
+                and event.get("claim_event_id")
+                in {proposal["event_id"] for proposal in proposals}
+                and event.get(
+                    "verifier_decision", event.get("decision")
+                )
+                == "block"
+            ),
             "blocked_false_finishes": len(blocked_false),
             "accepted_finish_proposals": len(accepted_proposals),
             "accepted_false_finishes": len(accepted_false),

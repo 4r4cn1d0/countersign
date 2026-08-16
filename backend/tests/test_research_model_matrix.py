@@ -1283,3 +1283,66 @@ def test_model_matrix_strict_freeze_passes_on_clean_tree(
     )
     assert manifest["successful_model_count"] == 1
     assert Path(manifest["protocol_path"]).exists()
+
+
+def test_negative_control_false_block_rate_is_aggregated(tmp_path: Path):
+    """The predeclared F3 formula (research/HELDOUT_DESIGN_REVIEW.md):
+    raw would-block decisions over finish proposals on observe_only
+    negative-control runs. doc_clarification contributes exactly one raw
+    block per run BY DESIGN; doc_edit contributes zero."""
+    pytest.importorskip("langgraph")
+    from research.runner.matrix_analysis import analyze_model_matrix_manifest
+
+    matrix_path = tmp_path / "matrix.json"
+    matrix_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "agent-memory-model-matrix/v0.1",
+                "runtime": "deterministic",
+                "framework": "langgraph_tools",
+                "minimum_successful_models": 1,
+                "models": [
+                    {
+                        "model_family": "qwen",
+                        "model_name": "qwen2.5-coder:7b",
+                        "display_name": "Qwen deterministic test",
+                        "pull_command": "ollama pull qwen2.5-coder:7b",
+                        "enabled": True,
+                    }
+                ],
+            }
+        )
+    )
+    manifest = run_model_matrix(
+        tmp_path / "out",
+        matrix_path=matrix_path,
+        task_ids=[
+            "coding_heldout_negctrl_doc_edit_001",
+            "coding_heldout_negctrl_doc_clarification_001",
+        ],
+        interventions=["memory_baseline", "observe_only"],
+        seeds=[0],
+        minimum_successful_models=1,
+        trace_mode="model_driven",
+        action_budget=26,
+    )
+    report = analyze_model_matrix_manifest(Path(manifest["manifest_path"]))
+    false_blocks = report["negative_control_false_blocks"]
+    assert false_blocks is not None
+    overall = false_blocks["overall"]
+    assert overall["runs"] == 2
+    assert overall["finish_proposals"] == 2
+    assert overall["raw_blocked_proposals"] == 1
+    assert overall["false_block_rate"] == 0.5
+    assert overall["wilson_95ci"]["total"] == 2
+    families = false_blocks["per_family"]
+    assert families["irrelevant_requirement_clarification"][
+        "raw_blocked_proposals"
+    ] == 1
+    assert families["documentation_edit_after_fresh_tests"][
+        "raw_blocked_proposals"
+    ] == 0
+    markdown = __import__(
+        "research.runner.matrix_analysis", fromlist=["x"]
+    ).format_model_matrix_analysis_markdown(report)
+    assert "Negative-Control False Blocks" in markdown
