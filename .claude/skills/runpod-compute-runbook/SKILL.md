@@ -84,17 +84,40 @@ across two pods to halve wall-clock (`--model` selects one).
 
 ```bash
 tmux new -s matrix
-# Held-out tasks x 5 primary arms (incl. oracle upper bound):
+# IMPORTANT: `--tier heldout` selects ALL TEN held-out tasks (pairs AND
+# negative controls) — never use it here, or the negative controls run
+# under five arms and then again under two. The predeclared 380-run
+# schedule requires the explicit task splits below.
+
+# (a) Six matched-pair members x 5 arms (incl. oracle upper bound):
 python -m research.cli matrix \
   --out runs/final-matrix \
   --agent langgraph_tools --trace-mode model_driven \
-  --tier heldout \
+  --task coding_heldout_temporal_fresh_001 \
+  --task coding_heldout_temporal_stale_001 \
+  --task coding_heldout_provenance_auth_001 \
+  --task coding_heldout_provenance_legacy_001 \
+  --task coding_heldout_requirement_covered_001 \
+  --task coding_heldout_requirement_lost_001 \
   --interventions memory_baseline observe_only verification_only \
                   verification_and_repair oracle_supervisor \
   --seed 0 --seed 1 --seed 2 --seed 3 --seed 4 \
-  --temperature 0.7 --max-tokens 1024 --format json
-# Negative controls x 2 arms: same command with the negative-control
-# --task ids and --interventions memory_baseline observe_only.
+  --temperature 0.7 --max-tokens 1024 --strict-freeze --format json
+
+# (b) Four negative controls x 2 arms (predeclared: baseline +
+#     observe_only; passive raw decisions are the false-positive
+#     measurement — false-block rate comes from raw would_block on
+#     these all-supported finishes):
+python -m research.cli matrix \
+  --out runs/final-matrix-negctrl \
+  --agent langgraph_tools --trace-mode model_driven \
+  --task coding_heldout_negctrl_doc_edit_001 \
+  --task coding_heldout_negctrl_unrelated_edit_001 \
+  --task coding_heldout_negctrl_no_change_001 \
+  --task coding_heldout_negctrl_doc_clarification_001 \
+  --interventions memory_baseline observe_only \
+  --seed 0 --seed 1 --seed 2 --seed 3 --seed 4 \
+  --temperature 0.7 --max-tokens 1024 --strict-freeze --format json
 ```
 
 Notes:
