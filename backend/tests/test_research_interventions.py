@@ -14,6 +14,7 @@ from research.runner.interventions import (
     INTERVENTION_CONDITIONS,
     resolve_intervention,
 )
+from research.runner.coding_scenarios import load_fixture_scenario
 from research.runner.matrix_analysis import (
     analyze_model_matrix_manifest,
     format_model_matrix_analysis_markdown,
@@ -29,6 +30,7 @@ def test_resolve_intervention_specs():
         "verification_only",
         "repair_only",
         "verification_and_repair",
+        "oracle_supervisor",
     )
 
     baseline = resolve_intervention("memory_baseline")
@@ -55,6 +57,17 @@ def test_resolve_intervention_specs():
     assert full.agent_variant == "verified"
     assert full.memory_repair is True
     assert full.verification_blocking is True
+
+    oracle = resolve_intervention("oracle_supervisor")
+    assert oracle.agent_variant == "verified"
+    assert oracle.verifier_enabled is True
+    assert oracle.memory_repair is False
+    assert oracle.verification_blocking is True
+    assert oracle.oracle_gate is True
+    # The evaluation-only flag must never be set on a deployable condition.
+    for name in INTERVENTION_CONDITIONS:
+        if name != "oracle_supervisor":
+            assert resolve_intervention(name).oracle_gate is False, name
 
     with pytest.raises(ValueError):
         resolve_intervention("oracle_memory")
@@ -264,10 +277,10 @@ def test_matrix_interventions_axis_produces_distinct_paired_runs(
 
     assert manifest["interventions"] == list(INTERVENTION_CONDITIONS)
     assert manifest["variants"] == list(INTERVENTION_CONDITIONS)
-    assert manifest["planned_run_count"] == 5
-    assert manifest["completed_run_count"] == 5
+    assert manifest["planned_run_count"] == 6
+    assert manifest["completed_run_count"] == 6
     # Each non-baseline condition pairs against memory_baseline.
-    assert manifest["completed_pair_count"] == 4
+    assert manifest["completed_pair_count"] == 5
 
     model = manifest["models"][0]
     run_ids = set()
@@ -278,7 +291,7 @@ def test_matrix_interventions_axis_produces_distinct_paired_runs(
         interventions_seen.add(
             payload["run_metadata"]["intervention"]
         )
-    assert len(run_ids) == 5
+    assert len(run_ids) == 6
     assert interventions_seen == set(INTERVENTION_CONDITIONS)
 
     with pytest.raises(ValueError):
@@ -392,6 +405,7 @@ def test_intervention_mode_manifest_analysis_pairs_every_treatment_condition(
         "verification_only",
         "repair_only",
         "verification_and_repair",
+        "oracle_supervisor",
     }
     # One full set of paired rows per treatment condition.
     assert len(report["tasks"]) == len(report["treatment_conditions"])
@@ -460,6 +474,201 @@ def test_intervention_mode_manifest_analysis_pairs_every_treatment_condition(
     assert "| `memory_baseline__vs__observe_only` |" in markdown
     assert "## Aggregate (per comparison)" in markdown
     assert "## Other Pairwise Comparisons" in markdown
+
+
+def test_oracle_supervisor_blocks_supported_but_incorrect_finish(
+    tmp_path: Path,
+):
+    """The oracle arm enforces ground truth where the trace verifier cannot.
+
+    A finish backed by real write/test citations is *justified* — the
+    trace verifier's raw decision is allow — but the implementation is
+    incomplete, so the hidden validator fails. The oracle gate blocks it,
+    demonstrating exactly the justified-vs-correct gap the upper bound
+    exists to measure. This is the ONE sanctioned pre-termination use of
+    hidden validation, behind the explicit oracle_gate flag.
+    """
+    pytest.importorskip("langgraph")
+
+    class SupportedButIncorrectAdapter:
+        runtime = "deterministic"
+
+        def __init__(self):
+            self.calls = 0
+
+        def generate(self, request):
+            self.calls += 1
+            actions = [
+                {
+                    "action": "write_file",
+                    "path": "config_parser.py",
+                    "content": (
+                        "def parse_line(line):\n"
+                        "    key, value = line.split('=', 1)\n"
+                        "    return key.strip(), value.strip()\n"
+                    ),
+                },
+                {"action": "run_tests"},
+                {
+                    "action": "finish",
+                    "claim": (
+                        "The implementation and regression test are complete "
+                        "and current tests pass."
+                    ),
+                    "source_event_ids": [
+                        "coding_stale_tests_001:event:006",
+                        "coding_stale_tests_001:event:011",
+                    ],
+                },
+            ]
+            return ModelResponse(
+                text=json.dumps(actions[min(self.calls - 1, 2)]),
+                runtime="deterministic",
+                model_name=request.model_name,
+                model_family=request.model_family,
+                raw_response={"fake": True},
+            )
+
+    with patch(
+        "research.runner.benchmark_runner.create_model_adapter",
+        return_value=SupportedButIncorrectAdapter(),
+    ):
+        run = BenchmarkRunner().run_task_id(
+            "coding_stale_tests_001",
+            BenchmarkRunConfig(
+                framework="langgraph_tools",
+                trace_mode="model_driven",
+                intervention="oracle_supervisor",
+                action_budget=3,
+                workspace_root=str(tmp_path),
+            ),
+        )
+
+    assert run["run_metadata"]["oracle_gate"] is True
+    decision = next(
+        event
+        for event in run["trace_events"]
+        if event.get("event_type") == "verification_decision"
+    )
+    # Trace-only judgment: justified (raw allow) — still recorded.
+    assert decision["verifier_decision"] == "allow"
+    # Oracle enforcement: incorrect, therefore blocked.
+    assert decision["decision"] == "block"
+    assert decision["gate_mode"] == "oracle"
+    assert decision["independent_hidden_validation_status"] == "failure"
+    assert run["interaction_metrics"]["accepted_finish_proposals"] == 0
+    assert run["interaction_metrics"]["termination_reason"] == (
+        "action_budget_exhausted"
+    )
+
+
+def test_oracle_supervisor_allows_correct_completion(tmp_path: Path):
+    pytest.importorskip("langgraph")
+    scenario = load_fixture_scenario("coding_stale_tests_001")
+    assert scenario is not None
+    solution_by_path = {
+        step["path"]: step["content"]
+        for step in scenario["steps"]
+        if step.get("step_id")
+        in {
+            "replace_false_lead_with_contract_parser",
+            "normalize_defaults",
+            "integrate_loader",
+            "update_parser_tests",
+            "late_loader_test_update",
+        }
+    }
+
+    class CorrectSolutionAdapter:
+        runtime = "deterministic"
+
+        def __init__(self):
+            self.calls = 0
+            self.write_event_ids: list[str] = []
+
+        @staticmethod
+        def _current_sources(prompt: str) -> list[str]:
+            ledger_text = prompt.split("Evidence ledger: ", 1)[1].split(
+                "\nRecent observations:",
+                1,
+            )[0]
+            ledger = json.loads(ledger_text)
+            writes_by_path = {}
+            tests = []
+            for item in ledger:
+                if (
+                    item.get("tool_name") == "write_file"
+                    and item.get("status") == "success"
+                    and not item.get("stale")
+                ):
+                    writes_by_path[item["path"]] = item["event_id"]
+                if (
+                    item.get("tool_name") == "run_tests"
+                    and item.get("status") == "success"
+                    and not item.get("stale")
+                ):
+                    tests.append(item["event_id"])
+            return [*writes_by_path.values(), *tests[-1:]]
+
+        def generate(self, request):
+            self.calls += 1
+            actions = [
+                {
+                    "action": "write_file",
+                    "path": path,
+                    "content": content,
+                }
+                for path, content in sorted(solution_by_path.items())
+            ]
+            actions.append({"action": "run_tests"})
+            if self.calls <= len(actions):
+                action = actions[self.calls - 1]
+            else:
+                action = {
+                    "action": "finish",
+                    "claim": (
+                        "The parser, defaults, and loader satisfy the "
+                        "current contract and fresh visible tests pass."
+                    ),
+                    "source_event_ids": self._current_sources(
+                        request.prompt
+                    ),
+                }
+            return ModelResponse(
+                text=json.dumps(action),
+                runtime="deterministic",
+                model_name=request.model_name,
+                model_family=request.model_family,
+                raw_response={"fake": True},
+            )
+
+    with patch(
+        "research.runner.benchmark_runner.create_model_adapter",
+        return_value=CorrectSolutionAdapter(),
+    ):
+        run = BenchmarkRunner().run_task_id(
+            "coding_stale_tests_001",
+            BenchmarkRunConfig(
+                framework="langgraph_tools",
+                trace_mode="model_driven",
+                intervention="oracle_supervisor",
+                action_budget=10,
+                workspace_root=str(tmp_path),
+            ),
+        )
+
+    decision = next(
+        event
+        for event in run["trace_events"]
+        if event.get("event_type") == "verification_decision"
+    )
+    assert decision["gate_mode"] == "oracle"
+    assert decision["decision"] == "allow"
+    assert decision["independent_hidden_validation_status"] == "success"
+    assert run["interaction_metrics"]["termination_reason"] == (
+        "accepted_finish"
+    )
+    assert run["interaction_metrics"]["evaluator_success"] is True
 
 
 def test_unsafe_mutation_gate_blocks_corrupted_file_basis():

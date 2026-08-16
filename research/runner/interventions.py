@@ -5,12 +5,13 @@ prompt (evidence ledger, citation requirements, freshness reminder) and
 action schema. The only differences take effect after the agent proposes
 an action:
 
-| Condition              | verifier_enabled | verification_blocking | memory_repair |
-|-------------------------|:---:|:---:|:---:|
-| ``memory_baseline``     | No  | No  | No  |
-| ``observe_only``        | Yes | No  | No  |
-| ``verification_only``   | Yes | Yes | No  |
-| ``verification_and_repair`` | Yes | Yes | Yes |
+| Condition              | verifier_enabled | verification_blocking | memory_repair | oracle_gate |
+|-------------------------|:---:|:---:|:---:|:---:|
+| ``memory_baseline``     | No  | No  | No  | No |
+| ``observe_only``        | Yes | No  | No  | No |
+| ``verification_only``   | Yes | Yes | No  | No |
+| ``verification_and_repair`` | Yes | Yes | Yes | No |
+| ``oracle_supervisor``   | Yes | Yes | No  | **Yes** |
 
 ``verifier_enabled`` controls whether the online finish-proposal verifier
 and the (non-overridable) unsafe-mutation gate run at all.
@@ -33,6 +34,17 @@ event) on every proposal, but the enforced decision is always "allow" and
 no repair ever executes — a genuinely passive detector condition, not just
 a non-blocking one. It measures the verifier's precision/recall in situ,
 without any behavioral feedback loop back to the agent.
+
+``oracle_supervisor`` is an **evaluation-only upper bound, never a
+deployable condition**: its gate consults the hidden/ground-truth
+validator before allowing termination — the exact mechanism deliberately
+excised from every deployable gate as leakage, reintroduced here behind
+the explicit ``oracle_gate`` flag to bound what any trace-only supervisor
+could achieve. The trace-only verifier still runs and records its raw
+``verifier_decision`` (so oracle-vs-trace disagreement is measurable),
+but enforcement follows ground truth alone. Its results must be labeled
+evaluation-only in every table and are never pooled into a primary
+comparison.
 """
 
 from __future__ import annotations
@@ -46,6 +58,7 @@ INTERVENTION_CONDITIONS = (
     "verification_only",
     "repair_only",
     "verification_and_repair",
+    "oracle_supervisor",
 )
 
 
@@ -56,6 +69,9 @@ class InterventionSpec:
     verifier_enabled: bool
     memory_repair: bool
     verification_blocking: bool
+    # Evaluation-only: the gate consults the hidden validator. Must never
+    # be True for any deployable condition — see the module docstring.
+    oracle_gate: bool = False
 
 
 _SPECS = {
@@ -93,6 +109,14 @@ _SPECS = {
         verifier_enabled=True,
         memory_repair=True,
         verification_blocking=True,
+    ),
+    "oracle_supervisor": InterventionSpec(
+        intervention="oracle_supervisor",
+        agent_variant="verified",
+        verifier_enabled=True,
+        memory_repair=False,
+        verification_blocking=True,
+        oracle_gate=True,
     ),
 }
 

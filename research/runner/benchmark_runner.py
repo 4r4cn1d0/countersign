@@ -73,7 +73,7 @@ TOOL_RUN_CHECKPOINT_SCHEMA = "agent-memory-tool-run-checkpoint/v0.1"
 # logic in process_action/_evaluate_finish_proposal materially changes.
 # Recorded in the frozen experiment protocol so a later code change is
 # detectable without diffing the whole file.
-CONTROLLER_POLICY_VERSION = "v3-trace-only-gate"
+CONTROLLER_POLICY_VERSION = "v4-oracle-arm-flag"
 
 
 @dataclass(frozen=True)
@@ -117,6 +117,10 @@ class BenchmarkRunConfig:
     # call sites that only set agent_variant keep their prior behavior.
     verifier_enabled: bool | None = None
     prompt_profile: str = "instrumented"
+    # EVALUATION-ONLY upper bound (oracle_supervisor condition): the finish
+    # gate consults the hidden/ground-truth validator. Never True for any
+    # deployable condition — see interventions.py.
+    oracle_gate: bool = False
 
     def __post_init__(self) -> None:
         if self.verifier_enabled is None:
@@ -153,6 +157,7 @@ class BenchmarkRunner:
                 verifier_enabled=spec.verifier_enabled,
                 memory_repair=spec.memory_repair,
                 verification_blocking=spec.verification_blocking,
+                oracle_gate=spec.oracle_gate,
             )
         stack = self._load_json(self.stack_path)
         self._validate_open_source_stack(stack, run_config)
@@ -239,6 +244,7 @@ class BenchmarkRunner:
                 "intervention": run_config.intervention,
                 "verifier_enabled": run_config.verifier_enabled,
                 "verification_blocking": run_config.verification_blocking,
+                "oracle_gate": run_config.oracle_gate,
                 "prompt_profile": run_config.prompt_profile,
                 "agent_framework_runtime": (
                     run_config.framework if run_config.framework != "react_custom" else None
@@ -1388,6 +1394,40 @@ class BenchmarkRunner:
                     )
                     would_block = not proposal["allow"]
                     allow = proposal["allow"]
+                    if config.oracle_gate:
+                        # EVALUATION-ONLY upper bound (oracle_supervisor):
+                        # enforcement follows ground truth alone — the one
+                        # sanctioned exception to the post-termination-only
+                        # hidden-validation invariant, behind this explicit
+                        # flag. The trace verifier's raw decision above is
+                        # still recorded so oracle-vs-trace disagreement is
+                        # measurable, but it does not gate anything here.
+                        oracle_evaluation = self._evaluate_coding_workspace(
+                            workspace,
+                            task["task_id"],
+                        )
+                        proposal = {
+                            **proposal,
+                            "independent_evaluation": oracle_evaluation,
+                        }
+                        allow = oracle_evaluation["status"] == "success"
+                        if not allow:
+                            if (
+                                "independent task evaluator failed"
+                                not in proposal["reasons"]
+                            ):
+                                proposal["reasons"] = [
+                                    *proposal["reasons"],
+                                    "independent task evaluator failed",
+                                ]
+                            proposal["recommended_actions"] = sorted(
+                                {
+                                    *proposal["recommended_actions"],
+                                    "re-inspect acceptance criteria and "
+                                    "repair evaluator failures",
+                                }
+                            )
+                        proposal["allow"] = allow
                     gate_override = False
                     repair_plan = None
                     if not allow:
@@ -1443,7 +1483,9 @@ class BenchmarkRunner:
                         enforced_decision=decision,
                         would_block=would_block,
                         gate_mode=(
-                            "blocking"
+                            "oracle"
+                            if config.oracle_gate
+                            else "blocking"
                             if config.verification_blocking
                             else "non_blocking"
                         ),

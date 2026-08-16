@@ -546,10 +546,12 @@ def _run_one_model(
                         spec = resolve_intervention(variant)
                         row_agent_variant = spec.agent_variant
                         row_verifier_enabled = spec.verifier_enabled
+                        row_oracle_gate = spec.oracle_gate
                         row_intervention = variant
                     else:
                         row_agent_variant = variant
                         row_verifier_enabled = variant == "verified"
+                        row_oracle_gate = False
                         row_intervention = "legacy"
                     run_config = BenchmarkRunConfig(
                         framework=framework,
@@ -557,6 +559,7 @@ def _run_one_model(
                         model_name=model_name,
                         agent_variant=row_agent_variant,
                         verifier_enabled=row_verifier_enabled,
+                        oracle_gate=row_oracle_gate,
                         intervention=row_intervention,
                         seed=seed,
                         runtime=runtime,

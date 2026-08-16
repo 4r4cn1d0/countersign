@@ -225,15 +225,19 @@ carry, decided before any final-run data exists:
 Primary arms: `memory_baseline`, `observe_only`, `verification_only`,
 `verification_and_repair`. `repair_only` stays a secondary ablation.
 
-**`oracle_supervisor` (to implement before freeze — evaluation-only
-upper bound):** a gate that consults the hidden validator before
-allowing termination. This deliberately reintroduces, behind an
-explicit per-condition flag, the exact mechanism that was excised from
-the deployable gate as ground-truth leakage — which is why it must be
-firewalled: labeled evaluation-only in every table, never pooled into a
-primary comparison, never described as deployable. Its role is to bound
-what any trace-only supervisor could achieve. Bump
-`CONTROLLER_POLICY_VERSION` when adding the flag.
+**`oracle_supervisor` — IMPLEMENTED (2026-08-16), evaluation-only upper
+bound:** a gate that consults the hidden validator before allowing
+termination, behind the explicit `oracle_gate` flag
+(`interventions.py`/`BenchmarkRunConfig`), with `gate_mode: "oracle"` on
+decision events. The trace verifier still runs and records its raw
+`verifier_decision`, so oracle-vs-trace disagreement is measurable — the
+new tests pin exactly that divergence (a justified-but-incorrect finish:
+raw allow, oracle block). This deliberately reintroduces the mechanism
+excised from the deployable gate as ground-truth leakage — which is why
+it stays firewalled: `oracle_gate` is asserted False for every other
+condition, results are labeled evaluation-only in every table, never
+pooled into a primary comparison, never described as deployable.
+`CONTROLLER_POLICY_VERSION` bumped to `v4-oracle-arm-flag`.
 
 ### Supervisory framing (meta-agents venue, locked 2026-08-16)
 
