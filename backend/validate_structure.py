@@ -1,6 +1,5 @@
 """Validate the backend structure for Task 1."""
 
-import os
 from pathlib import Path
 
 

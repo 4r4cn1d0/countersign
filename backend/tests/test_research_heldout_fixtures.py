@@ -9,7 +9,6 @@ inspected, fixture and verifier logic are frozen — these tests are the
 record of what was promised beforehand.
 """
 
-import json
 from collections import Counter
 from pathlib import Path
 

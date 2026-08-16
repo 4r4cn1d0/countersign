@@ -12,7 +12,6 @@ from typing import Any
 from .benchmark_runner import BenchmarkRunConfig, BenchmarkRunner
 from .comparison import compare_runs
 from .metrics import build_memory_health_report
-from .verification import verify_run
 
 
 def generate_artifact_bundle(
@@ -140,7 +139,7 @@ def generate_artifact_summary(manifest: dict) -> str:
         f"- Git ref: `{manifest.get('git_ref') or 'unknown'}`",
         f"- Runtime: `{manifest['config']['runtime']}`",
         f"- Model: `{manifest['config']['model_name']}`",
-        f"- Variant baseline/verified: `baseline` / `verified`",
+        "- Variant baseline/verified: `baseline` / `verified`",
         f"- Test status: `{manifest['test_status']}`",
         "",
         "## Tasks",

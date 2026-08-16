@@ -1,7 +1,6 @@
 """Tests for authentication middleware."""
 
-import pytest
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends
 from fastapi.testclient import TestClient
 from datetime import timedelta
 

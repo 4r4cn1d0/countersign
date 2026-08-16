@@ -4,7 +4,6 @@ from typing import Union
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
-from pydantic import ValidationError
 import traceback
 import logging
 

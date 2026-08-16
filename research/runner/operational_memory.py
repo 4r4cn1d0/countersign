@@ -6,7 +6,6 @@ import copy
 import hashlib
 import json
 from statistics import mean
-from typing import Any
 
 
 def apply_event_to_memory(

@@ -4,7 +4,7 @@ import secrets
 import bcrypt
 import os
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any
+from typing import Optional
 from uuid import uuid4
 
 from jose import JWTError, jwt

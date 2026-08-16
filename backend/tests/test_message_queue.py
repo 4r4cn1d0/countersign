@@ -1,7 +1,6 @@
 """Tests for Redis Streams message queue functionality."""
 
 import pytest
-import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime

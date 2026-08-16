@@ -7,7 +7,7 @@ according to the design specifications.
 import asyncio
 import asyncpg
 import sys
-from typing import List, Dict, Any
+from typing import List
 from config import settings
 
 

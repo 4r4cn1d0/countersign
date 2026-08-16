@@ -139,9 +139,14 @@ def retrieval_consistency_score(
     required_sources: set[str],
     policy: VerificationPolicy | None = None,
 ) -> float:
-    """Score whether recalled claim provenance is consistent with evidence."""
+    """Score whether recalled claim provenance is consistent with evidence.
 
-    active_policy = policy or VerificationPolicy()
+    The `policy` parameter is accepted for signature stability but the
+    weights are deliberately fixed (0.4/0.25/0.25/0.1): they were
+    rescaled when the circular confidence term was removed and must not
+    drift via ad-hoc policy overrides.
+    """
+
     chain = list(provenance_chain)
     if not chain:
         return 0.0

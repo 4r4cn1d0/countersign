@@ -3,7 +3,7 @@
 import json
 from datetime import datetime
 from decimal import Decimal
-from typing import Any, Optional, List
+from typing import Any, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query

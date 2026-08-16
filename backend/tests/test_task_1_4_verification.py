@@ -17,7 +17,6 @@ from datetime import datetime
 
 from services.redis_service import (
     init_redis,
-    close_redis,
     get_redis_client,
     get_redis_health
 )

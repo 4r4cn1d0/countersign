@@ -10,7 +10,6 @@ This module tests the PostgreSQL + TimescaleDB schema including:
 
 import pytest
 import asyncpg
-from typing import List, Dict, Any
 import os
 
 pytestmark = pytest.mark.integration

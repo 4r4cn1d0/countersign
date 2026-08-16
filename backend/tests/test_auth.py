@@ -1,6 +1,5 @@
 """Tests for authentication and authorization system."""
 
-import pytest
 from datetime import datetime, timedelta
 from services.auth import AuthService, PermissionModel, TokenData
 

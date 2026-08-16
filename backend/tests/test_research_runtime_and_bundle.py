@@ -17,7 +17,6 @@ from research.runner import (
     BenchmarkRunConfig,
     BenchmarkRunner,
     ModelRequest,
-    ModelResponse,
     compare_runs,
     create_model_adapter,
     generate_artifact_bundle,

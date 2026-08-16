@@ -2,11 +2,10 @@
 
 from typing import List, Optional
 from datetime import datetime, timedelta
-from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from asyncpg import Pool
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from api.middleware.auth import get_current_user
 from services.auth import TokenData

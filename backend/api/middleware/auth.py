@@ -4,7 +4,7 @@ from typing import Optional
 from fastapi import HTTPException, Security, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-from services.auth import AuthService, TokenData, PermissionModel
+from services.auth import AuthService, TokenData
 
 
 security = HTTPBearer()

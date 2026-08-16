@@ -11,7 +11,6 @@ from collections import deque
 from datetime import datetime
 from decimal import Decimal
 from typing import Any, Callable, Dict, Optional
-from uuid import UUID
 
 from services.database import get_db_pool
 

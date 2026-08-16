@@ -1,7 +1,6 @@
 """Tests for FastAPI application structure and configuration."""
 
 import pytest
-from fastapi.testclient import TestClient
 from unittest.mock import AsyncMock, patch
 
 
