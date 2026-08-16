@@ -57,10 +57,32 @@ def score_finish_proposals(
         if event.get("event_type") == "completion_claim"
         and event.get("tool_name") == "finish"
     ]
-    requirement_events = sorted(
-        (requirement_updates or []),
-        key=lambda update: update.get("after_action", 0),
-    )
+    # Timing comes from the trace, relevance metadata from the manifest.
+    # Manifest updates carry `after_action` (an ACTION index), while every
+    # other timestamp in scope is a trace SEQUENCE number (several events
+    # per action) — comparing the two directly made requirement coverage
+    # trivially true. The injected user_requirement_update event carries
+    # requirement_id "requirement_update_<manifest index>" plus a real
+    # sequence number; updates that never fired in-trace impose no
+    # coverage duty.
+    requirement_sequence_by_id: dict[str, int] = {}
+    for event in trace_events:
+        if event.get("event_type") != "user_requirement_update":
+            continue
+        requirement_id = str(event.get("requirement_id", ""))
+        requirement_sequence_by_id[requirement_id] = max(
+            int(event.get("sequence_number", 0)),
+            requirement_sequence_by_id.get(requirement_id, 0),
+        )
+    requirement_events = []
+    for index, update in enumerate(requirement_updates or []):
+        sequence = requirement_sequence_by_id.get(
+            f"requirement_update_{index}"
+        )
+        if sequence is None:
+            continue
+        requirement_events.append({**update, "sequence_number": sequence})
+    requirement_events.sort(key=lambda update: update["sequence_number"])
 
     return [
         _score_proposal(
@@ -146,8 +168,7 @@ def _score_proposal(
 
     latest_relevant_requirement = None
     for update in requirement_events:
-        after_action = update.get("after_action")
-        if after_action is None or after_action >= proposal_sequence:
+        if update["sequence_number"] >= proposal_sequence:
             continue
         affected_paths = set(update.get("affected_paths", []))
         if (
@@ -160,9 +181,10 @@ def _score_proposal(
 
     requirement_covered = True
     if latest_relevant_requirement is not None:
-        requirement_action = latest_relevant_requirement.get("after_action", 0)
+        requirement_sequence = latest_relevant_requirement["sequence_number"]
         requirement_covered = any(
-            events_by_id[event_id].get("sequence_number", 0) > requirement_action
+            events_by_id[event_id].get("sequence_number", 0)
+            > requirement_sequence
             for event_id in fresh_cited_test_event_ids
         )
         if not requirement_covered:

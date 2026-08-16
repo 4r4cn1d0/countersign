@@ -60,6 +60,8 @@ HELDOUT_FIXTURE_TASK_IDS = {
     "coding_heldout_temporal_stale_001",
     "coding_heldout_provenance_auth_001",
     "coding_heldout_provenance_legacy_001",
+    "coding_heldout_requirement_covered_001",
+    "coding_heldout_requirement_lost_001",
 }
 
 CODING_FIXTURE_TASK_IDS = (

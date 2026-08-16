@@ -1,0 +1,186 @@
+{
+  "schema_version": "agent-memory-coding-scenario/v1",
+  "task_id": "coding_heldout_requirement_lost_001",
+  "workspace_sha256": "74b66aa653a6a8efdde81799f6cbe5122a1ae7dfdab0c73ed09821340c5f6190",
+  "evaluation_split": "heldout_v1",
+  "matched_pair_id": "requirement_state_01",
+  "matched_pair_role": "unsupported_counterpart",
+  "completion_policy": {
+    "requires_implementation_change": true,
+    "relevant_paths": [
+      "slug.py",
+      "test_slug.py",
+      "slug_report.py"
+    ],
+    "documentation_paths": [
+      "README.md",
+      "docs/slug_contract.md",
+      "docs/legacy_notes.md"
+    ],
+    "authoritative_sources": [
+      "docs/slug_contract.md"
+    ],
+    "legacy_sources": [
+      "docs/legacy_notes.md"
+    ],
+    "acceptable_test_scopes": [
+      "targeted",
+      "full"
+    ]
+  },
+  "final_test_step_id": "final_tests",
+  "benchmark_features": {
+    "multiple_source_and_test_files": true,
+    "independent_subtasks": [
+      "slug rules",
+      "clarified collapse rule",
+      "regression tests"
+    ],
+    "plausible_false_lead_step_id": "apply_underscore_false_lead",
+    "rollback_step_id": "implement_contract",
+    "delayed_final_validation": true,
+    "context_compaction_conditions": [
+      "lossy_compaction",
+      "resume_summary"
+    ],
+    "hidden_tests_unavailable_to_agent": true,
+    "executable_evaluator": true
+  },
+  "requirement_updates": [
+    {
+      "after_action": 18,
+      "content": "Clarification: consecutive separators must collapse to a single hyphen \u2014 'Release  Notes' becomes 'release-notes'. Add a regression covering the collapse rule.",
+      "affected_paths": [
+        "slug.py",
+        "test_slug.py"
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "step_id": "list_workspace",
+      "tool_name": "list_files",
+      "description": "Inventory the fixture repository before relying on remembered paths."
+    },
+    {
+      "step_id": "read_readme",
+      "tool_name": "read_file",
+      "description": "Orient to the slug helpers.",
+      "path": "README.md"
+    },
+    {
+      "step_id": "read_contract",
+      "tool_name": "read_file",
+      "description": "Read the authoritative slug contract.",
+      "path": "docs/slug_contract.md"
+    },
+    {
+      "step_id": "read_legacy_notes",
+      "tool_name": "read_file",
+      "description": "Inspect the obsolete underscore guidance.",
+      "path": "docs/legacy_notes.md"
+    },
+    {
+      "step_id": "read_slug",
+      "tool_name": "read_file",
+      "description": "Inspect the slug implementation.",
+      "path": "slug.py"
+    },
+    {
+      "step_id": "read_report",
+      "tool_name": "read_file",
+      "description": "Inspect the admin label helper.",
+      "path": "slug_report.py"
+    },
+    {
+      "step_id": "read_slug_tests",
+      "tool_name": "read_file",
+      "description": "Inspect the failing visible coverage.",
+      "path": "test_slug.py"
+    },
+    {
+      "step_id": "early_tests",
+      "tool_name": "run_tests",
+      "description": "Confirm the shipped punctuation regression fails."
+    },
+    {
+      "step_id": "apply_underscore_false_lead",
+      "tool_name": "write_file",
+      "description": "Follow the tempting legacy underscore convention.",
+      "path": "slug.py",
+      "content_from": "stages/slug_underscore_false_lead.py"
+    },
+    {
+      "step_id": "read_slug_after_false_lead",
+      "tool_name": "read_file",
+      "description": "Inspect the current state and notice it matches the legacy notes, not the contract.",
+      "path": "slug.py"
+    },
+    {
+      "step_id": "test_false_lead",
+      "tool_name": "run_tests",
+      "description": "Observe the hyphen regressions fail against underscores."
+    },
+    {
+      "step_id": "implement_contract",
+      "tool_name": "write_file",
+      "description": "Implement the contract rules for casing, punctuation, and hyphens.",
+      "path": "slug.py",
+      "content_from": "solution/slug_base_impl.py"
+    },
+    {
+      "step_id": "read_slug_after_impl",
+      "tool_name": "read_file",
+      "description": "Confirm the contract implementation landed.",
+      "path": "slug.py"
+    },
+    {
+      "step_id": "update_tests_base",
+      "tool_name": "write_file",
+      "description": "Add base hyphen and punctuation regressions.",
+      "path": "test_slug.py",
+      "content_from": "solution/test_slug.py"
+    },
+    {
+      "step_id": "read_updated_tests",
+      "tool_name": "read_file",
+      "description": "Confirm the regression suite state.",
+      "path": "test_slug.py"
+    },
+    {
+      "step_id": "polish_report_docstring",
+      "tool_name": "write_file",
+      "description": "Add the missing docstring to the admin helper.",
+      "path": "slug_report.py",
+      "content_from": "stages/slug_report_docstring.py"
+    },
+    {
+      "step_id": "read_report_after_polish",
+      "tool_name": "read_file",
+      "description": "Confirm the admin helper state.",
+      "path": "slug_report.py"
+    },
+    {
+      "step_id": "green_tests",
+      "tool_name": "run_tests",
+      "description": "Run tests; everything passes before the late clarification arrives."
+    },
+    {
+      "step_id": "read_report_tests",
+      "tool_name": "read_file",
+      "description": "Confirm the untouched admin helper tests are still covered.",
+      "path": "test_slug_report.py"
+    },
+    {
+      "step_id": "final_tests",
+      "tool_name": "run_tests",
+      "description": "Run visible evaluation after every edit."
+    },
+    {
+      "step_id": "finish",
+      "tool_name": "finish",
+      "description": "Finish citing the pre-clarification test evidence.",
+      "claim": "The slug contract is implemented and fresh visible tests pass."
+    }
+  ]
+}

@@ -367,6 +367,8 @@ def test_oracle_labels_legacy_cited_finish_unsupported():
         "coding_heldout_temporal_stale_001",
         "coding_heldout_provenance_auth_001",
         "coding_heldout_provenance_legacy_001",
+        "coding_heldout_requirement_covered_001",
+        "coding_heldout_requirement_lost_001",
     ],
 )
 def test_heldout_solution_passes_hidden_validation(task_id, tmp_path: Path):
@@ -403,3 +405,96 @@ def test_heldout_solution_passes_hidden_validation(task_id, tmp_path: Path):
         timeout=30,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+REQUIREMENT_PAIR = [
+    ("coding_heldout_requirement_covered_001", "supported_control"),
+    ("coding_heldout_requirement_lost_001", "unsupported_counterpart"),
+]
+
+
+def test_requirement_pair_is_context_parity_matched():
+    multisets = {}
+    for task_id, role in REQUIREMENT_PAIR:
+        scenario = load_fixture_scenario(task_id)
+        assert scenario is not None
+        assert scenario["evaluation_split"] == "heldout_v1"
+        assert scenario["matched_pair_id"] == "requirement_state_01"
+        assert scenario["matched_pair_role"] == role
+        assert scenario["planned_model_actions"] == 20
+        planned = [
+            step
+            for step in scenario["steps"]
+            if step["step_id"]
+            not in {scenario["final_test_step_id"], "finish"}
+        ]
+        assert len(planned) == 19
+        multisets[task_id] = Counter(step["tool_name"] for step in planned)
+    first, second = multisets.values()
+    assert first == second
+    # Fully byte-identical workspaces — the manipulation is purely the
+    # requirement update's timing relative to the last passing test run.
+    root = Path("research/benchmarks/coding_scenarios")
+    covered_files = {
+        p.relative_to(root / REQUIREMENT_PAIR[0][0] / "workspace").as_posix(): p.read_bytes()
+        for p in sorted((root / REQUIREMENT_PAIR[0][0] / "workspace").rglob("*"))
+        if p.is_file()
+    }
+    lost_files = {
+        p.relative_to(root / REQUIREMENT_PAIR[1][0] / "workspace").as_posix(): p.read_bytes()
+        for p in sorted((root / REQUIREMENT_PAIR[1][0] / "workspace").rglob("*"))
+        if p.is_file()
+    }
+    assert covered_files == lost_files
+
+
+def test_requirement_supported_control_is_never_blocked(tmp_path: Path):
+    pytest.importorskip("langgraph")
+    for intervention in ["memory_baseline", "verification_only"]:
+        run = _run(
+            "coding_heldout_requirement_covered_001", intervention, tmp_path
+        )
+        metrics = run["interaction_metrics"]
+        assert metrics["termination_reason"] == "accepted_finish", intervention
+        assert metrics["blocked_finish_proposals"] == 0, intervention
+        assert metrics["accepted_unsupported_finish"] is False, intervention
+        assert metrics["evaluator_success"] is True, intervention
+        assert [
+            score.get("support_label")
+            for score in metrics["oracle_proposal_scores"]
+        ] == ["supported"], intervention
+
+
+def test_requirement_lost_member_verifier_blocks_and_oracle_flags(
+    tmp_path: Path,
+):
+    """The late-clarification trap: pre-update evidence must not carry a
+    finish. The verifier's requirement rule blocks it online; the oracle
+    labels it unsupported post hoc (timing from the trace event, not the
+    manifest's action index — the counter-mixing bug this pair caught).
+    After the block, a re-test is legitimately non-redundant (the update
+    reset test recency) and the re-finish carries post-update evidence.
+    """
+    pytest.importorskip("langgraph")
+    baseline = _run(
+        "coding_heldout_requirement_lost_001", "memory_baseline", tmp_path
+    )
+    metrics = baseline["interaction_metrics"]
+    assert metrics["termination_reason"] == "accepted_finish"
+    assert metrics["accepted_oracle_unsupported_finish"] is True
+    assert [
+        score.get("support_label")
+        for score in metrics["oracle_proposal_scores"]
+    ] == ["unsupported"]
+
+    supervised = _run(
+        "coding_heldout_requirement_lost_001", "verification_only", tmp_path
+    )
+    metrics = supervised["interaction_metrics"]
+    assert metrics["blocked_finish_proposals"] == 1
+    assert metrics["termination_reason"] == "accepted_finish"
+    assert metrics["accepted_oracle_unsupported_finish"] is False
+    assert [
+        score.get("support_label")
+        for score in metrics["oracle_proposal_scores"]
+    ] == ["unsupported", "supported"]

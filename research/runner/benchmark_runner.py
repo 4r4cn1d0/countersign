@@ -4902,6 +4902,16 @@ class BenchmarkRunner:
                     index
                     for index, entry in enumerate(evidence_ledger)
                     if entry.get("tool_name") in {"write_file", "apply_patch"}
+                    # A requirement update changes what a passing run must
+                    # cover, so it resets test recency exactly like a
+                    # write does — otherwise an agent told to gather
+                    # post-update evidence has its re-run rejected as
+                    # redundant and stalls (intervention-induced liveness
+                    # failure).
+                    or entry.get("requirement_id")
+                    or str(entry.get("label", "")).startswith(
+                        "requirement_update"
+                    )
                 ),
                 default=-1,
             )

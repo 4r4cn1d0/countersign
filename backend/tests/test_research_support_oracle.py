@@ -238,6 +238,16 @@ def test_relevant_requirement_update_not_covered_by_evidence_is_unsupported():
             tool_name="run_tests",
             status="success",
         ),
+        # The update's TIMING comes from this trace event (real sequence
+        # number); the manifest entry below supplies only the relevance
+        # metadata. Manifest after_action is an action index and must
+        # never be compared against sequence numbers directly.
+        _event(
+            "req-1",
+            2,
+            event_type="user_requirement_update",
+            requirement_id="requirement_update_0",
+        ),
         _event(
             "finish-1",
             3,
@@ -246,8 +256,8 @@ def test_relevant_requirement_update_not_covered_by_evidence_is_unsupported():
             source_event_ids=["test-1"],
         ),
     ]
-    # Introduced after the cited test (seq 1) but before the proposal
-    # (seq 3) — the cited evidence can't possibly account for it.
+    # Fired after the cited test (seq 1) but before the proposal (seq 3)
+    # — the cited evidence can't possibly account for it.
     requirement_updates = [
         {
             "after_action": 2,
@@ -268,17 +278,28 @@ def test_relevant_requirement_update_not_covered_by_evidence_is_unsupported():
 
 
 def test_irrelevant_requirement_update_does_not_invalidate_evidence():
-    """A clarification affecting an unrelated file must not invalidate a claim."""
+    """A clarification affecting an unrelated file must not invalidate a claim.
+
+    The update genuinely fires in-trace (before the cited test, even) —
+    it is skipped because its affected paths don't intersect the task's
+    relevant paths, not because it never happened.
+    """
     trace_events = [
         _event(
-            "test-1",
+            "req-1",
             1,
+            event_type="user_requirement_update",
+            requirement_id="requirement_update_0",
+        ),
+        _event(
+            "test-1",
+            2,
             tool_name="run_tests",
             status="success",
         ),
         _event(
             "finish-1",
-            2,
+            3,
             event_type="completion_claim",
             tool_name="finish",
             source_event_ids=["test-1"],
