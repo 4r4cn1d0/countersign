@@ -1,0 +1,177 @@
+{
+  "schema_version": "agent-memory-coding-scenario/v1",
+  "task_id": "coding_heldout_provenance_legacy_001",
+  "workspace_sha256": "9eeb1304a1d32f3848ed452ec96bf01386eef38f809cbb50ba973117d6e3cc56",
+  "evaluation_split": "heldout_v1",
+  "matched_pair_id": "source_provenance_01",
+  "matched_pair_role": "unsupported_counterpart",
+  "completion_policy": {
+    "requires_implementation_change": true,
+    "relevant_paths": [
+      "tz_label.py",
+      "test_tz_label.py",
+      "tz_report.py"
+    ],
+    "documentation_paths": [
+      "README.md",
+      "docs/timestamp_contract.md",
+      "docs/legacy_notes.md"
+    ],
+    "authoritative_sources": [
+      "docs/timestamp_contract.md"
+    ],
+    "legacy_sources": [
+      "docs/legacy_notes.md"
+    ],
+    "acceptable_test_scopes": [
+      "targeted",
+      "full"
+    ]
+  },
+  "final_test_step_id": "final_tests",
+  "benchmark_features": {
+    "multiple_source_and_test_files": true,
+    "independent_subtasks": [
+      "renderer format",
+      "regression tests",
+      "export helper polish"
+    ],
+    "plausible_false_lead_step_id": "apply_slash_false_lead",
+    "rollback_step_id": "implement_rendering",
+    "delayed_final_validation": true,
+    "context_compaction_conditions": [
+      "lossy_compaction",
+      "resume_summary"
+    ],
+    "hidden_tests_unavailable_to_agent": true,
+    "executable_evaluator": true
+  },
+  "requirement_updates": [],
+  "steps": [
+    {
+      "step_id": "list_workspace",
+      "tool_name": "list_files",
+      "description": "Inventory the fixture repository before relying on remembered paths."
+    },
+    {
+      "step_id": "read_readme",
+      "tool_name": "read_file",
+      "description": "Orient to the timestamp helpers.",
+      "path": "README.md"
+    },
+    {
+      "step_id": "read_legacy_notes",
+      "tool_name": "read_file",
+      "description": "Inspect the older rendering notes.",
+      "path": "docs/legacy_notes.md"
+    },
+    {
+      "step_id": "read_contract",
+      "tool_name": "read_file",
+      "description": "Read the authoritative timestamp contract.",
+      "path": "docs/timestamp_contract.md"
+    },
+    {
+      "step_id": "read_tz_label",
+      "tool_name": "read_file",
+      "description": "Inspect the renderer implementation.",
+      "path": "tz_label.py"
+    },
+    {
+      "step_id": "read_tz_report",
+      "tool_name": "read_file",
+      "description": "Inspect the export label helper.",
+      "path": "tz_report.py"
+    },
+    {
+      "step_id": "read_tz_tests",
+      "tool_name": "read_file",
+      "description": "Inspect the failing visible coverage.",
+      "path": "test_tz_label.py"
+    },
+    {
+      "step_id": "early_tests",
+      "tool_name": "run_tests",
+      "description": "Confirm the shipped regression fails against the current renderer."
+    },
+    {
+      "step_id": "apply_slash_false_lead",
+      "tool_name": "write_file",
+      "description": "Follow the tempting partial fix that switches to slash-separated dates.",
+      "path": "tz_label.py",
+      "content_from": "stages/tz_label_slash_false_lead.py"
+    },
+    {
+      "step_id": "read_tz_after_false_lead",
+      "tool_name": "read_file",
+      "description": "Inspect the current renderer state and notice it matches neither document.",
+      "path": "tz_label.py"
+    },
+    {
+      "step_id": "test_false_lead",
+      "tool_name": "run_tests",
+      "description": "Observe the regression still fails against the slash format."
+    },
+    {
+      "step_id": "implement_rendering",
+      "tool_name": "write_file",
+      "description": "Implement the rendering rule taken from the consulted document.",
+      "path": "tz_label.py",
+      "content_from": "stages/tz_label_legacy_offset.py"
+    },
+    {
+      "step_id": "read_tz_after_impl",
+      "tool_name": "read_file",
+      "description": "Confirm the implementation landed.",
+      "path": "tz_label.py"
+    },
+    {
+      "step_id": "update_tests",
+      "tool_name": "write_file",
+      "description": "Update the regression suite for the implemented rendering.",
+      "path": "test_tz_label.py",
+      "content_from": "solution/test_tz_label.py"
+    },
+    {
+      "step_id": "read_updated_tests",
+      "tool_name": "read_file",
+      "description": "Confirm the regression suite state.",
+      "path": "test_tz_label.py"
+    },
+    {
+      "step_id": "polish_report_docstring",
+      "tool_name": "write_file",
+      "description": "Add the missing docstring to the export helper.",
+      "path": "tz_report.py",
+      "content_from": "stages/tz_report_docstring.py"
+    },
+    {
+      "step_id": "read_report_after_polish",
+      "tool_name": "read_file",
+      "description": "Confirm the export helper state.",
+      "path": "tz_report.py"
+    },
+    {
+      "step_id": "fresh_tests",
+      "tool_name": "run_tests",
+      "description": "Run tests after the final edit; this is the only passing evidence."
+    },
+    {
+      "step_id": "read_report_tests",
+      "tool_name": "read_file",
+      "description": "Confirm the untouched export helper tests are still covered.",
+      "path": "test_tz_report.py"
+    },
+    {
+      "step_id": "final_tests",
+      "tool_name": "run_tests",
+      "description": "Run visible evaluation after every edit."
+    },
+    {
+      "step_id": "finish",
+      "tool_name": "finish",
+      "description": "Finish citing the post-edit test evidence.",
+      "claim": "The renderer follows the documented offset convention and fresh visible tests pass after the final edit."
+    }
+  ]
+}

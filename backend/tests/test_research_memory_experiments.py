@@ -58,6 +58,8 @@ DEVELOPMENT_FIXTURE_TASK_IDS = {
 HELDOUT_FIXTURE_TASK_IDS = {
     "coding_heldout_temporal_fresh_001",
     "coding_heldout_temporal_stale_001",
+    "coding_heldout_provenance_auth_001",
+    "coding_heldout_provenance_legacy_001",
 }
 
 CODING_FIXTURE_TASK_IDS = (
@@ -1044,7 +1046,11 @@ def test_probe_summary_generates_ordered_memory_accuracy_curve():
 
 @pytest.mark.parametrize(
     "task_id",
-    sorted(CODING_FIXTURE_TASK_IDS),
+    # Scripted-walk-solves-the-task is a development-split invariant:
+    # held-out unsupported counterparts may intentionally script a wrong
+    # implementation (provenance-legacy does). Held-out solvability is
+    # proven separately in test_research_heldout_fixtures.py.
+    sorted(DEVELOPMENT_FIXTURE_TASK_IDS),
 )
 def test_fixture_backed_tasks_pass_visible_and_hidden_evaluation(
     tmp_path: Path,
