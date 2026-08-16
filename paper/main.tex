@@ -184,6 +184,18 @@ communicated as evidence audits, never as correctness guarantees.
 
 \section{Limitations}
 % ~0.25 page. State plainly:
+% - FIRST, most important, never cut: the held-out traps and the
+%   supervisor's rules were designed by the same authors. The
+%   dev/held-out split prevents rule TUNING on evaluation fixtures, but
+%   it cannot remove the conceptual correlation between what we chose
+%   to trap and what we chose to detect — the supervisor is evaluated
+%   on failure modes its designers considered. Two design features
+%   partially offset this and should be cited here: the provenance
+%   family is constructed to DEFEAT the supervisor (we ship our own
+%   counterexample, measured by the oracle arm), and the negative
+%   controls price the failure direction a self-built evaluation is
+%   least motivated to measure. Partially offset is not eliminated:
+%   in-the-wild trap discovery is future work.
 % - Development fixtures were iterated against; only heldout_v1 supports
 %   the generalization claim, and it is fixture-based, not in-the-wild.
 % - Pairs are clustered by model and task; per-model results and
