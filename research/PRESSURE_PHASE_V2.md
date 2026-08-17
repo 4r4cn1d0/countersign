@@ -78,3 +78,19 @@ control arm, not discarded work.
 - deepseek-r1:8b third-model probe paused at 2/15 (≈12 min/run pace);
   its ladder decision is deferred and must not be made based on
   held-out results.
+
+## Migration ledger addendum (2026-08-17, pod 2)
+
+- Pod 1's frozen protocol
+  (`ac835337eb93c808def3e30ca7710e021721ca926c10622e72376bd123a39be1`,
+  revision 8ad7a29 / tag `heldout-v1-freeze`) was removed from the
+  resumed output directory because the resuming checkout is
+  `heldout-v1-freeze.1` (d80b1c2 — an interruption-recovery infra fix;
+  verifier-policy hashes identical between the two tags). The new
+  invocation writes its own protocol; the 101 reused run artifacts
+  retain the original protocol id in their embedded
+  `experiment_context` untouched, and manifest run rows carry
+  `reused: true` for them.
+- One episode (temporal_fresh x qwen x memory_baseline x seed 0) was
+  partially re-executed (~22 trace events) by the pre-fix relaunch and
+  discarded; its completed pod-1 artifact is the one in the dataset.
