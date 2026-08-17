@@ -94,3 +94,22 @@ control arm, not discarded work.
 - One episode (temporal_fresh x qwen x memory_baseline x seed 0) was
   partially re-executed (~22 trace events) by the pre-fix relaunch and
   discarded; its completed pod-1 artifact is the one in the dataset.
+
+## Incident ledger: negctrl crash + freeze.2 (2026-08-18)
+
+- negctrl run 29 (no_change control, qwen, observe/baseline arm): the
+  worker wrote a syntactically invalid env_validator.py, then called
+  inspect_dependency on it; an unguarded ast.parse SyntaxError escaped
+  the tool-error boundary and killed the matrix process at 28/40.
+- Fix: SyntaxError -> ValueError inside inspect_dependency (flows
+  through the existing action_error path; worker sees a failed tool
+  observation). coding_environment.py is not a hashed verifier-policy
+  file; no rule semantics changed. Tag: heldout-v1-freeze.2.
+- negctrl resumed under freeze.2 with 28 artifacts reused; prior
+  negctrl protocol 0f27b5697a246b3e superseded by the freeze.2
+  invocation's protocol (same settings; revision differs by the
+  crash fix and this ledger).
+- Note for analysis: the crashed cell re-executes at the same seed;
+  the worker's bad write + self-inspection now surfaces as tool_error
+  and the episode continues — a legitimately interesting observation
+  (the no-change task provoked an unnecessary, broken write).
