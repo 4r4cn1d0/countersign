@@ -85,10 +85,12 @@ autonomous debugging agent and evaluated on SWE-bench Verified.
 
 ## Target abstract shape
 
-"We present the first large-scale study of evidence support for
-coding-agent completion claims. Across N trajectories from multiple
-scaffolds, X% of termination claims lack fresh evidence sufficient to
-justify completion, and unsupported completion predicts task failure.
+"We study whether coding agents' completion claims are supported by
+the evidence available in their execution traces. Across N
+classifiable trajectories from multiple scaffolds (instrument coverage
+reported per corpus), X% of termination claims lack fresh evidence
+sufficient to justify completion, and unsupported completion is
+associated with task failure under mixed-effects controls.
 We introduce [Observatory], a trace-only runtime supervisor; a blinded
 two-annotator study establishes its precision/recall as a measurement
 instrument. Controlled matched experiments isolate temporal,
