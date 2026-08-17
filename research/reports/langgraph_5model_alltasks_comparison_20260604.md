@@ -1,5 +1,7 @@
 # Agent Memory Model Matrix Analysis
 
+**SCHEDULED FOR DELETION after the workshop submission — deprecated five-model study; metrics predate the NA-aware fix and the fixture-backed suite; never cited as evidence.**
+
 > **Deprecated — do not cite as empirical evidence.** This report was generated
 > with `trace_mode=model_driven` and the historical `_model_prompt`/
 > `_memory_pressure_prompt` (see `research/runner/benchmark_runner.py`), which

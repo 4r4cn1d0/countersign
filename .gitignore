@@ -26,3 +26,7 @@ backend/keys/*.pem
 # Build artifacts
 dist/
 build/
+
+# Local-only: run mirrors and private planning docs (never push)
+runs/pod-sync/
+planning/
