@@ -103,3 +103,63 @@ over public trajectories (Sept) -> Study 1 analysis (Sept-Oct) ->
 OpenHands integration + Study 3 (Oct) -> FSE research-track submission
 per the 2027 cycle deadline; Demonstrations + artifact badging
 alongside.
+
+## v2 refinements (adopted 2026-08-18 — this section is binding where it
+## tightens the above)
+
+1. **Ordering gate**: Study 1 BEGINS as a corpus audit — which public
+   trajectories are reconstructable enough (evidence produced, when,
+   what changed after, what was available at termination) to be
+   measurable at all. Report per-corpus inclusion rates; never pool
+   heterogeneous trace formats silently.
+2. **Measurement abstention**: the instrument outputs
+   supported / unsupported / INDETERMINATE on retrospective
+   trajectories; prevalence is reported jointly with instrument
+   coverage ("on corpus X, 71% of terminations were classifiable;
+   among those, Y% unsupported"). Note: abstention already exists in
+   the built machinery (oracle "uncertain", tri-state freshness) —
+   corpus scoring extends it, not invents it.
+3. **Study 3 committed design = three arms**: baseline / dumb
+   re-run-tests gate / Observatory. LLM-judge and bounded-repair arms
+   are secondary extensions only if compute and time permit. The dumb
+   gate is scientifically load-bearing: current qwen data shows all
+   natural slips are provenance slips, which test-freshness gating
+   cannot detect.
+4. **Causal restraint, predeclared**: Study 1 claims ASSOCIATION only
+   (unsupported termination <-> failure), modeled with mixed effects —
+   logit P(failure) ~ U + length + difficulty + edit/test complexity +
+   random effects for task, model, scaffold — with the exact
+   specification preregistered, never chosen post hoc. Difficulty
+   proxies to predeclare from gold-patch metadata (LOC changed, files
+   touched, tests modified), available across SWE-bench-derived
+   corpora. INTERVENTION evidence comes only from Study 3's controlled
+   assignment.
+5. **Detector validation is a GATE, not a section**: frozen annotation
+   codebook; two independent blinded raters; stratification across
+   corpora/scaffolds and predicted positive/negative; inter-rater
+   agreement; precision/recall with CIs; adjudication protocol; and
+   PER-FAILURE-FAMILY performance (temporal / provenance /
+   requirement-state) — aggregate F1 alone can hide weakness on
+   exactly the provenance cases that motivate the paper. The large
+   retrospective analysis does not run until this gate passes.
+6. **Kill conditions (hard)**: by ~Sept 10-12, if the corpus audit
+   yields too little reconstructable data OR human validation shows the
+   detector unreliable, change the FSE story rather than brute-forcing.
+   Floor for comfort: ~20-60K usable trajectories + validated labels +
+   a real OpenHands intervention; no six-figure counts required.
+7. **No "first" claims**; contribution statement: "We study whether
+   coding agents' completion claims are supported by the evidence
+   available in their execution traces, and evaluate whether an
+   evidence-grounded termination supervisor can reduce unsupported
+   completion."
+
+## Critical path (four gates)
+
+- Now -> Meta-Agents workshop: finish the controlled supervisor
+  experiment + paper. NO FSE scope creep.
+- Immediately in parallel (cheap): corpus audit; recruit/confirm the
+  second annotator.
+- Early September: usable-corpus determination; freeze the annotation
+  instrument; validate Observatory against humans (the gate).
+- Only after the gate: the large observational analysis; then Study 3
+  three-arm intervention.
