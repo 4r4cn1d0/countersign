@@ -427,6 +427,9 @@ def run_model_matrix(
         "skipped_run_count": sum(
             model["skipped_run_count"] for model in model_results
         ),
+        "reused_run_count": sum(
+            model.get("reused_run_count", 0) for model in model_results
+        ),
         "completed_pair_count": sum(
             model["completed_pair_count"] for model in model_results
         ),
@@ -511,6 +514,7 @@ def _run_one_model(
         "completed_run_count": 0,
         "failed_run_count": 0,
         "skipped_run_count": 0,
+        "reused_run_count": 0,
         "completed_pair_count": 0,
         "runs": [],
         "comparisons": [],
@@ -612,44 +616,78 @@ def _run_one_model(
                         / variant
                         / f"{task_id}.json"
                     )
-                    try:
-                        run = runner.run_task_id(task_id, run_config)
-                    except RuntimeError as exc:
-                        result["failed_run_count"] += 1
-                        result["errors"].append(
-                            {
-                                "task_id": task_id,
-                                "memory_condition": memory_condition,
-                                "pressure_profile_id": profile_id,
-                                "pressure_severity": (
-                                    pressure_profile.get("severity")
-                                ),
-                                "seed": seed,
-                                "variant": variant,
-                                "trial_id": trial_id,
-                                "error_type": "runtime_error",
-                                "error": str(exc),
-                            }
+                    # Interruption recovery: a completed artifact from an
+                    # earlier invocation of the SAME cell is reused as-is
+                    # — never re-executed (re-running would silently
+                    # resample the episode) and never rewritten (its
+                    # original experiment_context, including the protocol
+                    # id it ran under, is part of the audit trail).
+                    reused_run = None
+                    if run_path.exists():
+                        try:
+                            candidate = json.loads(
+                                run_path.read_text(encoding="utf-8")
+                            )
+                        except (OSError, ValueError):
+                            candidate = None
+                        context = (candidate or {}).get(
+                            "experiment_context", {}
                         )
-                        continue
+                        if (
+                            candidate
+                            and candidate.get("task_id") == task_id
+                            and candidate.get("run_metadata", {}).get(
+                                "model_name"
+                            )
+                            == model_name
+                            and context.get("seed") == seed
+                            and context.get("variant") == variant
+                            and context.get("pressure_profile_id")
+                            == profile_id
+                        ):
+                            reused_run = candidate
+                    if reused_run is not None:
+                        run = reused_run
+                        result["reused_run_count"] += 1
+                    else:
+                        try:
+                            run = runner.run_task_id(task_id, run_config)
+                        except RuntimeError as exc:
+                            result["failed_run_count"] += 1
+                            result["errors"].append(
+                                {
+                                    "task_id": task_id,
+                                    "memory_condition": memory_condition,
+                                    "pressure_profile_id": profile_id,
+                                    "pressure_severity": (
+                                        pressure_profile.get("severity")
+                                    ),
+                                    "seed": seed,
+                                    "variant": variant,
+                                    "trial_id": trial_id,
+                                    "error_type": "runtime_error",
+                                    "error": str(exc),
+                                }
+                            )
+                            continue
 
-                    run["experiment_context"] = {
-                        "protocol_id": protocol_id,
-                        "trial_id": trial_id,
-                        "memory_condition": memory_condition,
-                        "pressure_profile_id": profile_id,
-                        "pressure_severity": pressure_profile.get(
-                            "severity"
-                        ),
-                        "pressure_severity_ordinal": (
-                            pressure_profile.get("severity_ordinal")
-                        ),
-                        "memory_pressure_start": profile_pressure_start,
-                        "memory_window": profile_memory_window,
-                        "seed": seed,
-                        "variant": variant,
-                    }
-                    _write_json(run_path, run)
+                        run["experiment_context"] = {
+                            "protocol_id": protocol_id,
+                            "trial_id": trial_id,
+                            "memory_condition": memory_condition,
+                            "pressure_profile_id": profile_id,
+                            "pressure_severity": pressure_profile.get(
+                                "severity"
+                            ),
+                            "pressure_severity_ordinal": (
+                                pressure_profile.get("severity_ordinal")
+                            ),
+                            "memory_pressure_start": profile_pressure_start,
+                            "memory_window": profile_memory_window,
+                            "seed": seed,
+                            "variant": variant,
+                        }
+                        _write_json(run_path, run)
                     run_paths[
                         (task_id, profile_id, seed, variant)
                     ] = run_path
@@ -671,6 +709,7 @@ def _run_one_model(
                             "seed": seed,
                             "variant": variant,
                             "trial_id": trial_id,
+                            "reused": reused_run is not None,
                             "runtime_error": run["run_metadata"].get(
                                 "runtime_error"
                             ),

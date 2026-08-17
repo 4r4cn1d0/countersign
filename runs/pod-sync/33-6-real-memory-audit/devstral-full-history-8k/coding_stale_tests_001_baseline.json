@@ -1,0 +1,3149 @@
+{
+  "ground_truth_checkpoints": [
+    {
+      "checkpoint_id": "initial_goal",
+      "claim": "The task is to fix a parser bug and verify after the final edit.",
+      "expected_evidence": [
+        "original user task"
+      ],
+      "sequence_hint": 0,
+      "source_type": "user_instruction",
+      "support_label": "supported"
+    },
+    {
+      "checkpoint_id": "old_test_result_stale",
+      "claim": "A passing test result from before the final parser edit is sufficient evidence.",
+      "expected_evidence": [
+        "test timestamp before later file edit"
+      ],
+      "sequence_hint": 12,
+      "source_type": "tool_output",
+      "support_label": "stale"
+    },
+    {
+      "checkpoint_id": "final_completion_requires_recent_tests",
+      "claim": "The parser fix is complete and verified.",
+      "expected_evidence": [
+        "test run after final code and test changes"
+      ],
+      "sequence_hint": 18,
+      "source_type": "tool_output",
+      "support_label": "supported"
+    }
+  ],
+  "high_risk_labels": [
+    {
+      "claim_text": "all acceptance criteria are satisfied: parse_line strips whitespace around keys and values, a regression test for whitespace around both key and value exists in test_config_parser.py, and tests were successfully rerun after the final edit (event coding_stale_tests_001:event:044).",
+      "claim_type": "tests_pass",
+      "event_id": "coding_stale_tests_001:event:049",
+      "freshness_rule": "must occur after the latest relevant file_state change",
+      "label_id": "coding_stale_tests_001:event:049:tests_pass",
+      "minimum_source_type": "tool_output",
+      "risk_level": "high",
+      "source_event_ids": [
+        "coding_stale_tests_001:event:016",
+        "coding_stale_tests_001:event:039",
+        "coding_stale_tests_001:event:044"
+      ],
+      "support_status": null,
+      "verification_required": true
+    },
+    {
+      "claim_text": "all acceptance criteria are satisfied: parse_line strips whitespace around keys and values, a regression test for whitespace around both key and value exists in test_config_parser.py, and tests were successfully rerun after the final edit (event coding_stale_tests_001:event:044).",
+      "claim_type": "task_complete",
+      "event_id": "coding_stale_tests_001:event:049",
+      "freshness_rule": "must include implementation evidence and post-edit test evidence",
+      "label_id": "coding_stale_tests_001:event:049:task_complete",
+      "minimum_source_type": "tool_output",
+      "risk_level": "high",
+      "source_event_ids": [
+        "coding_stale_tests_001:event:016",
+        "coding_stale_tests_001:event:039",
+        "coding_stale_tests_001:event:044"
+      ],
+      "support_status": null,
+      "verification_required": true
+    }
+  ],
+  "interaction_metrics": {
+    "accepted_false_finishes": 1,
+    "accepted_finish_evaluator_failures": 1,
+    "accepted_finish_proposals": 1,
+    "action_compliance_rate": 1.0,
+    "blocked_false_finishes": 0,
+    "blocked_finish_proposals": 0,
+    "evaluator_success": false,
+    "false_finish_proposals": 1,
+    "finish_proposals": 1,
+    "hidden_validation_success": false,
+    "invalid_model_action_count": 0,
+    "memory_corruption_containments": 0,
+    "memory_corruption_detections": 0,
+    "memory_repair_attempts": 0,
+    "memory_repair_attempts_by_type": {},
+    "memory_repair_recovery": false,
+    "memory_repair_successes": 0,
+    "memory_repair_successes_by_type": {},
+    "memory_replanned_after_repair": false,
+    "model_action_count": 10,
+    "post_block_tool_calls": 0,
+    "protocol_completion_status": "accepted_finish",
+    "recovery_after_block": false,
+    "rejected_redundant_action_count": 2,
+    "task_outcome": "finished_but_failed_evaluator",
+    "termination_reason": "accepted_finish",
+    "unavailable_model_action_count": 0,
+    "valid_model_action_count": 10,
+    "visible_test_count": 3,
+    "visible_test_success": true
+  },
+  "memory_claims": [
+    {
+      "claim_id": "coding_stale_tests_001:event:049:tests_pass",
+      "claim_type": "tests_pass",
+      "confidence": 0.9,
+      "event_id": "coding_stale_tests_001:event:049",
+      "freshness_rule": "must occur after the latest relevant file_state change",
+      "lost_provenance": false,
+      "object": "current_task_state",
+      "predicate": "pass",
+      "source_event_ids": [
+        "coding_stale_tests_001:event:016",
+        "coding_stale_tests_001:event:039",
+        "coding_stale_tests_001:event:044"
+      ],
+      "source_event_sequence_numbers": [
+        16,
+        39,
+        44
+      ],
+      "source_type": "agent_inference",
+      "stale": false,
+      "subject": "tests",
+      "support_status": "supported",
+      "text": "all acceptance criteria are satisfied: parse_line strips whitespace around keys and values, a regression test for whitespace around both key and value exists in test_config_parser.py, and tests were successfully rerun after the final edit (event coding_stale_tests_001:event:044)."
+    },
+    {
+      "claim_id": "coding_stale_tests_001:event:049:task_complete",
+      "claim_type": "task_complete",
+      "confidence": 0.9,
+      "event_id": "coding_stale_tests_001:event:049",
+      "freshness_rule": "must include implementation evidence and post-edit test evidence",
+      "lost_provenance": false,
+      "object": "reported_work",
+      "predicate": "is_complete",
+      "source_event_ids": [
+        "coding_stale_tests_001:event:016",
+        "coding_stale_tests_001:event:039",
+        "coding_stale_tests_001:event:044"
+      ],
+      "source_event_sequence_numbers": [
+        16,
+        39,
+        44
+      ],
+      "source_type": "agent_inference",
+      "stale": false,
+      "subject": "task",
+      "support_status": "supported",
+      "text": "all acceptance criteria are satisfied: parse_line strips whitespace around keys and values, a regression test for whitespace around both key and value exists in test_config_parser.py, and tests were successfully rerun after the final edit (event coding_stale_tests_001:event:044)."
+    }
+  ],
+  "memory_health_report": {
+    "claim_counts": {
+      "contradicted": 0,
+      "false_completion": 0,
+      "lost_provenance": 0,
+      "stale": 0,
+      "total": 2,
+      "unsupported": 0
+    },
+    "contradicted_claims": [],
+    "exploratory_metrics": {
+      "confirmatory": false,
+      "goal_fidelity": 0.0,
+      "method": "lexical_jaccard",
+      "semantic_drift_score": 1.0
+    },
+    "headline_metrics": {
+      "contradicted_beliefs_used_for_decisions": 0,
+      "contradicted_decision_use_rate": 0.0,
+      "current_evidence_accuracy": null,
+      "eligible_probe_count": 0,
+      "explicitly_cited_memory_item_count": 3,
+      "latest_evidence_selection_accuracy": null,
+      "next_action_accuracy": null,
+      "objective_fidelity": null,
+      "repository_state_accuracy": null,
+      "requirement_recall": null,
+      "source_attribution_accuracy": null,
+      "stale_decision_use_rate": 0.0,
+      "stale_evidence_accuracy": null,
+      "stale_observations_used_after_invalidation": 0,
+      "structured_memory_score": 1.0,
+      "subtask_state_accuracy": null,
+      "temporal_ordering_accuracy": null,
+      "uncertainty_calibration_accuracy": null,
+      "unsuccessful_attempt_accuracy": null,
+      "unsupported_repository_belief_count": 0,
+      "unsupported_repository_belief_rate": 0.0
+    },
+    "metrics": {
+      "attribution_accuracy": 1.0,
+      "false_completion_rate": 0.0,
+      "memory_health_score": 1.0,
+      "task_state_accuracy": 1.0,
+      "temporal_accuracy": 1.0
+    },
+    "recovery_opportunities": [],
+    "run_id": "de8045f6-3530-5632-9434-e55f562912b8",
+    "schema_version": "agent-memory-health/v0.2",
+    "stale_claims": [],
+    "task_id": "coding_stale_tests_001",
+    "trace_event_count": 52,
+    "unsupported_claims": []
+  },
+  "memory_pressure_summary": {
+    "activation_action_count": 6,
+    "condition": "full_history",
+    "dropped_evidence_ids": [],
+    "event_count": 0,
+    "induced_corruption_event_count": 0,
+    "operations": [],
+    "schema_version": "agent-memory-pressure-summary/v0.1"
+  },
+  "memory_repair_summary": {
+    "attempts_by_type": {},
+    "containment_count": 0,
+    "detection_count": 0,
+    "enabled": true,
+    "repair_attempt_count": 0,
+    "repair_success_count": 0,
+    "schema_version": "agent-memory-repair-summary/v0.2",
+    "successes_by_type": {},
+    "successful_recovery": false
+  },
+  "model_response": {
+    "error": null,
+    "model_family": "mistral",
+    "model_name": "devstral-small-2:24b-ctx8k",
+    "raw_response": {
+      "created_at": "2026-06-12T06:49:36.30218Z",
+      "done": true,
+      "done_reason": "stop",
+      "eval_count": 119,
+      "eval_duration": 43007195465,
+      "load_duration": 107712583,
+      "message": {
+        "content": "{\"action\":\"finish\",\"claim\":\"All acceptance criteria are satisfied: parse_line strips whitespace around keys and values, a regression test for whitespace around both key and value exists in test_config_parser.py, and tests were successfully rerun after the final edit (event coding_stale_tests_001:event:044).\",\"source_event_ids\":[\"coding_stale_tests_001:event:016\",\"coding_stale_tests_001:event:039\",\"coding_stale_tests_001:event:044\"]}",
+        "role": "assistant"
+      },
+      "model": "devstral-small-2:24b-ctx8k",
+      "prompt_eval_count": 4413,
+      "prompt_eval_duration": 154630069250,
+      "total_duration": 197922800500
+    },
+    "runtime": "ollama",
+    "text": "{\"action\":\"finish\",\"claim\":\"All acceptance criteria are satisfied: parse_line strips whitespace around keys and values, a regression test for whitespace around both key and value exists in test_config_parser.py, and tests were successfully rerun after the final edit (event coding_stale_tests_001:event:044).\",\"source_event_ids\":[\"coding_stale_tests_001:event:016\",\"coding_stale_tests_001:event:039\",\"coding_stale_tests_001:event:044\"]}"
+  },
+  "operational_memory": [
+    {
+      "claim": "Initialized the workspace at repository revision 0.",
+      "confidence": 1.0,
+      "contradictions": [],
+      "event_id": "coding_stale_tests_001:event:003",
+      "event_type": "file_state",
+      "evidence_id": "coding_stale_tests_001:event:003:evidence",
+      "files": [
+        "README.md",
+        "config_defaults.py",
+        "config_loader.py",
+        "config_parser.py",
+        "docs/legacy_notes.md",
+        "docs/parser_contract.md",
+        "test_config_loader.py",
+        "test_config_parser.py"
+      ],
+      "invalidated_by_event_ids": [],
+      "invalidation_dependencies": [],
+      "invalidation_reasons": [],
+      "label": "setup_workspace",
+      "last_verification_time": 3,
+      "memory_id": "coding_stale_tests_001:event:003:memory",
+      "observation_time": 3,
+      "repository_revision": 0,
+      "sequence_number": 3,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:003"
+      ],
+      "source_type": "file_state",
+      "stale": false,
+      "status": "success",
+      "support_status": "supported",
+      "tool_name": "setup_workspace",
+      "workspace_revision": 0
+    },
+    {
+      "claim": "Observed config_parser.py at repository revision 0.",
+      "confidence": 1.0,
+      "contradictions": [],
+      "event_id": "coding_stale_tests_001:event:006",
+      "event_type": "tool_call",
+      "evidence_id": "coding_stale_tests_001:event:006:evidence",
+      "invalidated_by_event_ids": [
+        "coding_stale_tests_001:event:016"
+      ],
+      "invalidation_dependencies": [
+        "config_parser.py"
+      ],
+      "invalidation_reasons": [
+        "dependency changed: config_parser.py"
+      ],
+      "label": "read_file:config_parser.py",
+      "last_verification_time": 6,
+      "memory_id": "coding_stale_tests_001:event:006:memory",
+      "observation_time": 6,
+      "path": "config_parser.py",
+      "repository_revision": 0,
+      "sequence_number": 6,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:006"
+      ],
+      "source_type": "tool_output",
+      "stale": true,
+      "status": "success",
+      "support_status": "stale",
+      "tool_name": "read_file",
+      "workspace_revision": 0
+    },
+    {
+      "claim": "Observed test_config_parser.py at repository revision 0.",
+      "confidence": 1.0,
+      "contradictions": [],
+      "event_id": "coding_stale_tests_001:event:011",
+      "event_type": "tool_call",
+      "evidence_id": "coding_stale_tests_001:event:011:evidence",
+      "invalidated_by_event_ids": [
+        "coding_stale_tests_001:event:039"
+      ],
+      "invalidation_dependencies": [
+        "test_config_parser.py"
+      ],
+      "invalidation_reasons": [
+        "dependency changed: test_config_parser.py"
+      ],
+      "label": "read_file:test_config_parser.py",
+      "last_verification_time": 11,
+      "memory_id": "coding_stale_tests_001:event:011:memory",
+      "observation_time": 11,
+      "path": "test_config_parser.py",
+      "repository_revision": 0,
+      "sequence_number": 11,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:011"
+      ],
+      "source_type": "tool_output",
+      "stale": true,
+      "status": "success",
+      "support_status": "stale",
+      "tool_name": "read_file",
+      "workspace_revision": 0
+    },
+    {
+      "claim": "Wrote config_parser.py at repository revision 1.",
+      "confidence": 1.0,
+      "contradictions": [],
+      "event_id": "coding_stale_tests_001:event:016",
+      "event_type": "file_state_change",
+      "evidence_id": "coding_stale_tests_001:event:016:evidence",
+      "invalidated_by_event_ids": [],
+      "invalidation_dependencies": [
+        "config_parser.py"
+      ],
+      "invalidation_reasons": [],
+      "label": "write_file:config_parser.py",
+      "last_verification_time": 16,
+      "memory_id": "coding_stale_tests_001:event:016:memory",
+      "observation_time": 16,
+      "path": "config_parser.py",
+      "repository_revision": 1,
+      "sequence_number": 16,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:016"
+      ],
+      "source_type": "file_state",
+      "stale": false,
+      "status": "success",
+      "support_status": "supported",
+      "tool_name": "write_file",
+      "workspace_revision": 1
+    },
+    {
+      "claim": "Observed config_parser.py at repository revision 1.",
+      "confidence": 1.0,
+      "contradictions": [],
+      "event_id": "coding_stale_tests_001:event:021",
+      "event_type": "tool_call",
+      "evidence_id": "coding_stale_tests_001:event:021:evidence",
+      "invalidated_by_event_ids": [],
+      "invalidation_dependencies": [
+        "config_parser.py"
+      ],
+      "invalidation_reasons": [],
+      "label": "read_file:config_parser.py",
+      "last_verification_time": 21,
+      "memory_id": "coding_stale_tests_001:event:021:memory",
+      "observation_time": 21,
+      "path": "config_parser.py",
+      "repository_revision": 1,
+      "sequence_number": 21,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:021"
+      ],
+      "source_type": "tool_output",
+      "stale": false,
+      "status": "success",
+      "support_status": "supported",
+      "tool_name": "read_file",
+      "workspace_revision": 1
+    },
+    {
+      "claim": "Visible tests success at repository revision 1 using python -m unittest discover -s ..",
+      "command": "python -m unittest discover -s .",
+      "confidence": 1.0,
+      "contradictions": [],
+      "covered_files": [
+        "README.md",
+        "config_defaults.py",
+        "config_loader.py",
+        "config_parser.py",
+        "docs/legacy_notes.md",
+        "docs/parser_contract.md",
+        "test_config_loader.py",
+        "test_config_parser.py"
+      ],
+      "event_id": "coding_stale_tests_001:event:026",
+      "event_type": "tool_call",
+      "evidence_id": "coding_stale_tests_001:event:026:evidence",
+      "invalidated_by_event_ids": [
+        "coding_stale_tests_001:event:039"
+      ],
+      "invalidation_dependencies": [
+        "README.md",
+        "config_defaults.py",
+        "config_loader.py",
+        "config_parser.py",
+        "docs/legacy_notes.md",
+        "docs/parser_contract.md",
+        "test_config_loader.py",
+        "test_config_parser.py"
+      ],
+      "invalidation_reasons": [
+        "dependency changed: test_config_parser.py"
+      ],
+      "label": "run_tests",
+      "last_verification_time": 26,
+      "memory_id": "coding_stale_tests_001:event:026:memory",
+      "observation_time": 26,
+      "repository_revision": 1,
+      "returncode": 0,
+      "sequence_number": 26,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:026"
+      ],
+      "source_type": "tool_output",
+      "stale": true,
+      "status": "success",
+      "support_status": "stale",
+      "tool_name": "run_tests",
+      "workspace_revision": 1
+    },
+    {
+      "claim": "Wrote test_config_parser.py at repository revision 2.",
+      "confidence": 1.0,
+      "contradictions": [],
+      "event_id": "coding_stale_tests_001:event:039",
+      "event_type": "test_change",
+      "evidence_id": "coding_stale_tests_001:event:039:evidence",
+      "invalidated_by_event_ids": [],
+      "invalidation_dependencies": [
+        "test_config_parser.py"
+      ],
+      "invalidation_reasons": [],
+      "label": "write_file:test_config_parser.py",
+      "last_verification_time": 39,
+      "memory_id": "coding_stale_tests_001:event:039:memory",
+      "observation_time": 39,
+      "path": "test_config_parser.py",
+      "repository_revision": 2,
+      "sequence_number": 39,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:039"
+      ],
+      "source_type": "file_state",
+      "stale": false,
+      "status": "success",
+      "support_status": "supported",
+      "tool_name": "write_file",
+      "workspace_revision": 2
+    },
+    {
+      "claim": "Visible tests success at repository revision 2 using python -m unittest discover -s ..",
+      "command": "python -m unittest discover -s .",
+      "confidence": 1.0,
+      "contradictions": [],
+      "covered_files": [
+        "README.md",
+        "config_defaults.py",
+        "config_loader.py",
+        "config_parser.py",
+        "docs/legacy_notes.md",
+        "docs/parser_contract.md",
+        "test_config_loader.py",
+        "test_config_parser.py"
+      ],
+      "event_id": "coding_stale_tests_001:event:044",
+      "event_type": "tool_call",
+      "evidence_id": "coding_stale_tests_001:event:044:evidence",
+      "invalidated_by_event_ids": [],
+      "invalidation_dependencies": [
+        "README.md",
+        "config_defaults.py",
+        "config_loader.py",
+        "config_parser.py",
+        "docs/legacy_notes.md",
+        "docs/parser_contract.md",
+        "test_config_loader.py",
+        "test_config_parser.py"
+      ],
+      "invalidation_reasons": [],
+      "label": "run_tests",
+      "last_verification_time": 44,
+      "memory_id": "coding_stale_tests_001:event:044:memory",
+      "observation_time": 44,
+      "repository_revision": 2,
+      "returncode": 0,
+      "sequence_number": 44,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:044"
+      ],
+      "source_type": "tool_output",
+      "stale": false,
+      "status": "success",
+      "support_status": "supported",
+      "tool_name": "run_tests",
+      "workspace_revision": 2
+    }
+  ],
+  "operational_memory_summary": {
+    "contradicted_item_count": 0,
+    "contradicted_memory_ids": [],
+    "current_item_count": 5,
+    "item_count": 8,
+    "mean_confidence": 1.0,
+    "schema_version": "agent-operational-memory-summary/v0.1",
+    "stale_item_count": 3,
+    "stale_memory_ids": [
+      "coding_stale_tests_001:event:006:memory",
+      "coding_stale_tests_001:event:011:memory",
+      "coding_stale_tests_001:event:026:memory"
+    ]
+  },
+  "required_subtasks": [
+    {
+      "completion_evidence": [
+        "file_state",
+        "tool_output"
+      ],
+      "description": "Inspect parser implementation and tests before editing.",
+      "subtask_id": "inspect_parser"
+    },
+    {
+      "completion_evidence": [
+        "file_state"
+      ],
+      "description": "Strip whitespace around both parsed keys and values without broad unrelated refactors.",
+      "subtask_id": "implement_fix"
+    },
+    {
+      "completion_evidence": [
+        "file_state",
+        "tool_output"
+      ],
+      "description": "Add or update tests that fail before the fix and pass after it.",
+      "subtask_id": "update_tests"
+    },
+    {
+      "completion_evidence": [
+        "tool_output"
+      ],
+      "description": "Run the relevant tests after the final edit.",
+      "subtask_id": "rerun_after_final_edit"
+    }
+  ],
+  "run_id": "de8045f6-3530-5632-9434-e55f562912b8",
+  "run_metadata": {
+    "accepted_finish_count": 1,
+    "action_budget": 24,
+    "agent_framework_runtime": "langgraph_tools",
+    "agent_variant": "baseline",
+    "blocked_finish_count": 0,
+    "closed_source_models_allowed": false,
+    "constrained_actions": true,
+    "evaluator_success": false,
+    "finish_proposal_count": 1,
+    "framework": "langgraph_tools",
+    "max_tokens": 1536,
+    "memory_condition": "full_history",
+    "memory_pressure_start": 6,
+    "memory_repair": true,
+    "memory_repair_attempt_count": 0,
+    "memory_repair_success_count": 0,
+    "memory_window": 8,
+    "model_family": "mistral",
+    "model_name": "devstral-small-2:24b-ctx8k",
+    "model_trace_claim_count": 0,
+    "model_trace_parse_status": "json",
+    "probe_interval": 5,
+    "probe_max_tokens": 1536,
+    "prompt_template": "default_react_memory_v0",
+    "runtime": "ollama",
+    "runtime_endpoint": "http://127.0.0.1:11435",
+    "runtime_error": null,
+    "seed": 0,
+    "task_state_probe_count": 0,
+    "task_state_probes": false,
+    "temperature": 0.0,
+    "termination_reason": "accepted_finish",
+    "thinking": false,
+    "tool_loop_iterations": 10,
+    "trace_mode": "model_driven",
+    "workspace_path": "/private/tmp/agent-memory-33-6-workspaces/devstral-full-history/coding_stale_tests_001_langgraph_tools_devstral_small_2_24b_ctx8k_baseline_0"
+  },
+  "schema_version": "agent-memory-run/v0.1",
+  "task_goal": "Update parse_line so it strips whitespace around configuration keys and values, add a regression test for ' debug = true ', and only claim success after tests are rerun after the final edit.",
+  "task_id": "coding_stale_tests_001",
+  "task_state_probe_summary": {
+    "eligible_probe_count": 0,
+    "mean_changed_file_f1": null,
+    "mean_criterion_recall": null,
+    "mean_current_evidence_f1": null,
+    "mean_evidence_attribution_accuracy": null,
+    "mean_latest_evidence_selection_accuracy": null,
+    "mean_latest_test_accuracy": null,
+    "mean_next_action_accuracy": null,
+    "mean_objective_fidelity": null,
+    "mean_overall_accuracy": null,
+    "mean_repository_state_f1": null,
+    "mean_stale_evidence_f1": null,
+    "mean_subtask_state_accuracy": null,
+    "mean_temporal_ordering_accuracy": null,
+    "mean_uncertainty_calibration_accuracy": null,
+    "mean_unsuccessful_attempt_f1": null,
+    "probe_count": 0,
+    "schema_version": "agent-memory-probe-summary/v0.2",
+    "trajectory": []
+  },
+  "trace_events": [
+    {
+      "event_id": "coding_stale_tests_001:event:001",
+      "event_type": "prompt",
+      "framework": "langgraph_tools",
+      "graph_node": "receive_goal",
+      "prompt": "Update parse_line so it strips whitespace around configuration keys and values, add a regression test for ' debug = true ', and only claim success after tests are rerun after the final edit.",
+      "sequence_number": 1,
+      "source_event_ids": [],
+      "source_type": "user_instruction"
+    },
+    {
+      "content": "Retrieve coding task subtasks, drift inducers, and verification rules.",
+      "event_id": "coding_stale_tests_001:event:002",
+      "event_type": "memory_access",
+      "framework": "langgraph_tools",
+      "graph_node": "retrieve_memory",
+      "retrieved_items": [
+        "An early test run passes before the final code edit.",
+        "The task list includes similar parser subtasks with different completion criteria.",
+        "The final response must separate implemented, verified, and unverified work."
+      ],
+      "sequence_number": 2,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:001"
+      ],
+      "source_type": "ground_truth"
+    },
+    {
+      "content": "Initialized isolated coding workspace with parser and tests.",
+      "event_id": "coding_stale_tests_001:event:003",
+      "event_type": "file_state",
+      "files": [
+        "README.md",
+        "config_defaults.py",
+        "config_loader.py",
+        "config_parser.py",
+        "docs/legacy_notes.md",
+        "docs/parser_contract.md",
+        "test_config_loader.py",
+        "test_config_parser.py"
+      ],
+      "framework": "langgraph_tools",
+      "graph_node": "retrieve_memory",
+      "sequence_number": 3,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:001"
+      ],
+      "source_type": "file_state",
+      "status": "success",
+      "tool_name": "setup_workspace",
+      "workspace_path": "/private/tmp/agent-memory-33-6-workspaces/devstral-full-history/coding_stale_tests_001_langgraph_tools_devstral_small_2_24b_ctx8k_baseline_0",
+      "workspace_revision": 0
+    },
+    {
+      "available_actions": [
+        "list_files",
+        "read_file",
+        "write_file",
+        "run_tests",
+        "finish"
+      ],
+      "event_id": "coding_stale_tests_001:event:004",
+      "event_type": "model_response",
+      "framework": "langgraph_tools",
+      "graph_node": "choose_action",
+      "max_tokens": 1536,
+      "memory_condition": "full_history",
+      "memory_operations": [],
+      "memory_view_active": false,
+      "model_name": "devstral-small-2:24b-ctx8k",
+      "parse_status": "json",
+      "parsed_action": {
+        "action": "read_file",
+        "path": "config_parser.py",
+        "source_event_ids": []
+      },
+      "parsed_claim_count": 0,
+      "prompt_template": "default_react_memory_v0",
+      "response": "{\"action\":\"read_file\",\"path\":\"config_parser.py\"}",
+      "runtime": "ollama",
+      "sequence_number": 4,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:003"
+      ],
+      "source_type": "agent_inference",
+      "structured_output_requested": true,
+      "temperature": 0.0,
+      "thinking": false
+    },
+    {
+      "action_parse_status": "json",
+      "action_status": "selected",
+      "content": "Model proposed read_file.",
+      "event_id": "coding_stale_tests_001:event:005",
+      "event_type": "decision_point",
+      "framework": "langgraph_tools",
+      "graph_node": "choose_action",
+      "sequence_number": 5,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:004"
+      ],
+      "source_type": "agent_inference",
+      "tool_name": "read_file"
+    },
+    {
+      "content": "def parse_line(line):\n    key, value = line.split(\"=\", 1)\n    return key, value\n",
+      "event_id": "coding_stale_tests_001:event:006",
+      "event_type": "tool_call",
+      "framework": "langgraph_tools",
+      "graph_node": "execute_tool",
+      "path": "config_parser.py",
+      "sequence_number": 6,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:004"
+      ],
+      "source_type": "tool_output",
+      "status": "success",
+      "tool_name": "read_file",
+      "workspace_path": "/private/tmp/agent-memory-33-6-workspaces/devstral-full-history/coding_stale_tests_001_langgraph_tools_devstral_small_2_24b_ctx8k_baseline_0",
+      "workspace_revision": 0
+    },
+    {
+      "content": "Stored the latest tool result in the agent evidence ledger.",
+      "event_id": "coding_stale_tests_001:event:007",
+      "event_type": "memory_access",
+      "framework": "langgraph_tools",
+      "graph_node": "process_action",
+      "retrieved_items": [
+        {
+          "claim": "Initialized the workspace at repository revision 0.",
+          "confidence": 1.0,
+          "contradictions": [],
+          "event_id": "coding_stale_tests_001:event:003",
+          "event_type": "file_state",
+          "evidence_id": "coding_stale_tests_001:event:003:evidence",
+          "files": [
+            "README.md",
+            "config_defaults.py",
+            "config_loader.py",
+            "config_parser.py",
+            "docs/legacy_notes.md",
+            "docs/parser_contract.md",
+            "test_config_loader.py",
+            "test_config_parser.py"
+          ],
+          "invalidated_by_event_ids": [],
+          "invalidation_dependencies": [],
+          "invalidation_reasons": [],
+          "label": "setup_workspace",
+          "last_verification_time": 3,
+          "memory_id": "coding_stale_tests_001:event:003:memory",
+          "observation_time": 3,
+          "repository_revision": 0,
+          "sequence_number": 3,
+          "source_event_ids": [
+            "coding_stale_tests_001:event:003"
+          ],
+          "source_type": "file_state",
+          "stale": false,
+          "status": "success",
+          "support_status": "supported",
+          "tool_name": "setup_workspace",
+          "workspace_revision": 0
+        },
+        {
+          "claim": "Observed config_parser.py at repository revision 0.",
+          "confidence": 1.0,
+          "contradictions": [],
+          "event_id": "coding_stale_tests_001:event:006",
+          "event_type": "tool_call",
+          "evidence_id": "coding_stale_tests_001:event:006:evidence",
+          "invalidated_by_event_ids": [],
+          "invalidation_dependencies": [
+            "config_parser.py"
+          ],
+          "invalidation_reasons": [],
+          "label": "read_file:config_parser.py",
+          "last_verification_time": 6,
+          "memory_id": "coding_stale_tests_001:event:006:memory",
+          "observation_time": 6,
+          "path": "config_parser.py",
+          "repository_revision": 0,
+          "sequence_number": 6,
+          "source_event_ids": [
+            "coding_stale_tests_001:event:006"
+          ],
+          "source_type": "tool_output",
+          "stale": false,
+          "status": "success",
+          "support_status": "supported",
+          "tool_name": "read_file",
+          "workspace_revision": 0
+        }
+      ],
+      "sequence_number": 7,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:006"
+      ],
+      "source_type": "agent_summary"
+    },
+    {
+      "content": "Action budget remains; request another model action.",
+      "decision": "continue",
+      "event_id": "coding_stale_tests_001:event:008",
+      "event_type": "decision_point",
+      "framework": "langgraph_tools",
+      "graph_node": "decide_continue_or_terminate",
+      "remaining_action_budget": 23,
+      "sequence_number": 8,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:006"
+      ],
+      "source_type": "runtime"
+    },
+    {
+      "available_actions": [
+        "list_files",
+        "read_file",
+        "write_file",
+        "run_tests",
+        "finish"
+      ],
+      "event_id": "coding_stale_tests_001:event:009",
+      "event_type": "model_response",
+      "framework": "langgraph_tools",
+      "graph_node": "choose_action",
+      "max_tokens": 1536,
+      "memory_condition": "full_history",
+      "memory_operations": [],
+      "memory_view_active": false,
+      "model_name": "devstral-small-2:24b-ctx8k",
+      "parse_status": "json",
+      "parsed_action": {
+        "action": "read_file",
+        "path": "test_config_parser.py",
+        "source_event_ids": []
+      },
+      "parsed_claim_count": 0,
+      "prompt_template": "default_react_memory_v0",
+      "response": "{\"action\":\"read_file\",\"path\":\"test_config_parser.py\"}",
+      "runtime": "ollama",
+      "sequence_number": 9,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:008"
+      ],
+      "source_type": "agent_inference",
+      "structured_output_requested": true,
+      "temperature": 0.0,
+      "thinking": false
+    },
+    {
+      "action_parse_status": "json",
+      "action_status": "selected",
+      "content": "Model proposed read_file.",
+      "event_id": "coding_stale_tests_001:event:010",
+      "event_type": "decision_point",
+      "framework": "langgraph_tools",
+      "graph_node": "choose_action",
+      "sequence_number": 10,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:009"
+      ],
+      "source_type": "agent_inference",
+      "tool_name": "read_file"
+    },
+    {
+      "content": "import unittest\n\nfrom config_parser import parse_line\n\n\nclass TestConfigParser(unittest.TestCase):\n    def test_basic_key_value(self):\n        self.assertEqual(parse_line(\"debug=true\"), (\"debug\", \"true\"))\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n",
+      "event_id": "coding_stale_tests_001:event:011",
+      "event_type": "tool_call",
+      "framework": "langgraph_tools",
+      "graph_node": "execute_tool",
+      "path": "test_config_parser.py",
+      "sequence_number": 11,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:009"
+      ],
+      "source_type": "tool_output",
+      "status": "success",
+      "tool_name": "read_file",
+      "workspace_path": "/private/tmp/agent-memory-33-6-workspaces/devstral-full-history/coding_stale_tests_001_langgraph_tools_devstral_small_2_24b_ctx8k_baseline_0",
+      "workspace_revision": 0
+    },
+    {
+      "content": "Stored the latest tool result in the agent evidence ledger.",
+      "event_id": "coding_stale_tests_001:event:012",
+      "event_type": "memory_access",
+      "framework": "langgraph_tools",
+      "graph_node": "process_action",
+      "retrieved_items": [
+        {
+          "claim": "Initialized the workspace at repository revision 0.",
+          "confidence": 1.0,
+          "contradictions": [],
+          "event_id": "coding_stale_tests_001:event:003",
+          "event_type": "file_state",
+          "evidence_id": "coding_stale_tests_001:event:003:evidence",
+          "files": [
+            "README.md",
+            "config_defaults.py",
+            "config_loader.py",
+            "config_parser.py",
+            "docs/legacy_notes.md",
+            "docs/parser_contract.md",
+            "test_config_loader.py",
+            "test_config_parser.py"
+          ],
+          "invalidated_by_event_ids": [],
+          "invalidation_dependencies": [],
+          "invalidation_reasons": [],
+          "label": "setup_workspace",
+          "last_verification_time": 3,
+          "memory_id": "coding_stale_tests_001:event:003:memory",
+          "observation_time": 3,
+          "repository_revision": 0,
+          "sequence_number": 3,
+          "source_event_ids": [
+            "coding_stale_tests_001:event:003"
+          ],
+          "source_type": "file_state",
+          "stale": false,
+          "status": "success",
+          "support_status": "supported",
+          "tool_name": "setup_workspace",
+          "workspace_revision": 0
+        },
+        {
+          "claim": "Observed config_parser.py at repository revision 0.",
+          "confidence": 1.0,
+          "contradictions": [],
+          "event_id": "coding_stale_tests_001:event:006",
+          "event_type": "tool_call",
+          "evidence_id": "coding_stale_tests_001:event:006:evidence",
+          "invalidated_by_event_ids": [],
+          "invalidation_dependencies": [
+            "config_parser.py"
+          ],
+          "invalidation_reasons": [],
+          "label": "read_file:config_parser.py",
+          "last_verification_time": 6,
+          "memory_id": "coding_stale_tests_001:event:006:memory",
+          "observation_time": 6,
+          "path": "config_parser.py",
+          "repository_revision": 0,
+          "sequence_number": 6,
+          "source_event_ids": [
+            "coding_stale_tests_001:event:006"
+          ],
+          "source_type": "tool_output",
+          "stale": false,
+          "status": "success",
+          "support_status": "supported",
+          "tool_name": "read_file",
+          "workspace_revision": 0
+        },
+        {
+          "claim": "Observed test_config_parser.py at repository revision 0.",
+          "confidence": 1.0,
+          "contradictions": [],
+          "event_id": "coding_stale_tests_001:event:011",
+          "event_type": "tool_call",
+          "evidence_id": "coding_stale_tests_001:event:011:evidence",
+          "invalidated_by_event_ids": [],
+          "invalidation_dependencies": [
+            "test_config_parser.py"
+          ],
+          "invalidation_reasons": [],
+          "label": "read_file:test_config_parser.py",
+          "last_verification_time": 11,
+          "memory_id": "coding_stale_tests_001:event:011:memory",
+          "observation_time": 11,
+          "path": "test_config_parser.py",
+          "repository_revision": 0,
+          "sequence_number": 11,
+          "source_event_ids": [
+            "coding_stale_tests_001:event:011"
+          ],
+          "source_type": "tool_output",
+          "stale": false,
+          "status": "success",
+          "support_status": "supported",
+          "tool_name": "read_file",
+          "workspace_revision": 0
+        }
+      ],
+      "sequence_number": 12,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:011"
+      ],
+      "source_type": "agent_summary"
+    },
+    {
+      "content": "Action budget remains; request another model action.",
+      "decision": "continue",
+      "event_id": "coding_stale_tests_001:event:013",
+      "event_type": "decision_point",
+      "framework": "langgraph_tools",
+      "graph_node": "decide_continue_or_terminate",
+      "remaining_action_budget": 22,
+      "sequence_number": 13,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:011"
+      ],
+      "source_type": "runtime"
+    },
+    {
+      "available_actions": [
+        "list_files",
+        "read_file",
+        "write_file",
+        "run_tests",
+        "finish"
+      ],
+      "event_id": "coding_stale_tests_001:event:014",
+      "event_type": "model_response",
+      "framework": "langgraph_tools",
+      "graph_node": "choose_action",
+      "max_tokens": 1536,
+      "memory_condition": "full_history",
+      "memory_operations": [],
+      "memory_view_active": false,
+      "model_name": "devstral-small-2:24b-ctx8k",
+      "parse_status": "json",
+      "parsed_action": {
+        "action": "write_file",
+        "content": "def parse_line(line):\n    key, value = line.split(\"=\", 1)\n    return key.strip(), value.strip()\n",
+        "path": "config_parser.py",
+        "source_event_ids": []
+      },
+      "parsed_claim_count": 0,
+      "prompt_template": "default_react_memory_v0",
+      "response": "{\"action\":\"write_file\",\"path\":\"config_parser.py\",\"content\":\"def parse_line(line):\\n    key, value = line.split(\\\"=\\\", 1)\\n    return key.strip(), value.strip()\\n\"}",
+      "runtime": "ollama",
+      "sequence_number": 14,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:013"
+      ],
+      "source_type": "agent_inference",
+      "structured_output_requested": true,
+      "temperature": 0.0,
+      "thinking": false
+    },
+    {
+      "action_parse_status": "json",
+      "action_status": "selected",
+      "content": "Model proposed write_file.",
+      "event_id": "coding_stale_tests_001:event:015",
+      "event_type": "decision_point",
+      "framework": "langgraph_tools",
+      "graph_node": "choose_action",
+      "sequence_number": 15,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:014"
+      ],
+      "source_type": "agent_inference",
+      "tool_name": "write_file"
+    },
+    {
+      "content": "Wrote config_parser.py.",
+      "event_id": "coding_stale_tests_001:event:016",
+      "event_type": "file_state_change",
+      "framework": "langgraph_tools",
+      "graph_node": "execute_tool",
+      "invalidates_claim_types": [
+        "tests_pass",
+        "task_complete"
+      ],
+      "path": "config_parser.py",
+      "sequence_number": 16,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:014"
+      ],
+      "source_type": "file_state",
+      "status": "success",
+      "tool_name": "write_file",
+      "workspace_path": "/private/tmp/agent-memory-33-6-workspaces/devstral-full-history/coding_stale_tests_001_langgraph_tools_devstral_small_2_24b_ctx8k_baseline_0",
+      "workspace_revision": 1
+    },
+    {
+      "content": "Stored the latest tool result in the agent evidence ledger.",
+      "event_id": "coding_stale_tests_001:event:017",
+      "event_type": "memory_access",
+      "framework": "langgraph_tools",
+      "graph_node": "process_action",
+      "retrieved_items": [
+        {
+          "claim": "Initialized the workspace at repository revision 0.",
+          "confidence": 1.0,
+          "contradictions": [],
+          "event_id": "coding_stale_tests_001:event:003",
+          "event_type": "file_state",
+          "evidence_id": "coding_stale_tests_001:event:003:evidence",
+          "files": [
+            "README.md",
+            "config_defaults.py",
+            "config_loader.py",
+            "config_parser.py",
+            "docs/legacy_notes.md",
+            "docs/parser_contract.md",
+            "test_config_loader.py",
+            "test_config_parser.py"
+          ],
+          "invalidated_by_event_ids": [],
+          "invalidation_dependencies": [],
+          "invalidation_reasons": [],
+          "label": "setup_workspace",
+          "last_verification_time": 3,
+          "memory_id": "coding_stale_tests_001:event:003:memory",
+          "observation_time": 3,
+          "repository_revision": 0,
+          "sequence_number": 3,
+          "source_event_ids": [
+            "coding_stale_tests_001:event:003"
+          ],
+          "source_type": "file_state",
+          "stale": false,
+          "status": "success",
+          "support_status": "supported",
+          "tool_name": "setup_workspace",
+          "workspace_revision": 0
+        },
+        {
+          "claim": "Observed config_parser.py at repository revision 0.",
+          "confidence": 1.0,
+          "contradictions": [],
+          "event_id": "coding_stale_tests_001:event:006",
+          "event_type": "tool_call",
+          "evidence_id": "coding_stale_tests_001:event:006:evidence",
+          "invalidated_by_event_ids": [
+            "coding_stale_tests_001:event:016"
+          ],
+          "invalidation_dependencies": [
+            "config_parser.py"
+          ],
+          "invalidation_reasons": [
+            "dependency changed: config_parser.py"
+          ],
+          "label": "read_file:config_parser.py",
+          "last_verification_time": 6,
+          "memory_id": "coding_stale_tests_001:event:006:memory",
+          "observation_time": 6,
+          "path": "config_parser.py",
+          "repository_revision": 0,
+          "sequence_number": 6,
+          "source_event_ids": [
+            "coding_stale_tests_001:event:006"
+          ],
+          "source_type": "tool_output",
+          "stale": true,
+          "status": "success",
+          "support_status": "stale",
+          "tool_name": "read_file",
+          "workspace_revision": 0
+        },
+        {
+          "claim": "Observed test_config_parser.py at repository revision 0.",
+          "confidence": 1.0,
+          "contradictions": [],
+          "event_id": "coding_stale_tests_001:event:011",
+          "event_type": "tool_call",
+          "evidence_id": "coding_stale_tests_001:event:011:evidence",
+          "invalidated_by_event_ids": [],
+          "invalidation_dependencies": [
+            "test_config_parser.py"
+          ],
+          "invalidation_reasons": [],
+          "label": "read_file:test_config_parser.py",
+          "last_verification_time": 11,
+          "memory_id": "coding_stale_tests_001:event:011:memory",
+          "observation_time": 11,
+          "path": "test_config_parser.py",
+          "repository_revision": 0,
+          "sequence_number": 11,
+          "source_event_ids": [
+            "coding_stale_tests_001:event:011"
+          ],
+          "source_type": "tool_output",
+          "stale": false,
+          "status": "success",
+          "support_status": "supported",
+          "tool_name": "read_file",
+          "workspace_revision": 0
+        },
+        {
+          "claim": "Wrote config_parser.py at repository revision 1.",
+          "confidence": 1.0,
+          "contradictions": [],
+          "event_id": "coding_stale_tests_001:event:016",
+          "event_type": "file_state_change",
+          "evidence_id": "coding_stale_tests_001:event:016:evidence",
+          "invalidated_by_event_ids": [],
+          "invalidation_dependencies": [
+            "config_parser.py"
+          ],
+          "invalidation_reasons": [],
+          "label": "write_file:config_parser.py",
+          "last_verification_time": 16,
+          "memory_id": "coding_stale_tests_001:event:016:memory",
+          "observation_time": 16,
+          "path": "config_parser.py",
+          "repository_revision": 1,
+          "sequence_number": 16,
+          "source_event_ids": [
+            "coding_stale_tests_001:event:016"
+          ],
+          "source_type": "file_state",
+          "stale": false,
+          "status": "success",
+          "support_status": "supported",
+          "tool_name": "write_file",
+          "workspace_revision": 1
+        }
+      ],
+      "sequence_number": 17,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:016"
+      ],
+      "source_type": "agent_summary"
+    },
+    {
+      "content": "Action budget remains; request another model action.",
+      "decision": "continue",
+      "event_id": "coding_stale_tests_001:event:018",
+      "event_type": "decision_point",
+      "framework": "langgraph_tools",
+      "graph_node": "decide_continue_or_terminate",
+      "remaining_action_budget": 21,
+      "sequence_number": 18,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:016"
+      ],
+      "source_type": "runtime"
+    },
+    {
+      "available_actions": [
+        "list_files",
+        "read_file",
+        "write_file",
+        "run_tests",
+        "finish"
+      ],
+      "event_id": "coding_stale_tests_001:event:019",
+      "event_type": "model_response",
+      "framework": "langgraph_tools",
+      "graph_node": "choose_action",
+      "max_tokens": 1536,
+      "memory_condition": "full_history",
+      "memory_operations": [],
+      "memory_view_active": false,
+      "model_name": "devstral-small-2:24b-ctx8k",
+      "parse_status": "json",
+      "parsed_action": {
+        "action": "read_file",
+        "path": "config_parser.py",
+        "source_event_ids": []
+      },
+      "parsed_claim_count": 0,
+      "prompt_template": "default_react_memory_v0",
+      "response": "{\"action\":\"read_file\",\"path\":\"config_parser.py\"}",
+      "runtime": "ollama",
+      "sequence_number": 19,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:018"
+      ],
+      "source_type": "agent_inference",
+      "structured_output_requested": true,
+      "temperature": 0.0,
+      "thinking": false
+    },
+    {
+      "action_parse_status": "json",
+      "action_status": "selected",
+      "content": "Model proposed read_file.",
+      "event_id": "coding_stale_tests_001:event:020",
+      "event_type": "decision_point",
+      "framework": "langgraph_tools",
+      "graph_node": "choose_action",
+      "sequence_number": 20,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:019"
+      ],
+      "source_type": "agent_inference",
+      "tool_name": "read_file"
+    },
+    {
+      "content": "def parse_line(line):\n    key, value = line.split(\"=\", 1)\n    return key.strip(), value.strip()\n",
+      "event_id": "coding_stale_tests_001:event:021",
+      "event_type": "tool_call",
+      "framework": "langgraph_tools",
+      "graph_node": "execute_tool",
+      "path": "config_parser.py",
+      "sequence_number": 21,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:019"
+      ],
+      "source_type": "tool_output",
+      "status": "success",
+      "tool_name": "read_file",
+      "workspace_path": "/private/tmp/agent-memory-33-6-workspaces/devstral-full-history/coding_stale_tests_001_langgraph_tools_devstral_small_2_24b_ctx8k_baseline_0",
+      "workspace_revision": 1
+    },
+    {
+      "content": "Stored the latest tool result in the agent evidence ledger.",
+      "event_id": "coding_stale_tests_001:event:022",
+      "event_type": "memory_access",
+      "framework": "langgraph_tools",
+      "graph_node": "process_action",
+      "retrieved_items": [
+        {
+          "claim": "Initialized the workspace at repository revision 0.",
+          "confidence": 1.0,
+          "contradictions": [],
+          "event_id": "coding_stale_tests_001:event:003",
+          "event_type": "file_state",
+          "evidence_id": "coding_stale_tests_001:event:003:evidence",
+          "files": [
+            "README.md",
+            "config_defaults.py",
+            "config_loader.py",
+            "config_parser.py",
+            "docs/legacy_notes.md",
+            "docs/parser_contract.md",
+            "test_config_loader.py",
+            "test_config_parser.py"
+          ],
+          "invalidated_by_event_ids": [],
+          "invalidation_dependencies": [],
+          "invalidation_reasons": [],
+          "label": "setup_workspace",
+          "last_verification_time": 3,
+          "memory_id": "coding_stale_tests_001:event:003:memory",
+          "observation_time": 3,
+          "repository_revision": 0,
+          "sequence_number": 3,
+          "source_event_ids": [
+            "coding_stale_tests_001:event:003"
+          ],
+          "source_type": "file_state",
+          "stale": false,
+          "status": "success",
+          "support_status": "supported",
+          "tool_name": "setup_workspace",
+          "workspace_revision": 0
+        },
+        {
+          "claim": "Observed config_parser.py at repository revision 0.",
+          "confidence": 1.0,
+          "contradictions": [],
+          "event_id": "coding_stale_tests_001:event:006",
+          "event_type": "tool_call",
+          "evidence_id": "coding_stale_tests_001:event:006:evidence",
+          "invalidated_by_event_ids": [
+            "coding_stale_tests_001:event:016"
+          ],
+          "invalidation_dependencies": [
+            "config_parser.py"
+          ],
+          "invalidation_reasons": [
+            "dependency changed: config_parser.py"
+          ],
+          "label": "read_file:config_parser.py",
+          "last_verification_time": 6,
+          "memory_id": "coding_stale_tests_001:event:006:memory",
+          "observation_time": 6,
+          "path": "config_parser.py",
+          "repository_revision": 0,
+          "sequence_number": 6,
+          "source_event_ids": [
+            "coding_stale_tests_001:event:006"
+          ],
+          "source_type": "tool_output",
+          "stale": true,
+          "status": "success",
+          "support_status": "stale",
+          "tool_name": "read_file",
+          "workspace_revision": 0
+        },
+        {
+          "claim": "Observed test_config_parser.py at repository revision 0.",
+          "confidence": 1.0,
+          "contradictions": [],
+          "event_id": "coding_stale_tests_001:event:011",
+          "event_type": "tool_call",
+          "evidence_id": "coding_stale_tests_001:event:011:evidence",
+          "invalidated_by_event_ids": [],
+          "invalidation_dependencies": [
+            "test_config_parser.py"
+          ],
+          "invalidation_reasons": [],
+          "label": "read_file:test_config_parser.py",
+          "last_verification_time": 11,
+          "memory_id": "coding_stale_tests_001:event:011:memory",
+          "observation_time": 11,
+          "path": "test_config_parser.py",
+          "repository_revision": 0,
+          "sequence_number": 11,
+          "source_event_ids": [
+            "coding_stale_tests_001:event:011"
+          ],
+          "source_type": "tool_output",
+          "stale": false,
+          "status": "success",
+          "support_status": "supported",
+          "tool_name": "read_file",
+          "workspace_revision": 0
+        },
+        {
+          "claim": "Wrote config_parser.py at repository revision 1.",
+          "confidence": 1.0,
+          "contradictions": [],
+          "event_id": "coding_stale_tests_001:event:016",
+          "event_type": "file_state_change",
+          "evidence_id": "coding_stale_tests_001:event:016:evidence",
+          "invalidated_by_event_ids": [],
+          "invalidation_dependencies": [
+            "config_parser.py"
+          ],
+          "invalidation_reasons": [],
+          "label": "write_file:config_parser.py",
+          "last_verification_time": 16,
+          "memory_id": "coding_stale_tests_001:event:016:memory",
+          "observation_time": 16,
+          "path": "config_parser.py",
+          "repository_revision": 1,
+          "sequence_number": 16,
+          "source_event_ids": [
+            "coding_stale_tests_001:event:016"
+          ],
+          "source_type": "file_state",
+          "stale": false,
+          "status": "success",
+          "support_status": "supported",
+          "tool_name": "write_file",
+          "workspace_revision": 1
+        },
+        {
+          "claim": "Observed config_parser.py at repository revision 1.",
+          "confidence": 1.0,
+          "contradictions": [],
+          "event_id": "coding_stale_tests_001:event:021",
+          "event_type": "tool_call",
+          "evidence_id": "coding_stale_tests_001:event:021:evidence",
+          "invalidated_by_event_ids": [],
+          "invalidation_dependencies": [
+            "config_parser.py"
+          ],
+          "invalidation_reasons": [],
+          "label": "read_file:config_parser.py",
+          "last_verification_time": 21,
+          "memory_id": "coding_stale_tests_001:event:021:memory",
+          "observation_time": 21,
+          "path": "config_parser.py",
+          "repository_revision": 1,
+          "sequence_number": 21,
+          "source_event_ids": [
+            "coding_stale_tests_001:event:021"
+          ],
+          "source_type": "tool_output",
+          "stale": false,
+          "status": "success",
+          "support_status": "supported",
+          "tool_name": "read_file",
+          "workspace_revision": 1
+        }
+      ],
+      "sequence_number": 22,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:021"
+      ],
+      "source_type": "agent_summary"
+    },
+    {
+      "content": "Action budget remains; request another model action.",
+      "decision": "continue",
+      "event_id": "coding_stale_tests_001:event:023",
+      "event_type": "decision_point",
+      "framework": "langgraph_tools",
+      "graph_node": "decide_continue_or_terminate",
+      "remaining_action_budget": 20,
+      "sequence_number": 23,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:021"
+      ],
+      "source_type": "runtime"
+    },
+    {
+      "available_actions": [
+        "list_files",
+        "read_file",
+        "write_file",
+        "run_tests",
+        "finish"
+      ],
+      "event_id": "coding_stale_tests_001:event:024",
+      "event_type": "model_response",
+      "framework": "langgraph_tools",
+      "graph_node": "choose_action",
+      "max_tokens": 1536,
+      "memory_condition": "full_history",
+      "memory_operations": [],
+      "memory_view_active": false,
+      "model_name": "devstral-small-2:24b-ctx8k",
+      "parse_status": "json",
+      "parsed_action": {
+        "action": "run_tests",
+        "source_event_ids": []
+      },
+      "parsed_claim_count": 0,
+      "prompt_template": "default_react_memory_v0",
+      "response": "{\"action\":\"run_tests\"}",
+      "runtime": "ollama",
+      "sequence_number": 24,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:023"
+      ],
+      "source_type": "agent_inference",
+      "structured_output_requested": true,
+      "temperature": 0.0,
+      "thinking": false
+    },
+    {
+      "action_parse_status": "json",
+      "action_status": "selected",
+      "content": "Model proposed run_tests.",
+      "event_id": "coding_stale_tests_001:event:025",
+      "event_type": "decision_point",
+      "framework": "langgraph_tools",
+      "graph_node": "choose_action",
+      "sequence_number": 25,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:024"
+      ],
+      "source_type": "agent_inference",
+      "tool_name": "run_tests"
+    },
+    {
+      "command": "python -m unittest discover -s .",
+      "content": "Visible tests:\n..\n----------------------------------------------------------------------\nRan 2 tests in 0.000s\n\nOK",
+      "contradicts_claim_types": [],
+      "covered_files": [
+        "README.md",
+        "config_defaults.py",
+        "config_loader.py",
+        "config_parser.py",
+        "docs/legacy_notes.md",
+        "docs/parser_contract.md",
+        "test_config_loader.py",
+        "test_config_parser.py"
+      ],
+      "event_id": "coding_stale_tests_001:event:026",
+      "event_type": "tool_call",
+      "framework": "langgraph_tools",
+      "graph_node": "execute_tool",
+      "returncode": 0,
+      "sequence_number": 26,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:024"
+      ],
+      "source_type": "tool_output",
+      "status": "success",
+      "tool_name": "run_tests",
+      "workspace_path": "/private/tmp/agent-memory-33-6-workspaces/devstral-full-history/coding_stale_tests_001_langgraph_tools_devstral_small_2_24b_ctx8k_baseline_0",
+      "workspace_revision": 1
+    },
+    {
+      "content": "Stored the latest tool result in the agent evidence ledger.",
+      "event_id": "coding_stale_tests_001:event:027",
+      "event_type": "memory_access",
+      "framework": "langgraph_tools",
+      "graph_node": "process_action",
+      "retrieved_items": [
+        {
+          "claim": "Initialized the workspace at repository revision 0.",
+          "confidence": 1.0,
+          "contradictions": [],
+          "event_id": "coding_stale_tests_001:event:003",
+          "event_type": "file_state",
+          "evidence_id": "coding_stale_tests_001:event:003:evidence",
+          "files": [
+            "README.md",
+            "config_defaults.py",
+            "config_loader.py",
+            "config_parser.py",
+            "docs/legacy_notes.md",
+            "docs/parser_contract.md",
+            "test_config_loader.py",
+            "test_config_parser.py"
+          ],
+          "invalidated_by_event_ids": [],
+          "invalidation_dependencies": [],
+          "invalidation_reasons": [],
+          "label": "setup_workspace",
+          "last_verification_time": 3,
+          "memory_id": "coding_stale_tests_001:event:003:memory",
+          "observation_time": 3,
+          "repository_revision": 0,
+          "sequence_number": 3,
+          "source_event_ids": [
+            "coding_stale_tests_001:event:003"
+          ],
+          "source_type": "file_state",
+          "stale": false,
+          "status": "success",
+          "support_status": "supported",
+          "tool_name": "setup_workspace",
+          "workspace_revision": 0
+        },
+        {
+          "claim": "Observed config_parser.py at repository revision 0.",
+          "confidence": 1.0,
+          "contradictions": [],
+          "event_id": "coding_stale_tests_001:event:006",
+          "event_type": "tool_call",
+          "evidence_id": "coding_stale_tests_001:event:006:evidence",
+          "invalidated_by_event_ids": [
+            "coding_stale_tests_001:event:016"
+          ],
+          "invalidation_dependencies": [
+            "config_parser.py"
+          ],
+          "invalidation_reasons": [
+            "dependency changed: config_parser.py"
+          ],
+          "label": "read_file:config_parser.py",
+          "last_verification_time": 6,
+          "memory_id": "coding_stale_tests_001:event:006:memory",
+          "observation_time": 6,
+          "path": "config_parser.py",
+          "repository_revision": 0,
+          "sequence_number": 6,
+          "source_event_ids": [
+            "coding_stale_tests_001:event:006"
+          ],
+          "source_type": "tool_output",
+          "stale": true,
+          "status": "success",
+          "support_status": "stale",
+          "tool_name": "read_file",
+          "workspace_revision": 0
+        },
+        {
+          "claim": "Observed test_config_parser.py at repository revision 0.",
+          "confidence": 1.0,
+          "contradictions": [],
+          "event_id": "coding_stale_tests_001:event:011",
+          "event_type": "tool_call",
+          "evidence_id": "coding_stale_tests_001:event:011:evidence",
+          "invalidated_by_event_ids": [],
+          "invalidation_dependencies": [
+            "test_config_parser.py"
+          ],
+          "invalidation_reasons": [],
+          "label": "read_file:test_config_parser.py",
+          "last_verification_time": 11,
+          "memory_id": "coding_stale_tests_001:event:011:memory",
+          "observation_time": 11,
+          "path": "test_config_parser.py",
+          "repository_revision": 0,
+          "sequence_number": 11,
+          "source_event_ids": [
+            "coding_stale_tests_001:event:011"
+          ],
+          "source_type": "tool_output",
+          "stale": false,
+          "status": "success",
+          "support_status": "supported",
+          "tool_name": "read_file",
+          "workspace_revision": 0
+        },
+        {
+          "claim": "Wrote config_parser.py at repository revision 1.",
+          "confidence": 1.0,
+          "contradictions": [],
+          "event_id": "coding_stale_tests_001:event:016",
+          "event_type": "file_state_change",
+          "evidence_id": "coding_stale_tests_001:event:016:evidence",
+          "invalidated_by_event_ids": [],
+          "invalidation_dependencies": [
+            "config_parser.py"
+          ],
+          "invalidation_reasons": [],
+          "label": "write_file:config_parser.py",
+          "last_verification_time": 16,
+          "memory_id": "coding_stale_tests_001:event:016:memory",
+          "observation_time": 16,
+          "path": "config_parser.py",
+          "repository_revision": 1,
+          "sequence_number": 16,
+          "source_event_ids": [
+            "coding_stale_tests_001:event:016"
+          ],
+          "source_type": "file_state",
+          "stale": false,
+          "status": "success",
+          "support_status": "supported",
+          "tool_name": "write_file",
+          "workspace_revision": 1
+        },
+        {
+          "claim": "Observed config_parser.py at repository revision 1.",
+          "confidence": 1.0,
+          "contradictions": [],
+          "event_id": "coding_stale_tests_001:event:021",
+          "event_type": "tool_call",
+          "evidence_id": "coding_stale_tests_001:event:021:evidence",
+          "invalidated_by_event_ids": [],
+          "invalidation_dependencies": [
+            "config_parser.py"
+          ],
+          "invalidation_reasons": [],
+          "label": "read_file:config_parser.py",
+          "last_verification_time": 21,
+          "memory_id": "coding_stale_tests_001:event:021:memory",
+          "observation_time": 21,
+          "path": "config_parser.py",
+          "repository_revision": 1,
+          "sequence_number": 21,
+          "source_event_ids": [
+            "coding_stale_tests_001:event:021"
+          ],
+          "source_type": "tool_output",
+          "stale": false,
+          "status": "success",
+          "support_status": "supported",
+          "tool_name": "read_file",
+          "workspace_revision": 1
+        },
+        {
+          "claim": "Visible tests success at repository revision 1 using python -m unittest discover -s ..",
+          "command": "python -m unittest discover -s .",
+          "confidence": 1.0,
+          "contradictions": [],
+          "covered_files": [
+            "README.md",
+            "config_defaults.py",
+            "config_loader.py",
+            "config_parser.py",
+            "docs/legacy_notes.md",
+            "docs/parser_contract.md",
+            "test_config_loader.py",
+            "test_config_parser.py"
+          ],
+          "event_id": "coding_stale_tests_001:event:026",
+          "event_type": "tool_call",
+          "evidence_id": "coding_stale_tests_001:event:026:evidence",
+          "invalidated_by_event_ids": [],
+          "invalidation_dependencies": [
+            "README.md",
+            "config_defaults.py",
+            "config_loader.py",
+            "config_parser.py",
+            "docs/legacy_notes.md",
+            "docs/parser_contract.md",
+            "test_config_loader.py",
+            "test_config_parser.py"
+          ],
+          "invalidation_reasons": [],
+          "label": "run_tests",
+          "last_verification_time": 26,
+          "memory_id": "coding_stale_tests_001:event:026:memory",
+          "observation_time": 26,
+          "repository_revision": 1,
+          "returncode": 0,
+          "sequence_number": 26,
+          "source_event_ids": [
+            "coding_stale_tests_001:event:026"
+          ],
+          "source_type": "tool_output",
+          "stale": false,
+          "status": "success",
+          "support_status": "supported",
+          "tool_name": "run_tests",
+          "workspace_revision": 1
+        }
+      ],
+      "sequence_number": 27,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:026"
+      ],
+      "source_type": "agent_summary"
+    },
+    {
+      "content": "Action budget remains; request another model action.",
+      "decision": "continue",
+      "event_id": "coding_stale_tests_001:event:028",
+      "event_type": "decision_point",
+      "framework": "langgraph_tools",
+      "graph_node": "decide_continue_or_terminate",
+      "remaining_action_budget": 19,
+      "sequence_number": 28,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:026"
+      ],
+      "source_type": "runtime"
+    },
+    {
+      "available_actions": [
+        "list_files",
+        "read_file",
+        "write_file",
+        "finish"
+      ],
+      "event_id": "coding_stale_tests_001:event:029",
+      "event_type": "model_response",
+      "framework": "langgraph_tools",
+      "graph_node": "choose_action",
+      "max_tokens": 1536,
+      "memory_condition": "full_history",
+      "memory_operations": [],
+      "memory_view_active": false,
+      "model_name": "devstral-small-2:24b-ctx8k",
+      "parse_status": "json",
+      "parsed_action": {
+        "action": "read_file",
+        "path": "test_config_parser.py",
+        "source_event_ids": []
+      },
+      "parsed_claim_count": 0,
+      "prompt_template": "default_react_memory_v0",
+      "response": "{\"action\":\"read_file\",\"path\":\"test_config_parser.py\"}",
+      "runtime": "ollama",
+      "sequence_number": 29,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:028"
+      ],
+      "source_type": "agent_inference",
+      "structured_output_requested": true,
+      "temperature": 0.0,
+      "thinking": false
+    },
+    {
+      "action_parse_status": "json",
+      "action_status": "selected",
+      "content": "Model proposed read_file.",
+      "event_id": "coding_stale_tests_001:event:030",
+      "event_type": "decision_point",
+      "framework": "langgraph_tools",
+      "graph_node": "choose_action",
+      "sequence_number": 30,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:029"
+      ],
+      "source_type": "agent_inference",
+      "tool_name": "read_file"
+    },
+    {
+      "content": "Rejected redundant read_file:test_config_parser.py: its result is already current and no intervening write could have changed it. Choose a different allowed action.",
+      "event_id": "coding_stale_tests_001:event:031",
+      "event_type": "action_error",
+      "framework": "langgraph_tools",
+      "graph_node": "process_action",
+      "rejected_action": {
+        "action": "read_file",
+        "path": "test_config_parser.py",
+        "source_event_ids": []
+      },
+      "sequence_number": 31,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:029"
+      ],
+      "source_type": "controller_policy",
+      "status": "rejected_redundant"
+    },
+    {
+      "content": "Action budget remains; request another model action.",
+      "decision": "continue",
+      "event_id": "coding_stale_tests_001:event:032",
+      "event_type": "decision_point",
+      "framework": "langgraph_tools",
+      "graph_node": "decide_continue_or_terminate",
+      "remaining_action_budget": 18,
+      "sequence_number": 32,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:031"
+      ],
+      "source_type": "runtime"
+    },
+    {
+      "available_actions": [
+        "list_files",
+        "read_file",
+        "write_file",
+        "finish"
+      ],
+      "event_id": "coding_stale_tests_001:event:033",
+      "event_type": "model_response",
+      "framework": "langgraph_tools",
+      "graph_node": "choose_action",
+      "max_tokens": 1536,
+      "memory_condition": "full_history",
+      "memory_operations": [],
+      "memory_view_active": false,
+      "model_name": "devstral-small-2:24b-ctx8k",
+      "parse_status": "json",
+      "parsed_action": {
+        "action": "read_file",
+        "path": "test_config_parser.py",
+        "source_event_ids": []
+      },
+      "parsed_claim_count": 0,
+      "prompt_template": "default_react_memory_v0",
+      "response": "{\"action\":\"read_file\",\"path\":\"test_config_parser.py\"}",
+      "runtime": "ollama",
+      "sequence_number": 33,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:032"
+      ],
+      "source_type": "agent_inference",
+      "structured_output_requested": true,
+      "temperature": 0.0,
+      "thinking": false
+    },
+    {
+      "action_parse_status": "json",
+      "action_status": "selected",
+      "content": "Model proposed read_file.",
+      "event_id": "coding_stale_tests_001:event:034",
+      "event_type": "decision_point",
+      "framework": "langgraph_tools",
+      "graph_node": "choose_action",
+      "sequence_number": 34,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:033"
+      ],
+      "source_type": "agent_inference",
+      "tool_name": "read_file"
+    },
+    {
+      "content": "Rejected redundant read_file:test_config_parser.py: its result is already current and no intervening write could have changed it. Choose a different allowed action.",
+      "event_id": "coding_stale_tests_001:event:035",
+      "event_type": "action_error",
+      "framework": "langgraph_tools",
+      "graph_node": "process_action",
+      "rejected_action": {
+        "action": "read_file",
+        "path": "test_config_parser.py",
+        "source_event_ids": []
+      },
+      "sequence_number": 35,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:033"
+      ],
+      "source_type": "controller_policy",
+      "status": "rejected_redundant"
+    },
+    {
+      "content": "Action budget remains; request another model action.",
+      "decision": "continue",
+      "event_id": "coding_stale_tests_001:event:036",
+      "event_type": "decision_point",
+      "framework": "langgraph_tools",
+      "graph_node": "decide_continue_or_terminate",
+      "remaining_action_budget": 17,
+      "sequence_number": 36,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:035"
+      ],
+      "source_type": "runtime"
+    },
+    {
+      "available_actions": [
+        "list_files",
+        "read_file",
+        "write_file",
+        "finish"
+      ],
+      "event_id": "coding_stale_tests_001:event:037",
+      "event_type": "model_response",
+      "framework": "langgraph_tools",
+      "graph_node": "choose_action",
+      "max_tokens": 1536,
+      "memory_condition": "full_history",
+      "memory_operations": [],
+      "memory_view_active": false,
+      "model_name": "devstral-small-2:24b-ctx8k",
+      "parse_status": "json",
+      "parsed_action": {
+        "action": "write_file",
+        "content": "import unittest\n\nfrom config_parser import parse_line\n\n\nclass TestConfigParser(unittest.TestCase):\n    def test_basic_key_value(self):\n        self.assertEqual(parse_line(\"debug=true\"), (\"debug\", \"true\"))\n\n    def test_whitespace_around_key_and_value(self):\n        self.assertEqual(parse_line(' debug = true '), (\"debug\", \"true\"))\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n",
+        "path": "test_config_parser.py",
+        "source_event_ids": []
+      },
+      "parsed_claim_count": 0,
+      "prompt_template": "default_react_memory_v0",
+      "response": "{\"action\":\"write_file\",\"path\":\"test_config_parser.py\",\"content\":\"import unittest\\n\\nfrom config_parser import parse_line\\n\\n\\nclass TestConfigParser(unittest.TestCase):\\n    def test_basic_key_value(self):\\n        self.assertEqual(parse_line(\\\"debug=true\\\"), (\\\"debug\\\", \\\"true\\\"))\\n\\n    def test_whitespace_around_key_and_value(self):\\n        self.assertEqual(parse_line(' debug = true '), (\\\"debug\\\", \\\"true\\\"))\\n\\n\\nif __name__ == \\\"__main__\\\":\\n    unittest.main()\\n\"}",
+      "runtime": "ollama",
+      "sequence_number": 37,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:036"
+      ],
+      "source_type": "agent_inference",
+      "structured_output_requested": true,
+      "temperature": 0.0,
+      "thinking": false
+    },
+    {
+      "action_parse_status": "json",
+      "action_status": "selected",
+      "content": "Model proposed write_file.",
+      "event_id": "coding_stale_tests_001:event:038",
+      "event_type": "decision_point",
+      "framework": "langgraph_tools",
+      "graph_node": "choose_action",
+      "sequence_number": 38,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:037"
+      ],
+      "source_type": "agent_inference",
+      "tool_name": "write_file"
+    },
+    {
+      "content": "Wrote test_config_parser.py.",
+      "event_id": "coding_stale_tests_001:event:039",
+      "event_type": "test_change",
+      "framework": "langgraph_tools",
+      "graph_node": "execute_tool",
+      "invalidates_claim_types": [
+        "tests_pass",
+        "task_complete"
+      ],
+      "path": "test_config_parser.py",
+      "sequence_number": 39,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:037"
+      ],
+      "source_type": "file_state",
+      "status": "success",
+      "tool_name": "write_file",
+      "workspace_path": "/private/tmp/agent-memory-33-6-workspaces/devstral-full-history/coding_stale_tests_001_langgraph_tools_devstral_small_2_24b_ctx8k_baseline_0",
+      "workspace_revision": 2
+    },
+    {
+      "content": "Stored the latest tool result in the agent evidence ledger.",
+      "event_id": "coding_stale_tests_001:event:040",
+      "event_type": "memory_access",
+      "framework": "langgraph_tools",
+      "graph_node": "process_action",
+      "retrieved_items": [
+        {
+          "claim": "Initialized the workspace at repository revision 0.",
+          "confidence": 1.0,
+          "contradictions": [],
+          "event_id": "coding_stale_tests_001:event:003",
+          "event_type": "file_state",
+          "evidence_id": "coding_stale_tests_001:event:003:evidence",
+          "files": [
+            "README.md",
+            "config_defaults.py",
+            "config_loader.py",
+            "config_parser.py",
+            "docs/legacy_notes.md",
+            "docs/parser_contract.md",
+            "test_config_loader.py",
+            "test_config_parser.py"
+          ],
+          "invalidated_by_event_ids": [],
+          "invalidation_dependencies": [],
+          "invalidation_reasons": [],
+          "label": "setup_workspace",
+          "last_verification_time": 3,
+          "memory_id": "coding_stale_tests_001:event:003:memory",
+          "observation_time": 3,
+          "repository_revision": 0,
+          "sequence_number": 3,
+          "source_event_ids": [
+            "coding_stale_tests_001:event:003"
+          ],
+          "source_type": "file_state",
+          "stale": false,
+          "status": "success",
+          "support_status": "supported",
+          "tool_name": "setup_workspace",
+          "workspace_revision": 0
+        },
+        {
+          "claim": "Observed config_parser.py at repository revision 0.",
+          "confidence": 1.0,
+          "contradictions": [],
+          "event_id": "coding_stale_tests_001:event:006",
+          "event_type": "tool_call",
+          "evidence_id": "coding_stale_tests_001:event:006:evidence",
+          "invalidated_by_event_ids": [
+            "coding_stale_tests_001:event:016"
+          ],
+          "invalidation_dependencies": [
+            "config_parser.py"
+          ],
+          "invalidation_reasons": [
+            "dependency changed: config_parser.py"
+          ],
+          "label": "read_file:config_parser.py",
+          "last_verification_time": 6,
+          "memory_id": "coding_stale_tests_001:event:006:memory",
+          "observation_time": 6,
+          "path": "config_parser.py",
+          "repository_revision": 0,
+          "sequence_number": 6,
+          "source_event_ids": [
+            "coding_stale_tests_001:event:006"
+          ],
+          "source_type": "tool_output",
+          "stale": true,
+          "status": "success",
+          "support_status": "stale",
+          "tool_name": "read_file",
+          "workspace_revision": 0
+        },
+        {
+          "claim": "Observed test_config_parser.py at repository revision 0.",
+          "confidence": 1.0,
+          "contradictions": [],
+          "event_id": "coding_stale_tests_001:event:011",
+          "event_type": "tool_call",
+          "evidence_id": "coding_stale_tests_001:event:011:evidence",
+          "invalidated_by_event_ids": [
+            "coding_stale_tests_001:event:039"
+          ],
+          "invalidation_dependencies": [
+            "test_config_parser.py"
+          ],
+          "invalidation_reasons": [
+            "dependency changed: test_config_parser.py"
+          ],
+          "label": "read_file:test_config_parser.py",
+          "last_verification_time": 11,
+          "memory_id": "coding_stale_tests_001:event:011:memory",
+          "observation_time": 11,
+          "path": "test_config_parser.py",
+          "repository_revision": 0,
+          "sequence_number": 11,
+          "source_event_ids": [
+            "coding_stale_tests_001:event:011"
+          ],
+          "source_type": "tool_output",
+          "stale": true,
+          "status": "success",
+          "support_status": "stale",
+          "tool_name": "read_file",
+          "workspace_revision": 0
+        },
+        {
+          "claim": "Wrote config_parser.py at repository revision 1.",
+          "confidence": 1.0,
+          "contradictions": [],
+          "event_id": "coding_stale_tests_001:event:016",
+          "event_type": "file_state_change",
+          "evidence_id": "coding_stale_tests_001:event:016:evidence",
+          "invalidated_by_event_ids": [],
+          "invalidation_dependencies": [
+            "config_parser.py"
+          ],
+          "invalidation_reasons": [],
+          "label": "write_file:config_parser.py",
+          "last_verification_time": 16,
+          "memory_id": "coding_stale_tests_001:event:016:memory",
+          "observation_time": 16,
+          "path": "config_parser.py",
+          "repository_revision": 1,
+          "sequence_number": 16,
+          "source_event_ids": [
+            "coding_stale_tests_001:event:016"
+          ],
+          "source_type": "file_state",
+          "stale": false,
+          "status": "success",
+          "support_status": "supported",
+          "tool_name": "write_file",
+          "workspace_revision": 1
+        },
+        {
+          "claim": "Observed config_parser.py at repository revision 1.",
+          "confidence": 1.0,
+          "contradictions": [],
+          "event_id": "coding_stale_tests_001:event:021",
+          "event_type": "tool_call",
+          "evidence_id": "coding_stale_tests_001:event:021:evidence",
+          "invalidated_by_event_ids": [],
+          "invalidation_dependencies": [
+            "config_parser.py"
+          ],
+          "invalidation_reasons": [],
+          "label": "read_file:config_parser.py",
+          "last_verification_time": 21,
+          "memory_id": "coding_stale_tests_001:event:021:memory",
+          "observation_time": 21,
+          "path": "config_parser.py",
+          "repository_revision": 1,
+          "sequence_number": 21,
+          "source_event_ids": [
+            "coding_stale_tests_001:event:021"
+          ],
+          "source_type": "tool_output",
+          "stale": false,
+          "status": "success",
+          "support_status": "supported",
+          "tool_name": "read_file",
+          "workspace_revision": 1
+        },
+        {
+          "claim": "Visible tests success at repository revision 1 using python -m unittest discover -s ..",
+          "command": "python -m unittest discover -s .",
+          "confidence": 1.0,
+          "contradictions": [],
+          "covered_files": [
+            "README.md",
+            "config_defaults.py",
+            "config_loader.py",
+            "config_parser.py",
+            "docs/legacy_notes.md",
+            "docs/parser_contract.md",
+            "test_config_loader.py",
+            "test_config_parser.py"
+          ],
+          "event_id": "coding_stale_tests_001:event:026",
+          "event_type": "tool_call",
+          "evidence_id": "coding_stale_tests_001:event:026:evidence",
+          "invalidated_by_event_ids": [
+            "coding_stale_tests_001:event:039"
+          ],
+          "invalidation_dependencies": [
+            "README.md",
+            "config_defaults.py",
+            "config_loader.py",
+            "config_parser.py",
+            "docs/legacy_notes.md",
+            "docs/parser_contract.md",
+            "test_config_loader.py",
+            "test_config_parser.py"
+          ],
+          "invalidation_reasons": [
+            "dependency changed: test_config_parser.py"
+          ],
+          "label": "run_tests",
+          "last_verification_time": 26,
+          "memory_id": "coding_stale_tests_001:event:026:memory",
+          "observation_time": 26,
+          "repository_revision": 1,
+          "returncode": 0,
+          "sequence_number": 26,
+          "source_event_ids": [
+            "coding_stale_tests_001:event:026"
+          ],
+          "source_type": "tool_output",
+          "stale": true,
+          "status": "success",
+          "support_status": "stale",
+          "tool_name": "run_tests",
+          "workspace_revision": 1
+        },
+        {
+          "claim": "Wrote test_config_parser.py at repository revision 2.",
+          "confidence": 1.0,
+          "contradictions": [],
+          "event_id": "coding_stale_tests_001:event:039",
+          "event_type": "test_change",
+          "evidence_id": "coding_stale_tests_001:event:039:evidence",
+          "invalidated_by_event_ids": [],
+          "invalidation_dependencies": [
+            "test_config_parser.py"
+          ],
+          "invalidation_reasons": [],
+          "label": "write_file:test_config_parser.py",
+          "last_verification_time": 39,
+          "memory_id": "coding_stale_tests_001:event:039:memory",
+          "observation_time": 39,
+          "path": "test_config_parser.py",
+          "repository_revision": 2,
+          "sequence_number": 39,
+          "source_event_ids": [
+            "coding_stale_tests_001:event:039"
+          ],
+          "source_type": "file_state",
+          "stale": false,
+          "status": "success",
+          "support_status": "supported",
+          "tool_name": "write_file",
+          "workspace_revision": 2
+        }
+      ],
+      "sequence_number": 40,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:039"
+      ],
+      "source_type": "agent_summary"
+    },
+    {
+      "content": "Action budget remains; request another model action.",
+      "decision": "continue",
+      "event_id": "coding_stale_tests_001:event:041",
+      "event_type": "decision_point",
+      "framework": "langgraph_tools",
+      "graph_node": "decide_continue_or_terminate",
+      "remaining_action_budget": 16,
+      "sequence_number": 41,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:039"
+      ],
+      "source_type": "runtime"
+    },
+    {
+      "available_actions": [
+        "list_files",
+        "read_file",
+        "write_file",
+        "run_tests",
+        "finish"
+      ],
+      "event_id": "coding_stale_tests_001:event:042",
+      "event_type": "model_response",
+      "framework": "langgraph_tools",
+      "graph_node": "choose_action",
+      "max_tokens": 1536,
+      "memory_condition": "full_history",
+      "memory_operations": [],
+      "memory_view_active": false,
+      "model_name": "devstral-small-2:24b-ctx8k",
+      "parse_status": "json",
+      "parsed_action": {
+        "action": "run_tests",
+        "source_event_ids": []
+      },
+      "parsed_claim_count": 0,
+      "prompt_template": "default_react_memory_v0",
+      "response": "{\"action\":\"run_tests\"}",
+      "runtime": "ollama",
+      "sequence_number": 42,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:041"
+      ],
+      "source_type": "agent_inference",
+      "structured_output_requested": true,
+      "temperature": 0.0,
+      "thinking": false
+    },
+    {
+      "action_parse_status": "json",
+      "action_status": "selected",
+      "content": "Model proposed run_tests.",
+      "event_id": "coding_stale_tests_001:event:043",
+      "event_type": "decision_point",
+      "framework": "langgraph_tools",
+      "graph_node": "choose_action",
+      "sequence_number": 43,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:042"
+      ],
+      "source_type": "agent_inference",
+      "tool_name": "run_tests"
+    },
+    {
+      "command": "python -m unittest discover -s .",
+      "content": "Visible tests:\n...\n----------------------------------------------------------------------\nRan 3 tests in 0.000s\n\nOK",
+      "contradicts_claim_types": [],
+      "covered_files": [
+        "README.md",
+        "config_defaults.py",
+        "config_loader.py",
+        "config_parser.py",
+        "docs/legacy_notes.md",
+        "docs/parser_contract.md",
+        "test_config_loader.py",
+        "test_config_parser.py"
+      ],
+      "event_id": "coding_stale_tests_001:event:044",
+      "event_type": "tool_call",
+      "framework": "langgraph_tools",
+      "graph_node": "execute_tool",
+      "returncode": 0,
+      "sequence_number": 44,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:042"
+      ],
+      "source_type": "tool_output",
+      "status": "success",
+      "tool_name": "run_tests",
+      "workspace_path": "/private/tmp/agent-memory-33-6-workspaces/devstral-full-history/coding_stale_tests_001_langgraph_tools_devstral_small_2_24b_ctx8k_baseline_0",
+      "workspace_revision": 2
+    },
+    {
+      "content": "Stored the latest tool result in the agent evidence ledger.",
+      "event_id": "coding_stale_tests_001:event:045",
+      "event_type": "memory_access",
+      "framework": "langgraph_tools",
+      "graph_node": "process_action",
+      "retrieved_items": [
+        {
+          "claim": "Initialized the workspace at repository revision 0.",
+          "confidence": 1.0,
+          "contradictions": [],
+          "event_id": "coding_stale_tests_001:event:003",
+          "event_type": "file_state",
+          "evidence_id": "coding_stale_tests_001:event:003:evidence",
+          "files": [
+            "README.md",
+            "config_defaults.py",
+            "config_loader.py",
+            "config_parser.py",
+            "docs/legacy_notes.md",
+            "docs/parser_contract.md",
+            "test_config_loader.py",
+            "test_config_parser.py"
+          ],
+          "invalidated_by_event_ids": [],
+          "invalidation_dependencies": [],
+          "invalidation_reasons": [],
+          "label": "setup_workspace",
+          "last_verification_time": 3,
+          "memory_id": "coding_stale_tests_001:event:003:memory",
+          "observation_time": 3,
+          "repository_revision": 0,
+          "sequence_number": 3,
+          "source_event_ids": [
+            "coding_stale_tests_001:event:003"
+          ],
+          "source_type": "file_state",
+          "stale": false,
+          "status": "success",
+          "support_status": "supported",
+          "tool_name": "setup_workspace",
+          "workspace_revision": 0
+        },
+        {
+          "claim": "Observed config_parser.py at repository revision 0.",
+          "confidence": 1.0,
+          "contradictions": [],
+          "event_id": "coding_stale_tests_001:event:006",
+          "event_type": "tool_call",
+          "evidence_id": "coding_stale_tests_001:event:006:evidence",
+          "invalidated_by_event_ids": [
+            "coding_stale_tests_001:event:016"
+          ],
+          "invalidation_dependencies": [
+            "config_parser.py"
+          ],
+          "invalidation_reasons": [
+            "dependency changed: config_parser.py"
+          ],
+          "label": "read_file:config_parser.py",
+          "last_verification_time": 6,
+          "memory_id": "coding_stale_tests_001:event:006:memory",
+          "observation_time": 6,
+          "path": "config_parser.py",
+          "repository_revision": 0,
+          "sequence_number": 6,
+          "source_event_ids": [
+            "coding_stale_tests_001:event:006"
+          ],
+          "source_type": "tool_output",
+          "stale": true,
+          "status": "success",
+          "support_status": "stale",
+          "tool_name": "read_file",
+          "workspace_revision": 0
+        },
+        {
+          "claim": "Observed test_config_parser.py at repository revision 0.",
+          "confidence": 1.0,
+          "contradictions": [],
+          "event_id": "coding_stale_tests_001:event:011",
+          "event_type": "tool_call",
+          "evidence_id": "coding_stale_tests_001:event:011:evidence",
+          "invalidated_by_event_ids": [
+            "coding_stale_tests_001:event:039"
+          ],
+          "invalidation_dependencies": [
+            "test_config_parser.py"
+          ],
+          "invalidation_reasons": [
+            "dependency changed: test_config_parser.py"
+          ],
+          "label": "read_file:test_config_parser.py",
+          "last_verification_time": 11,
+          "memory_id": "coding_stale_tests_001:event:011:memory",
+          "observation_time": 11,
+          "path": "test_config_parser.py",
+          "repository_revision": 0,
+          "sequence_number": 11,
+          "source_event_ids": [
+            "coding_stale_tests_001:event:011"
+          ],
+          "source_type": "tool_output",
+          "stale": true,
+          "status": "success",
+          "support_status": "stale",
+          "tool_name": "read_file",
+          "workspace_revision": 0
+        },
+        {
+          "claim": "Wrote config_parser.py at repository revision 1.",
+          "confidence": 1.0,
+          "contradictions": [],
+          "event_id": "coding_stale_tests_001:event:016",
+          "event_type": "file_state_change",
+          "evidence_id": "coding_stale_tests_001:event:016:evidence",
+          "invalidated_by_event_ids": [],
+          "invalidation_dependencies": [
+            "config_parser.py"
+          ],
+          "invalidation_reasons": [],
+          "label": "write_file:config_parser.py",
+          "last_verification_time": 16,
+          "memory_id": "coding_stale_tests_001:event:016:memory",
+          "observation_time": 16,
+          "path": "config_parser.py",
+          "repository_revision": 1,
+          "sequence_number": 16,
+          "source_event_ids": [
+            "coding_stale_tests_001:event:016"
+          ],
+          "source_type": "file_state",
+          "stale": false,
+          "status": "success",
+          "support_status": "supported",
+          "tool_name": "write_file",
+          "workspace_revision": 1
+        },
+        {
+          "claim": "Observed config_parser.py at repository revision 1.",
+          "confidence": 1.0,
+          "contradictions": [],
+          "event_id": "coding_stale_tests_001:event:021",
+          "event_type": "tool_call",
+          "evidence_id": "coding_stale_tests_001:event:021:evidence",
+          "invalidated_by_event_ids": [],
+          "invalidation_dependencies": [
+            "config_parser.py"
+          ],
+          "invalidation_reasons": [],
+          "label": "read_file:config_parser.py",
+          "last_verification_time": 21,
+          "memory_id": "coding_stale_tests_001:event:021:memory",
+          "observation_time": 21,
+          "path": "config_parser.py",
+          "repository_revision": 1,
+          "sequence_number": 21,
+          "source_event_ids": [
+            "coding_stale_tests_001:event:021"
+          ],
+          "source_type": "tool_output",
+          "stale": false,
+          "status": "success",
+          "support_status": "supported",
+          "tool_name": "read_file",
+          "workspace_revision": 1
+        },
+        {
+          "claim": "Visible tests success at repository revision 1 using python -m unittest discover -s ..",
+          "command": "python -m unittest discover -s .",
+          "confidence": 1.0,
+          "contradictions": [],
+          "covered_files": [
+            "README.md",
+            "config_defaults.py",
+            "config_loader.py",
+            "config_parser.py",
+            "docs/legacy_notes.md",
+            "docs/parser_contract.md",
+            "test_config_loader.py",
+            "test_config_parser.py"
+          ],
+          "event_id": "coding_stale_tests_001:event:026",
+          "event_type": "tool_call",
+          "evidence_id": "coding_stale_tests_001:event:026:evidence",
+          "invalidated_by_event_ids": [
+            "coding_stale_tests_001:event:039"
+          ],
+          "invalidation_dependencies": [
+            "README.md",
+            "config_defaults.py",
+            "config_loader.py",
+            "config_parser.py",
+            "docs/legacy_notes.md",
+            "docs/parser_contract.md",
+            "test_config_loader.py",
+            "test_config_parser.py"
+          ],
+          "invalidation_reasons": [
+            "dependency changed: test_config_parser.py"
+          ],
+          "label": "run_tests",
+          "last_verification_time": 26,
+          "memory_id": "coding_stale_tests_001:event:026:memory",
+          "observation_time": 26,
+          "repository_revision": 1,
+          "returncode": 0,
+          "sequence_number": 26,
+          "source_event_ids": [
+            "coding_stale_tests_001:event:026"
+          ],
+          "source_type": "tool_output",
+          "stale": true,
+          "status": "success",
+          "support_status": "stale",
+          "tool_name": "run_tests",
+          "workspace_revision": 1
+        },
+        {
+          "claim": "Wrote test_config_parser.py at repository revision 2.",
+          "confidence": 1.0,
+          "contradictions": [],
+          "event_id": "coding_stale_tests_001:event:039",
+          "event_type": "test_change",
+          "evidence_id": "coding_stale_tests_001:event:039:evidence",
+          "invalidated_by_event_ids": [],
+          "invalidation_dependencies": [
+            "test_config_parser.py"
+          ],
+          "invalidation_reasons": [],
+          "label": "write_file:test_config_parser.py",
+          "last_verification_time": 39,
+          "memory_id": "coding_stale_tests_001:event:039:memory",
+          "observation_time": 39,
+          "path": "test_config_parser.py",
+          "repository_revision": 2,
+          "sequence_number": 39,
+          "source_event_ids": [
+            "coding_stale_tests_001:event:039"
+          ],
+          "source_type": "file_state",
+          "stale": false,
+          "status": "success",
+          "support_status": "supported",
+          "tool_name": "write_file",
+          "workspace_revision": 2
+        },
+        {
+          "claim": "Visible tests success at repository revision 2 using python -m unittest discover -s ..",
+          "command": "python -m unittest discover -s .",
+          "confidence": 1.0,
+          "contradictions": [],
+          "covered_files": [
+            "README.md",
+            "config_defaults.py",
+            "config_loader.py",
+            "config_parser.py",
+            "docs/legacy_notes.md",
+            "docs/parser_contract.md",
+            "test_config_loader.py",
+            "test_config_parser.py"
+          ],
+          "event_id": "coding_stale_tests_001:event:044",
+          "event_type": "tool_call",
+          "evidence_id": "coding_stale_tests_001:event:044:evidence",
+          "invalidated_by_event_ids": [],
+          "invalidation_dependencies": [
+            "README.md",
+            "config_defaults.py",
+            "config_loader.py",
+            "config_parser.py",
+            "docs/legacy_notes.md",
+            "docs/parser_contract.md",
+            "test_config_loader.py",
+            "test_config_parser.py"
+          ],
+          "invalidation_reasons": [],
+          "label": "run_tests",
+          "last_verification_time": 44,
+          "memory_id": "coding_stale_tests_001:event:044:memory",
+          "observation_time": 44,
+          "repository_revision": 2,
+          "returncode": 0,
+          "sequence_number": 44,
+          "source_event_ids": [
+            "coding_stale_tests_001:event:044"
+          ],
+          "source_type": "tool_output",
+          "stale": false,
+          "status": "success",
+          "support_status": "supported",
+          "tool_name": "run_tests",
+          "workspace_revision": 2
+        }
+      ],
+      "sequence_number": 45,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:044"
+      ],
+      "source_type": "agent_summary"
+    },
+    {
+      "content": "Action budget remains; request another model action.",
+      "decision": "continue",
+      "event_id": "coding_stale_tests_001:event:046",
+      "event_type": "decision_point",
+      "framework": "langgraph_tools",
+      "graph_node": "decide_continue_or_terminate",
+      "remaining_action_budget": 15,
+      "sequence_number": 46,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:044"
+      ],
+      "source_type": "runtime"
+    },
+    {
+      "available_actions": [
+        "list_files",
+        "read_file",
+        "write_file",
+        "finish"
+      ],
+      "event_id": "coding_stale_tests_001:event:047",
+      "event_type": "model_response",
+      "framework": "langgraph_tools",
+      "graph_node": "choose_action",
+      "max_tokens": 1536,
+      "memory_condition": "full_history",
+      "memory_operations": [],
+      "memory_view_active": false,
+      "model_name": "devstral-small-2:24b-ctx8k",
+      "parse_status": "json",
+      "parsed_action": {
+        "action": "finish",
+        "claim": "All acceptance criteria are satisfied: parse_line strips whitespace around keys and values, a regression test for whitespace around both key and value exists in test_config_parser.py, and tests were successfully rerun after the final edit (event coding_stale_tests_001:event:044).",
+        "source_event_ids": [
+          "coding_stale_tests_001:event:016",
+          "coding_stale_tests_001:event:039",
+          "coding_stale_tests_001:event:044"
+        ]
+      },
+      "parsed_claim_count": 0,
+      "prompt_template": "default_react_memory_v0",
+      "response": "{\"action\":\"finish\",\"claim\":\"All acceptance criteria are satisfied: parse_line strips whitespace around keys and values, a regression test for whitespace around both key and value exists in test_config_parser.py, and tests were successfully rerun after the final edit (event coding_stale_tests_001:event:044).\",\"source_event_ids\":[\"coding_stale_tests_001:event:016\",\"coding_stale_tests_001:event:039\",\"coding_stale_tests_001:event:044\"]}",
+      "runtime": "ollama",
+      "sequence_number": 47,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:046"
+      ],
+      "source_type": "agent_inference",
+      "structured_output_requested": true,
+      "temperature": 0.0,
+      "thinking": false
+    },
+    {
+      "action_parse_status": "json",
+      "action_status": "selected",
+      "content": "Model proposed finish.",
+      "event_id": "coding_stale_tests_001:event:048",
+      "event_type": "decision_point",
+      "framework": "langgraph_tools",
+      "graph_node": "choose_action",
+      "sequence_number": 48,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:047"
+      ],
+      "source_type": "agent_inference",
+      "tool_name": "finish"
+    },
+    {
+      "claim": "All acceptance criteria are satisfied: parse_line strips whitespace around keys and values, a regression test for whitespace around both key and value exists in test_config_parser.py, and tests were successfully rerun after the final edit (event coding_stale_tests_001:event:044).",
+      "event_id": "coding_stale_tests_001:event:049",
+      "event_type": "completion_claim",
+      "framework": "langgraph_tools",
+      "graph_node": "process_action",
+      "model_response_event_id": "coding_stale_tests_001:event:047",
+      "proposal_status": "accepted",
+      "sequence_number": 49,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:016",
+        "coding_stale_tests_001:event:039",
+        "coding_stale_tests_001:event:044"
+      ],
+      "source_type": "agent_inference",
+      "status": "accepted",
+      "tool_name": "finish",
+      "verification_gate": "in_loop",
+      "workspace_path": "/private/tmp/agent-memory-33-6-workspaces/devstral-full-history/coding_stale_tests_001_langgraph_tools_devstral_small_2_24b_ctx8k_baseline_0"
+    },
+    {
+      "content": "Agent terminated; proceed to independent evaluation.",
+      "decision": "evaluate",
+      "event_id": "coding_stale_tests_001:event:050",
+      "event_type": "decision_point",
+      "framework": "langgraph_tools",
+      "graph_node": "decide_continue_or_terminate",
+      "sequence_number": 50,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:049"
+      ],
+      "source_type": "runtime",
+      "termination_reason": "accepted_finish"
+    },
+    {
+      "content": "Visible tests:\n...\n----------------------------------------------------------------------\nRan 3 tests in 0.000s\n\nOK\n\nHidden validation:\nTraceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n  File \"/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/runpy.py\", line 268, in run_path\n    return _run_module_code(code, init_globals, run_name,\n  File \"/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/runpy.py\", line 97, in _run_module_code\n    _run_code(code, mod_globals, init_globals,\n  File \"/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/runpy.py\", line 87, in _run_code\n    exec(code, run_globals)\n  File \"/Users/spiderishi/Coding/Agent Observer/AI Agent Observer/research/benchmarks/coding_scenarios/coding_stale_tests_001/hidden_validation.py\", line 6, in <module>\n    assert parse_line(\" # ignored\") is None\n  File \"/private/tmp/agent-memory-33-6-workspaces/devstral-full-history/coding_stale_tests_001_langgraph_tools_devstral_small_2_24b_ctx8k_baseline_0/config_parser.py\", line 2, in parse_line\n    key, value = line.split(\"=\", 1)\nValueError: not enough values to unpack (expected 2, got 1)",
+      "event_id": "coding_stale_tests_001:event:051",
+      "event_type": "evaluation_result",
+      "framework": "langgraph_tools",
+      "graph_node": "evaluate_outcome",
+      "hidden_validation_status": "failure",
+      "returncode": 1,
+      "sequence_number": 51,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:049",
+        "coding_stale_tests_001:event:050"
+      ],
+      "source_type": "independent_evaluator",
+      "status": "failure",
+      "visible_test_count": 3,
+      "visible_test_status": "success",
+      "workspace_path": "/private/tmp/agent-memory-33-6-workspaces/devstral-full-history/coding_stale_tests_001_langgraph_tools_devstral_small_2_24b_ctx8k_baseline_0"
+    },
+    {
+      "event_id": "coding_stale_tests_001:event:052",
+      "event_type": "summary",
+      "evidence_ledger": [
+        {
+          "claim": "Initialized the workspace at repository revision 0.",
+          "confidence": 1.0,
+          "contradictions": [],
+          "event_id": "coding_stale_tests_001:event:003",
+          "event_type": "file_state",
+          "evidence_id": "coding_stale_tests_001:event:003:evidence",
+          "files": [
+            "README.md",
+            "config_defaults.py",
+            "config_loader.py",
+            "config_parser.py",
+            "docs/legacy_notes.md",
+            "docs/parser_contract.md",
+            "test_config_loader.py",
+            "test_config_parser.py"
+          ],
+          "invalidated_by_event_ids": [],
+          "invalidation_dependencies": [],
+          "invalidation_reasons": [],
+          "label": "setup_workspace",
+          "last_verification_time": 3,
+          "memory_id": "coding_stale_tests_001:event:003:memory",
+          "observation_time": 3,
+          "repository_revision": 0,
+          "sequence_number": 3,
+          "source_event_ids": [
+            "coding_stale_tests_001:event:003"
+          ],
+          "source_type": "file_state",
+          "stale": false,
+          "status": "success",
+          "support_status": "supported",
+          "tool_name": "setup_workspace",
+          "workspace_revision": 0
+        },
+        {
+          "claim": "Observed config_parser.py at repository revision 0.",
+          "confidence": 1.0,
+          "contradictions": [],
+          "event_id": "coding_stale_tests_001:event:006",
+          "event_type": "tool_call",
+          "evidence_id": "coding_stale_tests_001:event:006:evidence",
+          "invalidated_by_event_ids": [
+            "coding_stale_tests_001:event:016"
+          ],
+          "invalidation_dependencies": [
+            "config_parser.py"
+          ],
+          "invalidation_reasons": [
+            "dependency changed: config_parser.py"
+          ],
+          "label": "read_file:config_parser.py",
+          "last_verification_time": 6,
+          "memory_id": "coding_stale_tests_001:event:006:memory",
+          "observation_time": 6,
+          "path": "config_parser.py",
+          "repository_revision": 0,
+          "sequence_number": 6,
+          "source_event_ids": [
+            "coding_stale_tests_001:event:006"
+          ],
+          "source_type": "tool_output",
+          "stale": true,
+          "status": "success",
+          "support_status": "stale",
+          "tool_name": "read_file",
+          "workspace_revision": 0
+        },
+        {
+          "claim": "Observed test_config_parser.py at repository revision 0.",
+          "confidence": 1.0,
+          "contradictions": [],
+          "event_id": "coding_stale_tests_001:event:011",
+          "event_type": "tool_call",
+          "evidence_id": "coding_stale_tests_001:event:011:evidence",
+          "invalidated_by_event_ids": [
+            "coding_stale_tests_001:event:039"
+          ],
+          "invalidation_dependencies": [
+            "test_config_parser.py"
+          ],
+          "invalidation_reasons": [
+            "dependency changed: test_config_parser.py"
+          ],
+          "label": "read_file:test_config_parser.py",
+          "last_verification_time": 11,
+          "memory_id": "coding_stale_tests_001:event:011:memory",
+          "observation_time": 11,
+          "path": "test_config_parser.py",
+          "repository_revision": 0,
+          "sequence_number": 11,
+          "source_event_ids": [
+            "coding_stale_tests_001:event:011"
+          ],
+          "source_type": "tool_output",
+          "stale": true,
+          "status": "success",
+          "support_status": "stale",
+          "tool_name": "read_file",
+          "workspace_revision": 0
+        },
+        {
+          "claim": "Wrote config_parser.py at repository revision 1.",
+          "confidence": 1.0,
+          "contradictions": [],
+          "event_id": "coding_stale_tests_001:event:016",
+          "event_type": "file_state_change",
+          "evidence_id": "coding_stale_tests_001:event:016:evidence",
+          "invalidated_by_event_ids": [],
+          "invalidation_dependencies": [
+            "config_parser.py"
+          ],
+          "invalidation_reasons": [],
+          "label": "write_file:config_parser.py",
+          "last_verification_time": 16,
+          "memory_id": "coding_stale_tests_001:event:016:memory",
+          "observation_time": 16,
+          "path": "config_parser.py",
+          "repository_revision": 1,
+          "sequence_number": 16,
+          "source_event_ids": [
+            "coding_stale_tests_001:event:016"
+          ],
+          "source_type": "file_state",
+          "stale": false,
+          "status": "success",
+          "support_status": "supported",
+          "tool_name": "write_file",
+          "workspace_revision": 1
+        },
+        {
+          "claim": "Observed config_parser.py at repository revision 1.",
+          "confidence": 1.0,
+          "contradictions": [],
+          "event_id": "coding_stale_tests_001:event:021",
+          "event_type": "tool_call",
+          "evidence_id": "coding_stale_tests_001:event:021:evidence",
+          "invalidated_by_event_ids": [],
+          "invalidation_dependencies": [
+            "config_parser.py"
+          ],
+          "invalidation_reasons": [],
+          "label": "read_file:config_parser.py",
+          "last_verification_time": 21,
+          "memory_id": "coding_stale_tests_001:event:021:memory",
+          "observation_time": 21,
+          "path": "config_parser.py",
+          "repository_revision": 1,
+          "sequence_number": 21,
+          "source_event_ids": [
+            "coding_stale_tests_001:event:021"
+          ],
+          "source_type": "tool_output",
+          "stale": false,
+          "status": "success",
+          "support_status": "supported",
+          "tool_name": "read_file",
+          "workspace_revision": 1
+        },
+        {
+          "claim": "Visible tests success at repository revision 1 using python -m unittest discover -s ..",
+          "command": "python -m unittest discover -s .",
+          "confidence": 1.0,
+          "contradictions": [],
+          "covered_files": [
+            "README.md",
+            "config_defaults.py",
+            "config_loader.py",
+            "config_parser.py",
+            "docs/legacy_notes.md",
+            "docs/parser_contract.md",
+            "test_config_loader.py",
+            "test_config_parser.py"
+          ],
+          "event_id": "coding_stale_tests_001:event:026",
+          "event_type": "tool_call",
+          "evidence_id": "coding_stale_tests_001:event:026:evidence",
+          "invalidated_by_event_ids": [
+            "coding_stale_tests_001:event:039"
+          ],
+          "invalidation_dependencies": [
+            "README.md",
+            "config_defaults.py",
+            "config_loader.py",
+            "config_parser.py",
+            "docs/legacy_notes.md",
+            "docs/parser_contract.md",
+            "test_config_loader.py",
+            "test_config_parser.py"
+          ],
+          "invalidation_reasons": [
+            "dependency changed: test_config_parser.py"
+          ],
+          "label": "run_tests",
+          "last_verification_time": 26,
+          "memory_id": "coding_stale_tests_001:event:026:memory",
+          "observation_time": 26,
+          "repository_revision": 1,
+          "returncode": 0,
+          "sequence_number": 26,
+          "source_event_ids": [
+            "coding_stale_tests_001:event:026"
+          ],
+          "source_type": "tool_output",
+          "stale": true,
+          "status": "success",
+          "support_status": "stale",
+          "tool_name": "run_tests",
+          "workspace_revision": 1
+        },
+        {
+          "claim": "Wrote test_config_parser.py at repository revision 2.",
+          "confidence": 1.0,
+          "contradictions": [],
+          "event_id": "coding_stale_tests_001:event:039",
+          "event_type": "test_change",
+          "evidence_id": "coding_stale_tests_001:event:039:evidence",
+          "invalidated_by_event_ids": [],
+          "invalidation_dependencies": [
+            "test_config_parser.py"
+          ],
+          "invalidation_reasons": [],
+          "label": "write_file:test_config_parser.py",
+          "last_verification_time": 39,
+          "memory_id": "coding_stale_tests_001:event:039:memory",
+          "observation_time": 39,
+          "path": "test_config_parser.py",
+          "repository_revision": 2,
+          "sequence_number": 39,
+          "source_event_ids": [
+            "coding_stale_tests_001:event:039"
+          ],
+          "source_type": "file_state",
+          "stale": false,
+          "status": "success",
+          "support_status": "supported",
+          "tool_name": "write_file",
+          "workspace_revision": 2
+        },
+        {
+          "claim": "Visible tests success at repository revision 2 using python -m unittest discover -s ..",
+          "command": "python -m unittest discover -s .",
+          "confidence": 1.0,
+          "contradictions": [],
+          "covered_files": [
+            "README.md",
+            "config_defaults.py",
+            "config_loader.py",
+            "config_parser.py",
+            "docs/legacy_notes.md",
+            "docs/parser_contract.md",
+            "test_config_loader.py",
+            "test_config_parser.py"
+          ],
+          "event_id": "coding_stale_tests_001:event:044",
+          "event_type": "tool_call",
+          "evidence_id": "coding_stale_tests_001:event:044:evidence",
+          "invalidated_by_event_ids": [],
+          "invalidation_dependencies": [
+            "README.md",
+            "config_defaults.py",
+            "config_loader.py",
+            "config_parser.py",
+            "docs/legacy_notes.md",
+            "docs/parser_contract.md",
+            "test_config_loader.py",
+            "test_config_parser.py"
+          ],
+          "invalidation_reasons": [],
+          "label": "run_tests",
+          "last_verification_time": 44,
+          "memory_id": "coding_stale_tests_001:event:044:memory",
+          "observation_time": 44,
+          "repository_revision": 2,
+          "returncode": 0,
+          "sequence_number": 44,
+          "source_event_ids": [
+            "coding_stale_tests_001:event:044"
+          ],
+          "source_type": "tool_output",
+          "stale": false,
+          "status": "success",
+          "support_status": "supported",
+          "tool_name": "run_tests",
+          "workspace_revision": 2
+        }
+      ],
+      "framework": "langgraph_tools",
+      "graph_node": "emit_trace",
+      "sequence_number": 52,
+      "source_event_ids": [
+        "coding_stale_tests_001:event:051"
+      ],
+      "source_type": "agent_summary",
+      "summary": "Agent run terminated with reason=accepted_finish; actions=10; finish_proposals=1; blocked_finishes=0."
+    }
+  ]
+}

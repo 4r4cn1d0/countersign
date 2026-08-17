@@ -126,10 +126,18 @@ Notes:
   the guard.
 - Progress: watch `runs/final-matrix/workspaces/*.partial-trace.jsonl`
   sizes grow; each completed run lands under `runs/final-matrix/runs/`.
-- Interruption/preemption: just re-run the same command from the same
-  checkout — completed run artifacts are kept, incomplete ones resume
-  from `*.run-checkpoint.json` (or use
-  `python -m research.cli resume <checkpoint>` for a single run).
+- Interruption/preemption: re-run the same command from the same
+  checkout and output dir — completed run artifacts are REUSED as-is
+  (`reused_run_count` in the manifest confirms it; verified by
+  test_interrupted_matrix_reuses_completed_artifacts). The single
+  in-flight run at interruption time is re-executed from scratch (its
+  checkpoint serves `python -m research.cli resume <checkpoint>` for
+  one-off recovery, but the matrix loop does not consume checkpoints).
+  NOTE: if the resuming checkout is at a DIFFERENT commit than the one
+  that wrote `experiment_protocol.json`, delete that file first and
+  record the old protocol_id in the deviation ledger — the protocol
+  embeds the source revision, and write_frozen_protocol correctly
+  refuses to reuse a directory whose frozen protocol no longer matches.
 
 ## 4. Verify + pull artifacts
 

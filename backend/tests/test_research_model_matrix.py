@@ -1346,3 +1346,59 @@ def test_negative_control_false_block_rate_is_aggregated(tmp_path: Path):
         "research.runner.matrix_analysis", fromlist=["x"]
     ).format_model_matrix_analysis_markdown(report)
     assert "Negative-Control False Blocks" in markdown
+
+
+def test_interrupted_matrix_reuses_completed_artifacts(tmp_path: Path):
+    """Re-invoking a matrix over an output dir with completed run
+    artifacts must REUSE them byte-identically, not re-execute or
+    rewrite them — re-running would silently resample episodes, and
+    rewriting would destroy the original experiment_context."""
+    pytest.importorskip("langgraph")
+    import hashlib
+
+    matrix_path = tmp_path / "matrix.json"
+    matrix_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "agent-memory-model-matrix/v0.1",
+                "runtime": "deterministic",
+                "framework": "langgraph_tools",
+                "minimum_successful_models": 1,
+                "models": [
+                    {
+                        "model_family": "qwen",
+                        "model_name": "qwen2.5-coder:7b",
+                        "display_name": "Qwen deterministic test",
+                        "pull_command": "ollama pull qwen2.5-coder:7b",
+                        "enabled": True,
+                    }
+                ],
+            }
+        )
+    )
+    out_dir = tmp_path / "out"
+    kwargs = dict(
+        matrix_path=matrix_path,
+        task_ids=["coding_heldout_temporal_fresh_001"],
+        interventions=["memory_baseline", "verification_only"],
+        seeds=[0],
+        minimum_successful_models=1,
+        trace_mode="model_driven",
+        action_budget=26,
+    )
+    first = run_model_matrix(out_dir, **kwargs)
+    assert first["reused_run_count"] == 0
+    run_files = sorted((out_dir / "runs").rglob("*.json"))
+    assert len(run_files) == 2
+    hashes_before = {
+        p: hashlib.sha256(p.read_bytes()).hexdigest() for p in run_files
+    }
+
+    second = run_model_matrix(out_dir, **kwargs)
+    assert second["reused_run_count"] == 2
+    assert second["models"][0]["completed_run_count"] == 2
+    for p, digest in hashes_before.items():
+        assert hashlib.sha256(p.read_bytes()).hexdigest() == digest
+    assert all(
+        info.get("reused") for info in second["models"][0]["runs"]
+    )
