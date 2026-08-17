@@ -171,6 +171,15 @@ communicated as evidence audits, never as correctness guarantees.
 %   hazard for supervisory gates.
 % - Worker adaptation: post-block behavior (legitimate evidence refresh
 %   vs redundant test-running).
+% - QUALITATIVE OBSERVATION (from the run ledger, 2026-08-18; cite the
+%   trajectory, not the anecdote): on the legitimate no-change audit
+%   control, a worker spontaneously wrote an UNNECESSARY and
+%   syntactically invalid "fix", then inspected its own broken file.
+%   This is live evidence for the no-change control's design premise —
+%   action bias under a task whose correct completion is zero changes —
+%   and exactly the claim-vs-evidence gap the gate exists to audit.
+%   Report what the verifier/oracle concluded about that episode's
+%   finish, not the crash war story.
 % - The blind spot: fresh-but-wrongly-grounded evidence passes a
 %   trace-only audit (provenance pair); only oracle-side task knowledge
 %   closes it. This bounds what runtime supervision alone can promise.
@@ -253,6 +262,18 @@ fixtures, protocols, and run records only.
 % Frozen protocol ID, fixture tree hash, model digests, seeds, and the
 % exact matrix-report invocation; artifact is the relocatable bundle
 % passing matrix-audit from inside the copy. No identifying paths.
+%
+% FREEZE LINEAGE NOTE (must appear): the campaign spans three tags of
+% one freeze — the base freeze plus two infrastructure-only fixes
+% applied mid-campaign (interruption-recovery artifact reuse; a
+% tool-level crash on syntactically invalid worker-written code
+% surfacing as a tool error instead of killing the episode). State
+% plainly: the hashed verifier-policy files are byte-identical across
+% all three tags; no verifier, oracle, or fixture logic changed after
+% the freeze; every deviation, interim inspection, and protocol-id
+% supersession is recorded in the deviation ledger shipped with the
+% artifact. This is what makes the multi-protocol-id bundle auditable
+% rather than suspicious.
 \RESULT{protocol id + hashes from the frozen run}
 
 \end{document}
