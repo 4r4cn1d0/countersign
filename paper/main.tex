@@ -42,8 +42,8 @@
 % the frozen held-out manifest.
 \newcommand{\RESULT}[1]{\textcolor{red}{\textbf{[#1]}}}
 
-\title{Agent Memory Observatory: Supervisory Runtime Verification for
-Long-Horizon Coding Agents}
+\title{Countersign: Evidence-Grounded Supervision of Coding-Agent
+Completion Claims}
 
 % Double-blind: author block intentionally anonymous for submission.
 \author{Anonymous authors\\Paper under double-blind review}
@@ -55,11 +55,11 @@ Long-Horizon Coding Agents}
 \begin{abstract}
 Long-horizon agents often terminate on stale, misattributed, or missing
 evidence: the worker believes it is done because its operational memory
-says so, not because the trace supports it. We introduce Agent Memory
-Observatory, a supervisory meta-agent that audits a worker coding
-agent's completion claims against its execution trace and can block
-termination or issue bounded corrective guidance when the cited
-evidence is insufficient. The supervisor is deliberately trace-only: it
+says so, not because the trace supports it. We introduce Countersign, a
+supervisory meta-agent that audits a worker coding agent's completion
+claims against its execution trace and can block termination or issue
+bounded corrective guidance when the cited evidence is insufficient — a
+completion claim is not accepted until independently countersigned. The supervisor is deliberately trace-only: it
 judges whether a claim is \emph{justified} by evidence available at
 claim time, a distinct question from whether the work is
 \emph{correct}, which a hidden evaluator measures exactly once after
@@ -80,7 +80,7 @@ communicated as evidence audits, never as correctness guarantees.
 
 \section{Introduction}
 % ~0.75 page. Open with the supervision loop, not the detector.
-% Bridge diagram figure: worker agent -> Observatory supervisor ->
+% Bridge diagram figure: worker agent -> Countersign supervisor ->
 % accept / block / repair (generate via academic-plotting skill).
 %
 % Content plan:
@@ -102,7 +102,7 @@ communicated as evidence audits, never as correctness guarantees.
 
 \RESULT{Figure 1: worker $\to$ supervisor $\to$ accept/block/repair}
 
-\section{The Observatory Supervisor}
+\section{The Countersign Supervisor}
 % ~0.75 page. Architecture, kept concrete:
 % - Worker: tool-loop coding agent (self-hosted open-weight models);
 %   proposes actions and termination with cited evidence event IDs.
@@ -209,7 +209,7 @@ communicated as evidence audits, never as correctness guarantees.
 \section*{Responsible-Use Statement}
 % MANDATORY (desk-reject if omitted). Venue asks for "potential
 % societal impacts". Drafted in full; keep under ~0.25 page in final.
-Agent Memory Observatory is a control on agent overclaiming: it blocks
+Countersign is a control on agent overclaiming: it blocks
 a worker agent from terminating on completion claims its own execution
 trace does not support. We believe the primary societal impact is
 positive --- fewer silently unverified ``done'' states in automated

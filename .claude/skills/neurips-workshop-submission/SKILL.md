@@ -3,7 +3,7 @@ name: neurips-workshop-submission
 description: Venue requirements, framing, and submission checklist for this project's NeurIPS 2026 workshop paper. Use whenever drafting, revising, planning, or packaging the paper or its anonymized artifact, or when deciding what a section/figure/claim must satisfy for submission.
 ---
 
-# NeurIPS 2026 workshop submission (Agent Memory Observatory)
+# NeurIPS 2026 workshop submission (Countersign, formerly Agent Memory Observatory)
 
 CFPs fetched from the venue pages on 2026-08-16. Facts below are from
 those pages; do not silently contradict them.
@@ -44,22 +44,21 @@ https://meta-agents-workshop.github.io/
 
 The paper's central object is the **supervision loop**, not the
 detector: a worker coding agent proposes actions and termination; the
-Observatory is a **supervisory meta-agent** with authority over the
+Countersign is a **supervisory meta-agent** with authority over the
 worker's termination — it audits the worker's completion claims against
 the execution trace, **halts** unjustified termination, and issues
 **bounded corrective guidance** ("your cited test result is stale;
 re-run X", "requirement Y has no supporting evidence"). Never describe
 it as a passive logger or "runtime verifier for one coding agent."
 
-Bridge diagram (use it): worker agent → Observatory supervisor →
+Bridge diagram (use it): worker agent → Countersign supervisor →
 accept / block / repair.
 
-- Title direction: **"Agent Memory Observatory: Supervisory Runtime
-  Verification for Long-Horizon Agents"** (or "Supervising Agent
-  Completion with Evidence-Grounded Runtime Verification").
+- Title (locked 2026-08-18): **"Countersign: Evidence-Grounded Supervision of
+  Coding-Agent Completion Claims"**.
 - Abstract opens with the supervisor: "Long-horizon agents often
   terminate on stale, misattributed, or missing evidence. We introduce
-  Agent Memory Observatory, a supervisory meta-agent that audits a
+  Countersign, a supervisory meta-agent that audits a
   worker agent's completion claims against its execution trace and can
   block termination or trigger bounded repair when the evidence is
   insufficient."

@@ -1,11 +1,13 @@
-# Agent Memory Observatory
+# Countersign
 
-Terminal-first research and tooling for studying memory corruption in long-horizon AI
-agents.
+Evidence-grounded supervision of coding-agent completion claims: a runtime
+gate that verifies an agent's "done" against its own execution trace, and
+the measurement system around it (formerly Agent Memory Observatory).
 
-The core question is practical AI safety: when an open-source agent works across a long
-task, does its memory of goals, evidence, tool results, sources, and completion state
-degrade in ways that cause false claims or bad actions? The project measures those
+The core question is practical AI safety: when an agent claims its task is
+complete, does the evidence in its own execution trace actually support the
+claim — especially as its operational memory of goals, evidence, tool
+results, and sources degrades across a long task? The project measures those
 failures and tests verification mechanisms that stop unsupported memory claims before the
 agent acts on them.
 
