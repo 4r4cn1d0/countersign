@@ -113,3 +113,23 @@ control arm, not discarded work.
   the worker's bad write + self-inspection now surfaces as tool_error
   and the episode continues — a legitimately interesting observation
   (the no-change task provoked an unnecessary, broken write).
+
+## Execution topology (2026-08-18, funded)
+
+The 180-run qwen pressure gradient executes split by TASK across two
+identical-class pods (both NVIDIA H100 80GB HBM3, secure cloud, image
+and freeze tag identical — heldout-v1-freeze.2), to halve wall-clock:
+
+- pressure-a: requirement_covered, requirement_lost, temporal_fresh
+  (the exhaustion-heavy half) — 90 runs
+- pressure-b: temporal_stale, provenance_auth, provenance_legacy
+  — 90 runs
+
+Both arms (memory_baseline, verification_only), all seeds, and all
+three lossy severities for a given task stay INSIDE one pod/manifest,
+so every within-task contrast is same-machine. Cross-task aggregation
+(the dose-response curve) merges the two manifests' task rows in
+analysis and is documented as a two-manifest merge. GPU class differs
+from the v1 full-history phase (A100 -> H100, same CUDA stack);
+severity-0 (control) data comes from the v1 phase and the
+cross-phase GPU difference is stated in limitations.
