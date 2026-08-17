@@ -272,7 +272,17 @@ def inspect_dependency(
     source = target.read_text(encoding="utf-8")
     if target.suffix != ".py":
         raise ValueError("inspect_dependency currently supports Python files")
-    tree = ast.parse(source, filename=relative.as_posix())
+    try:
+        tree = ast.parse(source, filename=relative.as_posix())
+    except SyntaxError as exc:
+        # A worker can (and does) write syntactically invalid code and
+        # then inspect it. That must surface as a FAILED TOOL RESULT the
+        # agent can react to — exactly what a real IDE/import would tell
+        # it — never as a harness crash that kills the whole episode.
+        raise ValueError(
+            f"cannot inspect {relative.as_posix()}: syntax error at "
+            f"line {exc.lineno}: {exc.msg}"
+        ) from exc
     imports = []
     definitions = []
     for node in ast.walk(tree):

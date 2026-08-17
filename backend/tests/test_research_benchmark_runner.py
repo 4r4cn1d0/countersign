@@ -2907,3 +2907,21 @@ def test_graded_recovery_levels_are_ordered_and_monotonic():
     assert contained_only["contained_recovery"] is True
     assert contained_only["memory_repair_recovery"] is False
     assert contained_only["evaluator_success"] is False
+
+
+def test_inspect_dependency_on_broken_file_is_tool_error_not_crash(tmp_path):
+    """A worker can write syntactically invalid code and then inspect it.
+    That must surface as a ValueError (-> action_error observation via the
+    process_action boundary), never as a raw SyntaxError that kills the
+    episode — the crash that ended negctrl run 29 on the pod."""
+    import pytest as _pytest
+    from research.runner.coding_environment import inspect_dependency
+
+    broken = tmp_path / "env_validator.py"
+    broken.write_text(
+        "def check(env_name):\n"
+        "    return f'Environment name '{env_name}' is valid.'\n",
+        encoding="utf-8",
+    )
+    with _pytest.raises(ValueError, match="syntax error at line 2"):
+        inspect_dependency(tmp_path, path="env_validator.py")
