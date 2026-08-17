@@ -95,3 +95,19 @@ what trace-only supervision cannot see.
 
 4-page short paper: target 18–24 citations total. Buckets 1, 2, 5 are
 load-bearing; 3, 4, 6 get one sentence each.
+
+## Addendum (2026-08-18): corrections from external FSE strategy review
+
+- **Must-cite adjacent work**: "Failure as a Process: An Anatomy of CLI
+  Coding Agent Trajectories" (arXiv 2607.09510, July 2026) — 1,794
+  trajectories, 7 models, 3 scaffolds; failures begin early and remain
+  latent. Bucket 1 neighbor; our differentiation is epistemic
+  justification FOR TERMINATION + runtime intervention, not failure
+  anatomy in general. (verify details on the arXiv page)
+- **Terminology rule**: never "test-oracle problem" — Observatory
+  judges evidential sufficiency of the completion claim, not output
+  correctness. Use "evidence oracle for agent termination" /
+  "evidence-grounded quality gate". SE lineage: runtime verification,
+  test adequacy, CI quality gates, provenance.
+- **Corpus phrasing**: "agent execution trajectories on
+  real-repository software tasks", not "wild" trajectories.
