@@ -45,3 +45,15 @@ tests?" review question, computed on the same frozen data the rest of
 the paper reports. Caveat carried from the design: Countersign's
 catches are scored against the independent oracle (disjoint logic,
 shared trace); the human-validation pass anchors this externally.
+
+## CAVEAT added 2026-08-19 (forensic audit)
+
+Of the 15 oracle-unsupported proposals in this ablation, the large
+majority are "no source_event_ids cited" with a fresh passing test
+present in the trace. The simple CI gate cannot catch these because
+the tests genuinely WERE fresh — the deficiency is citation, not test
+staleness. The 2/15 vs 11/11 comparison is therefore correct as
+stated, but its interpretation is narrower than "Countersign catches
+evidence failures a CI gate misses": Countersign catches
+UNSUBSTANTIATED (uncited) completion claims, whose underlying work was
+usually verified. Report accordingly.

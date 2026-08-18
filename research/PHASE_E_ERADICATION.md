@@ -137,3 +137,45 @@ Substrate is adequate: the fixtures engage, the regime discriminates,
 and the gate demonstrably intervenes. Model expansion (E1/E2) is
 JUSTIFIED — the priority question is now whether the resume-summary
 effect replicates across model family and scale.
+
+## CORRECTION to the E4.1 entry above (2026-08-19, pre-spend forensic audit)
+
+The entry above over-interprets the effect. Forensic audit of every
+oracle-unsupported proposal in the whole campaign (24 proposals):
+
+- **22/24 had a FRESH PASSING TEST in the canonical trace before the
+  proposal** — the underlying work was actually verified.
+- **18/24 are labelled unsupported for "no source_event_ids cited"** —
+  the agent attached NO citations at all. In resume_medium this is
+  8 of 9.
+- All 5 resume_medium baseline falls are of this form: fresh green
+  tests existed (e.g. provenance_auth seed 0: last write seq 25,
+  passing tests seq 39 and 45), and the finish cited nothing.
+
+So the measured phenomenon is predominantly a CITATION-COMPLIANCE
+failure, not an epistemic one: the agent did verified work and then
+failed to point at its evidence. The plausible mechanism is that the
+resume summary REMOVES the visible event IDs, so an agent that is not
+instructed to cite has nothing to cite.
+
+**Confound (blocking):** memory_baseline uses the naive prompt (no
+citation instruction) while verification_only uses the verified prompt
+(explicit citation instruction) PLUS the gate. The 5/30 -> 1/30
+contrast therefore conflates prompt coaching with gate blocking, and
+3 of the 5 discordant pairs show NO block in the supervised arm (the
+supervised trajectory simply never made an uncited proposal). Also
+corrected: the supervised arm is 1/30 on the oracle endpoint, not
+0/30 as first written.
+
+**Resolution before any model expansion:** run observe_only (verified
+prompt, verifier logs but never blocks) in resume_medium, 30 runs.
+- If observe_only ~ baseline (falls persist): the summary's removal of
+  IDs drives it; gate effect is real and separable.
+- If observe_only ~ verification_only (falls vanish): the effect is
+  PROMPT coaching, and no gate claim can be made in this regime.
+Model expansion (E1/E2) is deferred until this resolves.
+
+**Construct note for the paper:** "unsupported" must be reported as
+UNSUBSTANTIATED (claim without cited evidence), explicitly not
+incorrect: 22/24 such claims were backed by work that passed hidden
+evaluation. This quantifies the hygiene-vs-safety distinction.
