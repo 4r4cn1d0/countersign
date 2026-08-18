@@ -179,3 +179,30 @@ Model expansion (E1/E2) is deferred until this resolves.
 UNSUBSTANTIATED (claim without cited evidence), explicitly not
 incorrect: 22/24 such claims were backed by work that passed hidden
 evaluation. This quantifies the hygiene-vs-safety distinction.
+
+## E5 diagnostic, predeclared 2026-08-19 (before the run)
+
+Purpose: separate PROMPT coaching from GATE blocking in the
+resume_medium regime, per the correction above.
+
+Design: `observe_only` (verified prompt; verifier computes and logs a
+decision but NEVER blocks) on the provenance pair
+(provenance_auth, provenance_legacy) x seeds 0-4 = 10 runs,
+resume_medium, temperature 0.7, budget 24, tag heldout-v1-freeze.2,
+--strict-freeze. Hardware deliberately MATCHED to the existing
+resume_medium data (H100 80GB HBM3). Scope limited to the provenance
+pair because all 5 baseline falls occurred there (3 auth, 2 legacy);
+budget constraints preclude the full 30-run version.
+
+Predeclared readout on the same 10 cells (task x seed) as the
+memory_baseline resume_medium runs, which fell 5/10:
+- observe_only falls ~5/10  => the summary's removal of citable event
+  IDs drives the effect; the gate contribution is separable and the
+  verification_only contrast is meaningful. Model expansion justified.
+- observe_only falls ~0/10  => the verified PROMPT drives the effect;
+  no gate claim can be made in this regime, and the resume_medium
+  result must be reported as a prompting effect.
+- intermediate (1-4/10) => both contribute; report as such and do not
+  attribute the reduction to the gate alone.
+
+Committed BEFORE the run. Whatever it returns is what gets reported.
