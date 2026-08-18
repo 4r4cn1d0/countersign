@@ -1402,3 +1402,53 @@ def test_interrupted_matrix_reuses_completed_artifacts(tmp_path: Path):
     assert all(
         info.get("reused") for info in second["models"][0]["runs"]
     )
+
+
+def test_supervision_decomposition_separates_prompt_from_gate():
+    """memory_baseline vs verification_only confounds prompt coaching
+    with gating. The three-arm decomposition must isolate each, and must
+    refuse (None) when the prompt-matched arm is absent."""
+    from research.runner.matrix_analysis import (
+        exact_mcnemar_p,
+        supervision_decomposition,
+    )
+
+    def row(task, seed, treatment, ref_unsup, treat_unsup):
+        return {
+            "model_name": "m",
+            "task_id": task,
+            "pressure_profile_id": "resume_medium",
+            "seed": seed,
+            "reference_condition": "memory_baseline",
+            "treatment_condition": treatment,
+            "baseline_accepted_oracle_unsupported_finish": ref_unsup,
+            "verified_accepted_oracle_unsupported_finish": treat_unsup,
+        }
+
+    # 5 cells: baseline fails all 5; observe_only fails 3; gate fails 0.
+    rows = []
+    for seed in range(5):
+        rows.append(row("t", seed, "observe_only", True, seed < 3))
+        rows.append(row("t", seed, "verification_only", True, False))
+    report = supervision_decomposition(rows)
+    assert report is not None
+    assert report["matched_cells"] == 5
+    assert report["rates"]["memory_baseline"]["unsupported"] == 5
+    assert report["rates"]["observe_only"]["unsupported"] == 3
+    assert report["rates"]["verification_only"]["unsupported"] == 0
+    # prompt effect: baseline 5 -> observe 3 => 2 discordant one-way
+    assert report["prompt_effect"]["discordant_reference_only"] == 2
+    assert report["prompt_effect"]["discordant_treatment_only"] == 0
+    # gate effect: observe 3 -> verification 0 => 3 discordant one-way
+    assert report["gate_effect"]["discordant_reference_only"] == 3
+    assert report["gate_effect"]["discordant_treatment_only"] == 0
+    assert report["combined_confounded"]["discordant_reference_only"] == 5
+    assert "confounds prompt" in report["combined_confounded"]["caveat"]
+
+    # Refuses rather than guessing when the prompt-matched arm is missing.
+    gate_only = [r for r in rows if r["treatment_condition"] == "verification_only"]
+    assert supervision_decomposition(gate_only) is None
+
+    assert exact_mcnemar_p(0, 0) is None
+    assert exact_mcnemar_p(3, 0) == 0.25
+    assert exact_mcnemar_p(5, 0) == 0.0625

@@ -243,3 +243,34 @@ real and separable from prompting, the instrument discriminates
 perfectly where it has no power to bias, and the open question is now
 sharp: does the summary-induced citation collapse (and the gate's
 correction of it) replicate across model family and scale?
+
+## Confound FIX (2026-08-19, structural — applies to all future runs)
+
+The prompt/gate confound is now fixed in the analysis layer rather than
+caveated forever. Verified prerequisite: `observe_only` emits verifier
+DECISIONS but zero agent-visible `verification_feedback` events
+(checked in-trace on the E5 runs), so it is a valid prompt-matched
+control — the worker never learns it is being judged.
+
+`matrix_analysis.supervision_decomposition` now reads the three arms as
+a 2x2 over matched (model, task, profile, seed) cells:
+
+    prompt effect = memory_baseline  -> observe_only
+    gate effect   = observe_only     -> verification_only
+
+reporting each with exact McNemar, plus the confounded
+memory_baseline -> verification_only contrast explicitly LABELLED as
+confounded. It returns None (never a guess) when observe_only is
+absent, so a missing prompt-matched arm can no longer be silently
+reported as a gate effect.
+
+**Binding requirement for all future runs** (model expansion E1/E2, any
+new regime, FSE Study 3): `observe_only` must be included in every
+regime, or no gate claim may be made for that regime. The predeclared
+schedules are amended accordingly.
+
+Known coverage gap, disclosed: observe_only ran in the v1 full-history
+phase and in E5 (provenance pair under resume_medium, 10 cells) but NOT
+in the lossy gradient or the remaining resume_medium cells. Those
+regimes therefore report the confounded contrast with its caveat, and
+only the full-history and E5 cells support a gate-effect claim.
