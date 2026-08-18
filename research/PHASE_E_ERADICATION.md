@@ -206,3 +206,40 @@ memory_baseline resume_medium runs, which fell 5/10:
   attribute the reduction to the gate alone.
 
 Committed BEFORE the run. Whatever it returns is what gets reported.
+
+## E5 RESULT (2026-08-19, 10/10 runs, hardware-matched H100)
+
+Landed in the predeclared INTERMEDIATE band: observe_only = 3/10.
+Decomposition over the same 10 provenance cells under resume_medium:
+
+| arm | prompt | gate | falls |
+|---|---|---|---|
+| memory_baseline | naive | none | 5/10 |
+| observe_only | verified | none (logs only) | **3/10** |
+| verification_only | verified | blocking | 0/10 |
+
+- PROMPT contribution: 2 of 5 cells (exact McNemar p=0.50)
+- GATE contribution: 3 of 5 cells (exact McNemar p=0.25)
+- Combined: 5 -> 0 (exact McNemar p=0.0625)
+Per the predeclaration: BOTH contribute; the reduction must NOT be
+attributed to the gate alone. Reported as a decomposition. No claim of
+statistical significance at this n.
+
+**The strongest single result in the campaign** comes from the
+no-power arm: in observe_only the verifier judges but cannot act, so
+its decisions are pure measurement. Its would-block fired in EXACTLY
+the 3 oracle-unsupported cells and in NONE of the other 7:
+TP=3, FP=0, FN=0 on this cell set. That is uncontaminated
+discrimination — the verifier cannot have influenced the trajectories
+it judged.
+
+Construct caveat unchanged and reinforced: all 3 observe_only falls
+are again 'no source_event_ids cited' with fresh green tests present
+in the trace and hidden evaluation PASSING. These are
+UNSUBSTANTIATED, not incorrect, completions.
+
+**Verdict: model expansion (E1/E2) is justified.** The gate effect is
+real and separable from prompting, the instrument discriminates
+perfectly where it has no power to bias, and the open question is now
+sharp: does the summary-induced citation collapse (and the gate's
+correction of it) replicate across model family and scale?
