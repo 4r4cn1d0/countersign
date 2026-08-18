@@ -76,3 +76,26 @@ eradication. The workshop paper states this scope plainly.
 - Kill condition: if E-runs threaten the Aug 27 writing freeze, E4.2
   is dropped first, then E3's 32B leg; E1/E2's v1 pairs are never
   dropped.
+
+## Sequencing amendment (user decision, 2026-08-19, before any E-run)
+
+Model expansion (E1 devstral, E2 qwen-32b) is GATED on a substrate
+validation checkpoint — no second-model spend until the test substrate
+itself is shown adequate. The checkpoint runs on qwen only:
+
+1. E3 (budget-40 requirement supplement, qwen): does the heaviest
+   family ENGAGE its trap when given room? (50 runs)
+2. E4.1 (resume_summary regime, qwen): does the real-pattern
+   degradation regime produce interpretable behavior? (60 runs)
+3. The prevalence pilot over public real-repository trajectories
+   (free, local): does the failure class exist OUTSIDE the fixtures at
+   a nontrivial, measurable rate?
+
+Substrate verdict criteria (predeclared): the substrate is "good
+enough" to justify model scaling iff (a) the requirement family
+engages (finishes occur; trap either bites or is defused — either is
+informative), AND (c) the pilot shows the construct is measurable on
+real trajectories with nontrivial coverage (per the FSE plan's
+abstention rules). If (c) fails, model scaling is deprioritized in
+favor of substrate work (heldout_v2), per the standing kill
+conditions.
