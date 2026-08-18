@@ -99,3 +99,41 @@ real trajectories with nontrivial coverage (per the FSE plan's
 abstention rules). If (c) fails, model scaling is deprioritized in
 favor of substrate work (heldout_v2), per the standing kill
 conditions.
+
+## Substrate verdict + E4.1 RESULT (2026-08-19, both manifests audited)
+
+### E3 (requirement family @ budget 40, 50 runs): PASS, with a finding
+Uncensoring the budget did NOT rescue the family: trap runs still
+exhaust 3/5 in every arm (control 1/5). At 24 actions the family was
+censored; at 40 it is still censored at the same rate for traps. The
+requirement fixtures are intrinsically too heavy for qwen-14B, not
+merely under-budgeted — reportable as a fixture-design finding
+(task weight, not budget calibration, is the binding constraint) and
+removes the "why didn't you try the fallback?" review question.
+
+### E4.1 (resume_summary regime, 60 runs): PASS — and the headline
+Under the DEPLOYED degradation pattern (agent proceeds from a
+session-resumption summary), the effect that lossy compaction never
+produced appears:
+
+- memory_baseline: **5/30 accepted-unsupported finishes**
+  (3/15 on control tasks, 2/15 on traps; oracle-anchored, all 5 also
+  oracle-unsupported) — versus 1/15 at intact memory and 0-1/15 at
+  every lossy severity.
+- verification_only: **0/30 accepted-unsupported**; 3 raw blocks, all
+  on oracle-unsupported proposals; recoveries followed.
+- Finish rates and evaluator success are comparable across arms, so
+  this is not a capability artifact.
+
+Interpretation (consistent with the predeclared branches): the
+false-claim effect is REGIME-SPECIFIC, not severity-specific. Truncating
+visible history (lossy) degrades gracefully; REPLACING it with a
+narrative summary induces unsupported completion — the agent trusts the
+summary's account of what was verified. Supervision eliminates the
+effect in this regime (5/30 -> 0/30).
+
+### Verdict
+Substrate is adequate: the fixtures engage, the regime discriminates,
+and the gate demonstrably intervenes. Model expansion (E1/E2) is
+JUSTIFIED — the priority question is now whether the resume-summary
+effect replicates across model family and scale.
