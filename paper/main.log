@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.29 (TeX Live 2026/Homebrew) (preloaded format=pdflatex 2026.3.4)  20 AUG 2026 18:14
+This is pdfTeX, Version 3.141592653-2.6-1.40.29 (TeX Live 2026/Homebrew) (preloaded format=pdflatex 2026.3.4)  20 AUG 2026 19:08
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -390,24 +390,24 @@ File: l3backend-pdftex.def 2025-10-09 L3 backend support: PDF output (pdfTeX)
 ) (./main.aux)
 \openout1 = `main.aux'.
 
-LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 42.
-LaTeX Font Info:    ... okay on input line 42.
-LaTeX Font Info:    Checking defaults for OMS/cmsy/m/n on input line 42.
-LaTeX Font Info:    ... okay on input line 42.
-LaTeX Font Info:    Checking defaults for OT1/cmr/m/n on input line 42.
-LaTeX Font Info:    ... okay on input line 42.
-LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 42.
-LaTeX Font Info:    ... okay on input line 42.
-LaTeX Font Info:    Checking defaults for TS1/cmr/m/n on input line 42.
-LaTeX Font Info:    ... okay on input line 42.
-LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 42.
-LaTeX Font Info:    ... okay on input line 42.
-LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 42.
-LaTeX Font Info:    ... okay on input line 42.
-LaTeX Font Info:    Checking defaults for PD1/pdf/m/n on input line 42.
-LaTeX Font Info:    ... okay on input line 42.
-LaTeX Font Info:    Checking defaults for PU/pdf/m/n on input line 42.
-LaTeX Font Info:    ... okay on input line 42.
+LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 43.
+LaTeX Font Info:    ... okay on input line 43.
+LaTeX Font Info:    Checking defaults for OMS/cmsy/m/n on input line 43.
+LaTeX Font Info:    ... okay on input line 43.
+LaTeX Font Info:    Checking defaults for OT1/cmr/m/n on input line 43.
+LaTeX Font Info:    ... okay on input line 43.
+LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 43.
+LaTeX Font Info:    ... okay on input line 43.
+LaTeX Font Info:    Checking defaults for TS1/cmr/m/n on input line 43.
+LaTeX Font Info:    ... okay on input line 43.
+LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 43.
+LaTeX Font Info:    ... okay on input line 43.
+LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 43.
+LaTeX Font Info:    ... okay on input line 43.
+LaTeX Font Info:    Checking defaults for PD1/pdf/m/n on input line 43.
+LaTeX Font Info:    ... okay on input line 43.
+LaTeX Font Info:    Checking defaults for PU/pdf/m/n on input line 43.
+LaTeX Font Info:    ... okay on input line 43.
 
 *geometry* driver: auto-detecting
 *geometry* detected driver: pdftex
@@ -475,18 +475,18 @@ LaTeX Font Info:    ... okay on input line 42.
 * \@reversemarginfalse
 * (1in=72.27pt=25.4mm, 1cm=28.453pt)
 
-Package hyperref Info: Link coloring OFF on input line 42.
+Package hyperref Info: Link coloring OFF on input line 43.
 (./main.out) (./main.out)
 \@outlinefile=\write3
 \openout3 = `main.out'.
 
-LaTeX Info: Redefining \microtypecontext on input line 42.
-Package microtype Info: Applying patch `item' on input line 42.
-Package microtype Info: Applying patch `toc' on input line 42.
-Package microtype Info: Applying patch `eqnum' on input line 42.
-Package microtype Info: Applying patch `footnote' on input line 42.
-Package microtype Info: Applying patch `verbatim' on input line 42.
-LaTeX Info: Redefining \microtypesetup on input line 42.
+LaTeX Info: Redefining \microtypecontext on input line 43.
+Package microtype Info: Applying patch `item' on input line 43.
+Package microtype Info: Applying patch `toc' on input line 43.
+Package microtype Info: Applying patch `eqnum' on input line 43.
+Package microtype Info: Applying patch `footnote' on input line 43.
+Package microtype Info: Applying patch `verbatim' on input line 43.
+LaTeX Info: Redefining \microtypesetup on input line 43.
 Package microtype Info: Generating PDF output.
 Package microtype Info: Character protrusion enabled (level 2).
 Package microtype Info: Using default protrusion set `alltext'.
@@ -533,7 +533,7 @@ cmr.cfg
 File: mt-cmr.cfg 2013/05/19 v2.2 microtype config. file: Computer Modern Roman 
 (RS)
 )
-LaTeX Font Info:    Trying to load font information for U+msa on input line 45.
+LaTeX Font Info:    Trying to load font information for U+msa on input line 46.
 
 
 (/opt/homebrew/Cellar/texlive/20260301/share/texmf-dist/tex/latex/amsfonts/umsa
@@ -544,7 +544,7 @@ File: umsa.fd 2013/01/14 v3.01 AMS symbols A
 msa.cfg
 File: mt-msa.cfg 2006/02/04 v1.1 microtype config. file: AMS symbols (a) (RS)
 )
-LaTeX Font Info:    Trying to load font information for U+msb on input line 45.
+LaTeX Font Info:    Trying to load font information for U+msb on input line 46.
 
 
 (/opt/homebrew/Cellar/texlive/20260301/share/texmf-dist/tex/latex/amsfonts/umsb
@@ -559,7 +559,7 @@ Package microtype Info: Loading generic protrusion settings for font family
 (microtype)             `cmtt' (encoding: T1).
 (microtype)             For optimal results, create family-specific settings.
 (microtype)             See the microtype manual for details.
-LaTeX Font Info:    Trying to load font information for T1+phv on input line 73
+LaTeX Font Info:    Trying to load font information for T1+phv on input line 74
 .
 
 (/opt/homebrew/Cellar/texlive/20260301/share/texmf-dist/tex/latex/psnfss/t1phv.
@@ -577,31 +577,25 @@ Package microtype Info: Loading generic protrusion settings for font family
 /pdftex.map}{/opt/homebrew/Cellar/texlive/20260301/share/texmf-dist/fonts/enc/d
 vips/base/8r.enc}{/opt/homebrew/Cellar/texlive/20260301/share/texmf-dist/fonts/
 enc/dvips/cm-super/cm-super-t1.enc}]
-<figures/fig_loop.pdf, id=64, 232.89008pt x 81.23148pt>
+<figures/fig_loop.pdf, id=64, 232.89008pt x 77.33614pt>
 File: figures/fig_loop.pdf Graphic file (type pdf)
 <use figures/fig_loop.pdf>
-Package pdftex.def Info: figures/fig_loop.pdf  used on input line 110.
-(pdftex.def)             Requested size: 232.8895pt x 81.23126pt.
+Package pdftex.def Info: figures/fig_loop.pdf  used on input line 111.
+(pdftex.def)             Requested size: 232.8895pt x 77.33594pt.
  [2 <./figures/fig_loop.pdf>]
-<figures/fig_regimes.pdf, id=151, 295.40509pt x 129.8308pt>
+<figures/fig_regimes.pdf, id=151, 295.40509pt x 125.27779pt>
 File: figures/fig_regimes.pdf Graphic file (type pdf)
 <use figures/fig_regimes.pdf>
-Package pdftex.def Info: figures/fig_regimes.pdf  used on input line 223.
-(pdftex.def)             Requested size: 295.40436pt x 129.83046pt.
+Package pdftex.def Info: figures/fig_regimes.pdf  used on input line 222.
+(pdftex.def)             Requested size: 295.40436pt x 125.27747pt.
 
 [3 <./figures/fig_regimes.pdf>] (./main.bbl [4]
-Underfull \hbox (badness 2189) in paragraph at lines 72--76
-[]\T1/ptm/m/n/10 (+20) Sydney Von Arx, Lawrence Chan, and Beth Barnes.  Re-cent
- fron-tier mod-els are re-
- []
-
-
-Underfull \hbox (badness 3482) in paragraph at lines 72--76
+Underfull \hbox (badness 1748) in paragraph at lines 10--14
 \T1/ptm/m/n/10 (+20) ward hack-ing.  METR Tech-ni-cal Re-port, 2025.  URL []$\T
 1/cmtt/m/n/10 https : / / metr . org / blog /
  []
 
-) [5] [6] (./main.aux)
+[5]) [6] [7] (./main.aux)
  ***********
 LaTeX2e <2025-11-01>
 L3 programming layer <2026-01-19>
@@ -610,13 +604,13 @@ Package rerunfilecheck Info: File `main.out' has not changed.
 (rerunfilecheck)             Checksum: ED9540B16DE2D6CECA47903D8E1F8461;1692.
  ) 
 Here is how much of TeX's memory you used:
- 13295 strings out of 467525
- 211532 string characters out of 5408440
- 672305 words of memory out of 5000000
- 41755 multiletter control sequences out of 15000+600000
- 671560 words of font info for 229 fonts, out of 8000000 for 9000
+ 13351 strings out of 467525
+ 212522 string characters out of 5408440
+ 674731 words of memory out of 5000000
+ 41779 multiletter control sequences out of 15000+600000
+ 673112 words of font info for 244 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
- 72i,8n,79p,1001b,572s stack positions out of 10000i,1000n,20000p,200000b,200000s
+ 72i,8n,79p,1001b,609s stack positions out of 10000i,1000n,20000p,200000b,200000s
 </opt/homebrew/Cellar/texlive/20260301/share/texmf-dist/fonts/type1/public/am
 sfonts/cm/cmmi10.pfb></opt/homebrew/Cellar/texlive/20260301/share/texmf-dist/fo
 nts/type1/public/amsfonts/cm/cmr10.pfb></opt/homebrew/Cellar/texlive/20260301/s
@@ -628,10 +622,10 @@ rw/times/utmb8a.pfb></opt/homebrew/Cellar/texlive/20260301/share/texmf-dist/fon
 ts/type1/urw/times/utmbi8a.pfb></opt/homebrew/Cellar/texlive/20260301/share/tex
 mf-dist/fonts/type1/urw/times/utmr8a.pfb></opt/homebrew/Cellar/texlive/20260301
 /share/texmf-dist/fonts/type1/urw/times/utmri8a.pfb>
-Output written on main.pdf (6 pages, 207450 bytes).
+Output written on main.pdf (7 pages, 213390 bytes).
 PDF statistics:
- 328 PDF objects out of 1000 (max. 8388607)
- 176 compressed objects within 2 object streams
- 32 named destinations out of 1000 (max. 500000)
+ 358 PDF objects out of 1000 (max. 8388607)
+ 204 compressed objects within 3 object streams
+ 41 named destinations out of 1000 (max. 500000)
  45155 words of extra memory for PDF output out of 51595 (max. 10000000)
 

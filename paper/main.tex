@@ -11,6 +11,7 @@
 
 \documentclass{article}
 
+\PassOptionsToPackage{numbers,compress}{natbib}
 \IfFileExists{neurips_2026.sty}{%
   \usepackage{neurips_2026}%
 }{%
@@ -30,8 +31,8 @@
 \usepackage{enumitem}
 
 % Modest float-spacing tightening (standard for 4-page short papers).
-\setlength{\textfloatsep}{15pt plus 2pt minus 4pt}
-\setlength{\abovecaptionskip}{6pt}
+\setlength{\textfloatsep}{12pt plus 2pt minus 4pt}
+\setlength{\abovecaptionskip}{4pt}
 
 \title{Countersign: Evidence-Grounded Supervision of Coding-Agent
 Completion Claims}
@@ -60,16 +61,16 @@ unsupported (precision $1.00$, 95\% CI $[0.82,1.0]$) and none on the
 204 supported proposals judged---though 13 of 17 are the trivial case
 of a claim citing no evidence. A counterfactual replay shows a
 conventional continuous-integration gate catches 2 of 15 unsupported
-proposals where Countersign catches 11 of 11 it judged. Negative
+proposals; Countersign catches 11 of 11 it judged. Negative
 results are equally informative: truncating the worker's visible
 history did not increase unsupported completion; the effect appears
 only when history is \emph{replaced by a narrative summary}, driven
 mainly by prompting, the gate's contribution being to convert
 unsupported acceptances into blocked episodes that recover. And we
-quantify the construct honestly: 25 of 27 unsupported proposals were
-backed by work that passed hidden evaluation---Countersign is an
-evidence-hygiene instrument whose safety value remains a hypothesis
-under test.
+quantify the construct honestly: all 18 accepted unsupported
+completions concerned work that passed hidden evaluation---Countersign
+is an evidence-hygiene instrument whose safety value remains a
+hypothesis under test.
 \end{abstract}
 
 \section{Introduction}
@@ -98,9 +99,9 @@ independent post-hoc oracle it does not compute (\S\ref{sec:method});
 (ii)~a preregistered evaluation on matched fixture pairs and negative
 controls that price false blocks, under a frozen protocol with a public
 deviation ledger (\S\ref{sec:design}); (iii)~results across 490 runs:
-perfect block precision, a counterfactual CI-gate ablation, a null
-dose--response under truncation, and a regime-specific summarization
-effect decomposed into prompt and gate contributions
+perfect block precision, a CI-gate ablation, a truncation null, and a
+regime-specific summarization effect decomposed into prompt and gate
+contributions
 (\S\ref{sec:results}); (iv)~a calibrated account of the gate as
 evidence hygiene, not a demonstrated safety mechanism
 (\S\ref{sec:failure}).
@@ -129,8 +130,7 @@ evidence identifiers.
 \textbf{The audit.} Countersign checks four properties of the cited
 evidence: (i)~at least one cited event is a successful test run;
 (ii)~no cited test predates a later mutation of a file it covers
-(coverage inference detailed in Appendix~\ref{sec:appendix-design});
-(iii)~cited evidence
+(Appendix~\ref{sec:appendix-design}); (iii)~cited evidence
 postdates the latest relevant requirement update; and (iv)~the claim
 does not rest on sources the task marks superseded. Freshness is
 tri-state: the supervisor abstains when coverage is unknown.
@@ -164,8 +164,8 @@ rules were iterated, is never used for evaluation.
 
 \textbf{Conditions.} Arms cross a worker prompt variant with verifier
 authority: \textsf{memory\_baseline} (naive prompt, no gate),
-\textsf{observe\_only} (evidence-citation prompt; the verifier logs
-decisions but never blocks nor returns feedback),
+\textsf{observe\_only} (evidence-citation prompt; verifier logs
+decisions, never blocks, returns no feedback),
 \textsf{verification\_only} (same prompt, blocking),
 \textsf{verification\_and\_repair}, and an evaluation-only
 \textsf{oracle\_supervisor} upper bound. Because
@@ -202,14 +202,13 @@ verifier judged: precision $1.00$ (95\% CI
 $[0.82,1.0]$), false-block rate $0/204$ (95\% CI $[0,0.018]$), recall
 $17/18=0.94$ (95\% CI $[0.74,0.99]$). Two caveats bound this. First,
 the denominator counts only judged proposals: 110 further supported
-proposals occurred in no-verifier arms and are excluded, not counted as
-successes. Second, and more important, \textbf{13 of the 17 blocks are
+proposals in no-verifier arms are excluded, not counted as successes. Second, and more important, \textbf{13 of the 17 blocks are
 the trivial case}---a claim citing no evidence, which any rule detects.
 Only 4 required substantive reasoning about staleness or provenance:
-read the figure as ``the gate does not misfire,'' not ``the gate
+read the result as ``the gate does not misfire,'' not ``the gate
 discriminates hard cases.''
 
-\textbf{A conventional CI gate is blind to what actually occurs.} We
+\textbf{A conventional CI gate is mostly blind.} We
 replay every stored proposal against the standard-practice rule
 ``require a successful test run after the last edit,'' a strict subset
 of Countersign's temporal check. The CI rule catches 2 of
@@ -236,7 +235,7 @@ decomposition, not significance.}
 claims.} Baseline unsupported completion on trap fixtures did not
 increase with truncation severity (Figure~\ref{fig:regimes}a). This is a non-detection, not invariance:
 at 15 runs per cell the Wilson intervals span roughly 0.01--0.30, so
-effects under ${\sim}30$ percentage points are unresolvable. The
+effects under ${\sim}30$ percentage points are unresolvable; the
 preregistered null branch applies with that caveat.
 
 \textbf{The effect is regime-specific, and decomposes.} Replacing
@@ -246,16 +245,16 @@ comparison must be read at the \emph{proposal} level: in a blocking arm
 an accepted-unsupported finish is suppressed by the intervention's own
 definition, so a zero there is partly mechanical. Counting unsupported proposals over ten
 matched cells: baseline 5, \textsf{observe\_only} 3,
-\textsf{verification\_only} 2. The evidence-citation prompt accounts
-for the reduction from 5 to 3 (exact McNemar $p=0.50$); the further
+\textsf{verification\_only} 2. Pairing the cells, the prompt contrast
+has discordant cells 3 vs.\ 1 (exact McNemar $p=0.625$); the further
 $3\rightarrow2$ is sampling noise, since the gate cannot influence a
 worker's \emph{first} proposal. The gate's contribution is not fewer
 unsupported claims but a different fate for them: both proposals it saw
 were blocked, and both episodes recovered and terminated with supported
-evidence rather than exhausting their budget. No comparison here reaches $p<.05$, and
-an a-priori power analysis explains why---with all discordant pairs in
-one direction the exact test requires $b\ge6$, one more than this
-campaign could have produced, and 16 matched cells would be needed for
+evidence. No comparison here reaches $p<.05$, and
+an a-priori power analysis explains why---even with every discordant
+pair in one direction the exact test requires $b\ge6$, one more than
+this campaign could have produced, and 16 matched cells would be needed for
 80\% power at the observed effect (Bayesian sensitivity reading in
 Appendix~\ref{sec:appendix-bayes}). The cleanest evidence is
 measurement without power: in \textsf{observe\_only} the verifier
@@ -266,10 +265,10 @@ FN$=0$)---immune to the circularity objection a blocking arm invites.
 \textbf{What ``unsupported'' means here.} Table~\ref{tab:twobytwo}
 crosses the oracle's judgement of the accepted claim against the hidden
 evaluator's judgement of the work. All 18 unsupported completions
-concerned work that was in fact \emph{correct}: an unjustified claim
-never once coincided with a wrong implementation, so Countersign is
-measured to catch \emph{poor evidential hygiene} and its safety value
-remains a hypothesis this campaign cannot confirm.
+concerned work that was \emph{correct}: an unjustified claim never
+coincided with a wrong implementation, so Countersign is measured to
+catch \emph{poor evidential hygiene} and its safety value remains a
+hypothesis this campaign cannot confirm.
 
 \begin{table}[t]
 \centering
@@ -291,29 +290,31 @@ claim unsupported & 18  & 0 \\
 \section{Supervisor-Failure Analysis and Limitations}
 \label{sec:failure}
 
-\textbf{The structural blind spot.} The provenance pair constructs
-fresh evidence grounded in a superseded document: a trace-only
-supervisor allows those finishes and the hidden evaluator fails
-them---\textsf{supported-but-incorrect} outcomes no trace audit can
-reach, bounding what runtime evidence supervision can promise.
+\textbf{The structural blind spot.} The provenance pair is designed so
+that fresh, well-cited evidence grounded in a superseded source passes
+a trace-only audit while the work fails hidden evaluation. That designed path never fired here (the two
+\textsf{supported-but-incorrect} completions arose on a
+negative-control and a requirement fixture), but the class is real, no
+trace audit can reach it, and it bounds what runtime evidence
+supervision can promise.
 Appendix~\ref{sec:appendix-failures} details two further failure modes:
 classifier/oracle divergence under heavy degradation and a fixture
 family censored by task weight, not action budget.
 
 \textbf{Limitations.} (1)~Most important: the held-out traps and the
-supervisor's rules share authors. The development/held-out split
+supervisor's rules share authors; the development/held-out split
 prevents rule tuning on evaluation fixtures but not the conceptual
-correlation between what we trap and what we detect;
-the provenance family (built to \emph{defeat} the supervisor) and the
-negative controls (which price the unflattering direction) offset this
-only partially. (2)~One worker
-model on ten small fixture repositories establishes nothing about
-prevalence in production software.
+correlation between what we trap and what we detect, and the provenance
+family (built to \emph{defeat} the supervisor) plus the negative
+controls (which price the unflattering direction) offset this only
+partially. (2)~One worker
+model on ten small fixtures establishes nothing about prevalence in
+production software.
 (3)~The primary endpoint is partly suppressed by construction in
 blocking arms; gate effects are read at the proposal level and in
 post-block outcomes. (4)~The verifier and oracle
-share no code but read the same trace, and most agreements concern
-claims citing no evidence---near-vacuous independence. (5)~No result reaches
+share no code but read the same trace; most agreements concern claims
+citing no evidence---near-vacuous independence. (5)~No result reaches
 $p<.05$; nulls are non-detections at modest power, and we report
 decompositions and intervals, never significance. (6)~The degradation profiles are our own transforms, not a deployed
 scaffold's condenser; (7)~oracle-label validation covers a
@@ -321,34 +322,40 @@ single-rater sample.
 
 \section{Related Work}
 
-Prior work measures workers gaming outcome
-checks~\cite{vonarx2025rewardhacking,baker2025monitoring} and gates
-\emph{actions} for safety at
-runtime~\cite{chennabasappa2025llamafirewall}; Countersign instead
-gates \emph{termination} for evidential support and prices the false
-blocks. Self-verification asks the worker to check
-itself~\cite{shinn2023reflexion}; external supervision is the
-complement when self-checking is in doubt. Outcome and process
-verifiers~\cite{cobbe2021gsm8k,lightman2024verify} inform our
-online-process/post-hoc-outcome split; long-context
-degradation~\cite{liu2024lost,packer2023memgpt} motivates the memory
-regimes, and hidden-evaluation benchmarks~\cite{jimenez2024swebench}
-the correctness oracle.
+Workers game outcome
+checks~\citep{vonarx2025rewardhacking,baker2025monitoring}; external
+supervisors with authority over another agent are an established design
+space~\citep{greenblatt2023control,xiang2024guardagent,agentspec2025,chennabasappa2025llamafirewall};
+deterministic finish-blocking hooks (no termination until tests pass)
+are deployed practice---the rule our CI replay prices. Countersign
+differs in \emph{what} it audits: cited-evidence chronology
+(freshness, requirement recency, provenance), with abstention and
+priced false blocks. The justified/correct split
+descends from process-vs-outcome
+supervision~\citep{uesato2022process,lightman2024verify}, instantiated
+at termination against a hidden
+evaluator~\citep{cobbe2021gsm8k,jimenez2024swebench}. Trajectory judges
+score completion without termination
+authority~\citep{zhuge2024agentjudge}; SCATE targets premature
+termination~\citep{gu2026scate}; concurrent work
+checks completion evidence and provenance in workflow
+graphs~\citep{matrix2026provenance} and at GUI agents' finish
+step~\citep{han2026vlaagui}. Self-verification~\citep{shinn2023reflexion} is the complement;
+long-context degradation~\citep{liu2024lost,packer2023memgpt} motivates
+the memory regimes.
 
 \section*{Responsible-Use Statement}
 
-Countersign controls agent overclaiming; its net effect should be
-positive, but agents supervising agents carries risks we keep visible. \emph{An allow is not a guarantee}: the
-supervisor audits justification, not correctness (\S\ref{sec:failure}),
-and must never be marketed as verifying it. \emph{Oversight displacement}: a visible gate
-invites humans to stop checking; verdicts should reach operators as
-cited-evidence audits, not badges. \emph{Who supervises the supervisor}:
-halting authority creates a new failure surface (over-blocking; repair
-loops into budget exhaustion) which we price as standard
-counter-metrics. Experiments involve no human subjects, personal data,
-or production systems.
+Countersign controls agent overclaiming, but agents supervising agents
+carries risks we keep visible: an \emph{allow} audits justification,
+not correctness, and must not be marketed as verification; a visible
+gate invites \emph{oversight displacement}, so verdicts reach operators
+as cited-evidence audits, not badges; and halting authority adds a
+failure surface---\emph{who supervises the supervisor}---that we price
+as counter-metrics. Experiments involve no human subjects, personal
+data, or production systems.
 
-\bibliographystyle{plainnat}
+\bibliographystyle{unsrtnat}
 \bibliography{references}
 
 \appendix
@@ -400,11 +407,12 @@ ledger; no new data, uniform $\mathrm{Beta}(1,1)$ priors, exact
 conjugate posteriors, no sampling), we re-read the paper's key
 small-$n$ counts in Bayesian form. \emph{Direction of the prompt
 effect}: conditioning on discordant matched cells as in the exact
-McNemar test, $b{=}2$ cells favour \textsf{observe\_only} over
-\textsf{memory\_baseline} and $c{=}0$ the reverse, giving posterior
-$\mathrm{Beta}(3,1)$ on the probability that a discordant cell favours
-the prompt and $P(\theta>0.5)=0.875$---seven-to-one posterior odds on a
-beneficial direction from the same data whose two-sided $p$ is $0.50$.
+McNemar test, $b{=}3$ cells favour \textsf{observe\_only} over
+\textsf{memory\_baseline} and $c{=}1$ the reverse, giving posterior
+$\mathrm{Beta}(4,2)$ on the probability that a discordant cell favours
+the prompt and $P(\theta>0.5)=0.8125$---roughly four-to-one posterior
+odds on a beneficial direction from the same data whose two-sided $p$
+is $0.625$.
 \emph{Discrimination in the arm that cannot act}: the
 \textsf{observe\_only} verifier's sensitivity $3/3$ has posterior mean
 $0.80$ with 95\% credible interval $[0.40, 0.99]$, and its specificity

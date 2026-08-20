@@ -1464,13 +1464,14 @@ def test_bayes_sensitivity_readings_pin_paper_appendix_numbers():
         beta_perfect_count_interval,
     )
 
-    # Prompt contrast b=2, c=0: P(direction beneficial) = 7/8.
-    assert beta_direction_posterior(2, 0) == 0.875
-    # Gate-level and combined counts, computed but not claimed as gate
-    # effects (accepted-endpoint suppression; reported for completeness).
-    assert beta_direction_posterior(3, 0) == 0.9375
+    # Prompt contrast b=3, c=1 (paired discordants; the 2026-08-20
+    # correction entry documents the earlier marginal-derived 2/0 slip).
+    assert beta_direction_posterior(3, 1) == 0.8125
+    # Combined baseline-vs-verification accepted-level count, computed
+    # but not claimed as a gate effect (accepted-endpoint suppression).
     assert beta_direction_posterior(5, 0) == 0.9844
-    # Symmetry and refusal cases.
+    # Formula, symmetry, and refusal cases.
+    assert beta_direction_posterior(2, 0) == 0.875
     assert beta_direction_posterior(0, 0) is None
     assert beta_direction_posterior(1, 1) == 0.5
 

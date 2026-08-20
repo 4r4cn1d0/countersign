@@ -170,7 +170,7 @@ ks, ns = zip(*[unsup_rate(grad, prof, "memory_baseline") for prof, _ in regimes]
 
 # Compact native size: the paper includes this at natural scale, so the
 # canvas must be column-fraction sized for fonts to print at true size.
-fig, (axA, axB) = plt.subplots(1, 2, figsize=(4.2, 1.42),
+fig, (axA, axB) = plt.subplots(1, 2, figsize=(4.2, 1.36),
                                gridspec_kw={"wspace": 0.52,
                                             "width_ratios": [1.0, 1.3]})
 
@@ -242,7 +242,7 @@ print("fig_regimes:", list(zip(ks, ns)), "| acc", list(acc), "blk", list(blk), "
 
 # ============================================================ Figure 1 (loop)
 # Compact native size (included at natural scale in the paper).
-fig, ax = plt.subplots(figsize=(3.9, 1.20))
+fig, ax = plt.subplots(figsize=(3.9, 1.13))
 ax.set_xlim(0, 10.4); ax.set_ylim(0.42, 3.00); ax.axis("off")
 
 

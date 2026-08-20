@@ -338,3 +338,41 @@ pinned by test_bayes_sensitivity_readings_pin_paper_appendix_numbers.
 - Reported in the paper only as an appendix sensitivity analysis with
   the post-hoc label and the skeptical-prior caveat; direction and
   uncertainty statements only, never magnitude or significance.
+
+## CORRECTION: prompt-contrast discordant counts (2026-08-20)
+
+Found by a six-lane adversarial audit tracing every paper number back
+to run artifacts, then independently re-derived by hand before this
+entry. The E5 RESULT entry above recorded the prompt contrast
+(memory_baseline vs observe_only, resume_medium, provenance pair) as
+"prompt=2 (p=.50)". That was a MARGINAL difference (5 fallen baseline
+cells minus 3 fallen observe cells), not the paired discordant count
+the predeclared analysis specifies. Pairing the ten matched
+(task, seed) cells against the artifacts:
+
+- baseline-only falls: provenance_auth seeds 0 and 4, provenance_legacy
+  seed 2 (b=3)
+- observe-only fall: provenance_auth seed 3 (c=1)  <- the reverse-
+  direction cell the marginal derivation silently dropped
+- both fall: auth seed 1, legacy seed 3
+- exact two-sided McNemar p = 0.625 (not 0.50); identical at the
+  proposal and accepted level in these non-blocking arms.
+
+supervision_decomposition() in matrix_analysis.py computes the paired
+counts correctly; the error was hand-derivation in the ledger prose
+that never went through the function. Downstream corrections applied:
+paper Results (b=3 vs c=1, p=0.625), paper Appendix D Bayes reading
+(posterior Beta(4,2), P(direction)=0.8125, ~4.3:1 odds — supersedes the
+Beta(3,1)/0.875/7:1 figures in the post-hoc entry above), pinning test
+updated. Unchanged: marginal counts 5/3/2 per arm; the combined
+accepted-level contrast b=5, c=0 (p=.0625); every conclusion (no
+comparison reaches p<.05; direction favors the prompt; the gate's
+contribution is conversion to blocked-then-recovered, not fewer
+unsupported claims). Interpretation is qualitatively unchanged but the
+prompt-direction evidence is weaker than previously stated.
+
+Audit side-note for artifact packaging: final-matrix is the one
+campaign whose manifest/artifact_index pair is not present locally
+(balance-exhaustion pod migration); regenerate or recover it before
+building the anonymized artifact so the integrity audit covers all
+seven campaigns.

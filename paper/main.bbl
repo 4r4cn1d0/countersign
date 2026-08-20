@@ -1,9 +1,16 @@
-\begin{thebibliography}{9}
+\begin{thebibliography}{17}
 \providecommand{\natexlab}[1]{#1}
 \providecommand{\url}[1]{\texttt{#1}}
 \expandafter\ifx\csname urlstyle\endcsname\relax
   \providecommand{\doi}[1]{doi: #1}\else
   \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
+
+\bibitem[Von~Arx et~al.(2025)Von~Arx, Chan, and
+  Barnes]{vonarx2025rewardhacking}
+Sydney Von~Arx, Lawrence Chan, and Beth Barnes.
+\newblock Recent frontier models are reward hacking.
+\newblock METR Technical Report, 2025.
+\newblock URL \url{https://metr.org/blog/2025-06-05-recent-reward-hacking/}.
 
 \bibitem[Baker et~al.(2025)Baker, Huizinga, Gao, Dou, Guan, Madry, Zaremba,
   Pachocki, and Farhi]{baker2025monitoring}
@@ -13,12 +20,53 @@ Bowen Baker, Joost Huizinga, Leo Gao, Zehao Dou, Melody~Y. Guan, Aleksander
   promoting obfuscation, 2025.
 \newblock URL \url{https://arxiv.org/abs/2503.11926}.
 
+\bibitem[Greenblatt et~al.(2024)Greenblatt, Shlegeris, Sachan, and
+  Roger]{greenblatt2023control}
+Ryan Greenblatt, Buck Shlegeris, Kshitij Sachan, and Fabien Roger.
+\newblock {AI} control: Improving safety despite intentional subversion.
+\newblock In \emph{Forty-first International Conference on Machine Learning,
+  {ICML} 2024}, pages 16295--16336. PMLR, 2024.
+\newblock URL \url{https://proceedings.mlr.press/v235/greenblatt24a.html}.
+
+\bibitem[Xiang et~al.(2025)Xiang, Zheng, Li, Hong, Li, Xie, Zhang, Xiong, Xie,
+  Yang, Song, and Li]{xiang2024guardagent}
+Zhen Xiang, Linzhi Zheng, Yanjie Li, Junyuan Hong, Qinbin Li, Han Xie, Jiawei
+  Zhang, Zidi Xiong, Chulin Xie, Carl Yang, Dawn Song, and Bo~Li.
+\newblock {GuardAgent}: Safeguard {LLM} agents via knowledge-enabled reasoning.
+\newblock In \emph{Forty-second International Conference on Machine Learning,
+  {ICML} 2025}. PMLR, 2025.
+\newblock URL \url{https://proceedings.mlr.press/v267/xiang25a.html}.
+
+\bibitem[Wang et~al.(2026)Wang, Poskitt, and Sun]{agentspec2025}
+Haoyu Wang, Christopher~M. Poskitt, and Jun Sun.
+\newblock {AgentSpec}: Customizable runtime enforcement for safe and reliable
+  {LLM} agents.
+\newblock In \emph{Proceedings of the 48th {IEEE/ACM} International Conference
+  on Software Engineering ({ICSE} 2026)}, 2026.
+\newblock URL \url{https://arxiv.org/abs/2503.18666}.
+
 \bibitem[Chennabasappa et~al.(2025)]{chennabasappa2025llamafirewall}
 Sahana Chennabasappa et~al.
 \newblock {LlamaFirewall}: An open source guardrail system for building secure
   {AI} agents.
 \newblock \emph{arXiv preprint arXiv:2505.03574}, 2025.
 \newblock Author list to be verified against the arXiv page before submission.
+
+\bibitem[Uesato et~al.(2022)Uesato, Kushman, Kumar, Song, Siegel, Wang,
+  Creswell, Irving, and Higgins]{uesato2022process}
+Jonathan Uesato, Nate Kushman, Ramana Kumar, Francis Song, Noah Siegel, Lisa
+  Wang, Antonia Creswell, Geoffrey Irving, and Irina Higgins.
+\newblock Solving math word problems with process- and outcome-based feedback,
+  2022.
+\newblock URL \url{https://arxiv.org/abs/2211.14275}.
+
+\bibitem[Lightman et~al.(2024)Lightman, Kosaraju, Burda, Edwards, Baker, Lee,
+  Leike, Schulman, Sutskever, and Cobbe]{lightman2024verify}
+Hunter Lightman, Vineet Kosaraju, Yura Burda, Harrison Edwards, Bowen Baker,
+  Teddy Lee, Jan Leike, John Schulman, Ilya Sutskever, and Karl Cobbe.
+\newblock Let's verify step by step.
+\newblock In \emph{International Conference on Learning Representations
+  (ICLR)}, 2024.
 
 \bibitem[Cobbe et~al.(2021)Cobbe, Kosaraju, Bavarian, Chen, Jun, Kaiser,
   Plappert, Tworek, Hilton, Nakano, Hesse, and Schulman]{cobbe2021gsm8k}
@@ -36,13 +84,46 @@ Carlos~E. Jimenez, John Yang, Alexander Wettig, Shunyu Yao, Kexin Pei, Ofir
 \newblock In \emph{International Conference on Learning Representations
   (ICLR)}, 2024.
 
-\bibitem[Lightman et~al.(2024)Lightman, Kosaraju, Burda, Edwards, Baker, Lee,
-  Leike, Schulman, Sutskever, and Cobbe]{lightman2024verify}
-Hunter Lightman, Vineet Kosaraju, Yura Burda, Harrison Edwards, Bowen Baker,
-  Teddy Lee, Jan Leike, John Schulman, Ilya Sutskever, and Karl Cobbe.
-\newblock Let's verify step by step.
-\newblock In \emph{International Conference on Learning Representations
-  (ICLR)}, 2024.
+\bibitem[Zhuge et~al.(2025)Zhuge, Zhao, Ashley, Wang, Khizbullin, Xiong, Liu,
+  Chang, Krishnamoorthi, Tian, Shi, Chandra, and
+  Schmidhuber]{zhuge2024agentjudge}
+Mingchen Zhuge, Changsheng Zhao, Dylan~R. Ashley, Wenyi Wang, Dmitrii
+  Khizbullin, Yunyang Xiong, Zechun Liu, Ernie Chang, Raghuraman
+  Krishnamoorthi, Yuandong Tian, Yangyang Shi, Vikas Chandra, and J{\"u}rgen
+  Schmidhuber.
+\newblock Agent-as-a-judge: Evaluate agents with agents.
+\newblock In \emph{Forty-second International Conference on Machine Learning,
+  {ICML} 2025}. PMLR, 2025.
+\newblock URL \url{https://proceedings.mlr.press/v267/zhuge25a.html}.
+
+\bibitem[Gu et~al.(2026)Gu, Nashid, and Mesbah]{gu2026scate}
+Sijia Gu, Noor Nashid, and Ali Mesbah.
+\newblock {SCATE}: Learning to supervise coding agents for cost-effective test
+  generation, 2026.
+\newblock URL \url{https://arxiv.org/abs/2607.08983}.
+
+\bibitem[Salas(2026)]{matrix2026provenance}
+Jesus Salas.
+\newblock Correct is not governed: Provenance integrity in agentic workflows,
+  2026.
+\newblock URL \url{https://arxiv.org/abs/2608.12761}.
+
+\bibitem[Han et~al.(2026)Han, Tu, Wang, Dai, Zhou, Lau, Cardenas, Xu, Xu,
+  Xiong, Zheng, Yao, Zhou, and Xie]{han2026vlaagui}
+Qijun Han, Haoqin Tu, Zijun Wang, Haoyue Dai, Yiyang Zhou, Nancy Lau, Alvaro~A.
+  Cardenas, Yuhui Xu, Ran Xu, Caiming Xiong, Zeyu Zheng, Huaxiu Yao, Yuyin
+  Zhou, and Cihang Xie.
+\newblock {VLAA-GUI}: Knowing when to stop, recover, and search, a modular
+  framework for {GUI} automation, 2026.
+\newblock URL \url{https://arxiv.org/abs/2604.21375}.
+
+\bibitem[Shinn et~al.(2023)Shinn, Cassano, Gopinath, Narasimhan, and
+  Yao]{shinn2023reflexion}
+Noah Shinn, Federico Cassano, Ashwin Gopinath, Karthik Narasimhan, and Shunyu
+  Yao.
+\newblock Reflexion: Language agents with verbal reinforcement learning.
+\newblock In \emph{Advances in Neural Information Processing Systems
+  (NeurIPS)}, 2023.
 
 \bibitem[Liu et~al.(2024)Liu, Lin, Hewitt, Paranjape, Bevilacqua, Petroni, and
   Liang]{liu2024lost}
@@ -58,20 +139,5 @@ Charles Packer, Sarah Wooders, Kevin Lin, Vivian Fang, Shishir~G. Patil, Ion
   Stoica, and Joseph~E. Gonzalez.
 \newblock {MemGPT}: Towards {LLMs} as operating systems.
 \newblock \emph{arXiv preprint arXiv:2310.08560}, 2023.
-
-\bibitem[Shinn et~al.(2023)Shinn, Cassano, Gopinath, Narasimhan, and
-  Yao]{shinn2023reflexion}
-Noah Shinn, Federico Cassano, Ashwin Gopinath, Karthik Narasimhan, and Shunyu
-  Yao.
-\newblock Reflexion: Language agents with verbal reinforcement learning.
-\newblock In \emph{Advances in Neural Information Processing Systems
-  (NeurIPS)}, 2023.
-
-\bibitem[Von~Arx et~al.(2025)Von~Arx, Chan, and
-  Barnes]{vonarx2025rewardhacking}
-Sydney Von~Arx, Lawrence Chan, and Beth Barnes.
-\newblock Recent frontier models are reward hacking.
-\newblock METR Technical Report, 2025.
-\newblock URL \url{https://metr.org/blog/2025-06-05-recent-reward-hacking/}.
 
 \end{thebibliography}
