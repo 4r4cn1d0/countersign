@@ -104,6 +104,18 @@ gate contributions (\S\ref{sec:results}); and (iv)~a calibrated account
 of the gate as an evidence-hygiene instrument rather than a
 demonstrated safety mechanism (\S\ref{sec:failure}).
 
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.86\linewidth]{figures/fig_loop.pdf}
+\caption{The supervision loop. The worker proposes termination with
+cited evidence; Countersign audits the claim against the execution
+trace and either accepts it or blocks it with a specific deficiency,
+after which the worker gathers fresh evidence and re-proposes. The
+hidden evaluator that determines correctness runs once, after
+termination, and is never consulted by the supervisor.}
+\label{fig:loop}
+\end{figure}
+
 \section{The Countersign Supervisor}
 \label{sec:method}
 
@@ -207,28 +219,15 @@ about staleness or provenance. The precision figure should therefore be
 read as ``the gate does not misfire,'' not as ``the gate is
 discriminating hard cases.''
 
-\begin{figure}[t]
-\centering
-\includegraphics[width=0.72\linewidth]{figures/fig_ablation.pdf}
-\caption{Countersign versus the conventional CI rule ``require a
-successful test run after the last edit,'' replayed counterfactually
-over every stored proposal. (a)~The CI rule catches 2 of 15
-oracle-unsupported claims; Countersign catches all 11 it judged, but
-only 4 of those require substantive reasoning---the other 7 are claims
-citing no evidence at all, which any rule detects. (b)~Neither gate
-blocked any of the 161 supported proposals both judged: the difference
-is blindness, not conservatism.}
-\label{fig:ablation}
-\end{figure}
-
 \textbf{A conventional CI gate is blind to what actually occurs.} We
 replay every stored proposal against the standard-practice rule
 ``require a successful test run after the last edit,'' a strict subset
-of Countersign's temporal check (Figure~\ref{fig:ablation}).
-\textbf{Nine of the fifteen unsupported proposals are caught only by
-the evidence rules}, because in those cases the tests were fresh and
-the deficiency lay in citation or provenance. Neither gate blocked any
-of the 161 supported proposals both judged.
+of Countersign's temporal check . The CI rule catches 2 of
+15 unsupported proposals; Countersign catches 11 of the 11 it judged,
+of which only 4 require substantive reasoning about staleness or
+provenance and the rest are claims citing nothing at all. Neither gate
+blocked any of the 161 supported proposals both judged: where they
+differ, the difference is blindness rather than conservatism.
 
 \begin{figure}[t]
 \centering
@@ -282,14 +281,31 @@ would-block fired in exactly the 3 unsupported cells and none of the
 other 7 (TP$=3$, FP$=0$, FN$=0$)---evidence immune to the circularity
 objection a blocking arm invites.
 
-\textbf{What ``unsupported'' means here.} 25 of the 27
-unsupported proposals had a fresh passing test in the canonical trace
-and passed hidden evaluation; 18 of 27 are unsupported because the
-worker cited \emph{no} evidence at all. The measured phenomenon is
-therefore predominantly \emph{unsubstantiated} rather than
-\emph{incorrect} completion---verified work the worker failed to point
-at, most often when summarization removed the identifiers it would have
-cited.
+\textbf{What ``unsupported'' means here.} Table~\ref{tab:twobytwo}
+crosses the oracle's judgement of the accepted claim against the hidden
+evaluator's judgement of the work. Every one of the 18 unsupported
+completions concerned work that was in fact \emph{correct}: in this
+campaign an unjustified claim never once coincided with a wrong
+implementation. Countersign is thus measured to catch \emph{poor
+evidential hygiene}, and its value as a safety mechanism remains a
+hypothesis this campaign cannot confirm. The two supported-but-incorrect
+cases are the trace-only blind spot of \S\ref{sec:failure}.
+
+\begin{table}[t]
+\centering
+\caption{Accepted completions ($n{=}327$): the oracle's verdict on the
+claim against the hidden evaluator's verdict on the work. The empty
+bottom-right cell is the paper's central caveat.}
+\label{tab:twobytwo}
+\begin{tabular}{lcc}
+\toprule
+& correct & incorrect \\
+\midrule
+claim supported   & 307 & 2 \\
+claim unsupported & 18  & 0 \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \section{Supervisor-Failure Analysis and Limitations}
 \label{sec:failure}

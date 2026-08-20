@@ -224,3 +224,41 @@ fig.tight_layout(pad=0.4)
 fig.savefig(OUT / "fig_regimes.pdf")
 fig.savefig(OUT / "fig_regimes.png")
 print("fig2 lossy:", list(zip(ks, ns)), "| accepted:", acc, "blocked:", blk, "clean:", clean)
+
+# ---------------------------------------------------------------- figure 0
+# System diagram: the supervision loop. Vector, reproducible, no API key.
+from matplotlib.patches import FancyBboxPatch, FancyArrowPatch
+
+fig, ax = plt.subplots(figsize=(5.2, 1.55))
+ax.set_xlim(0, 10); ax.set_ylim(0, 3.1); ax.axis("off")
+
+def box(x, y, w, h, label, fc, ec, fs=8.5, bold=True):
+    ax.add_patch(FancyBboxPatch((x, y), w, h, boxstyle="round,pad=0.06,rounding_size=0.12",
+                                facecolor=fc, edgecolor=ec, linewidth=1.1))
+    ax.text(x + w/2, y + h/2, label, ha="center", va="center", fontsize=fs,
+            color=INK, weight="bold" if bold else "normal", linespacing=1.25)
+
+box(0.15, 1.05, 2.25, 1.0, "worker\nagent", "#EAF0F2", INK)
+box(3.25, 1.05, 2.5, 1.0, "Countersign\nsupervisor", "#FBE3D9", GATE)
+box(6.75, 1.75, 3.0, 0.75, "accept  (terminate)", "#E4EFEA", MID, fs=8)
+box(6.75, 0.55, 3.0, 0.75, "block  +  guidance", "#FBE3D9", GATE, fs=8)
+
+def arrow(x1, y1, x2, y2, style="-|>", rad=0.0, color=INK, lw=1.1, ls="-"):
+    ax.add_patch(FancyArrowPatch((x1, y1), (x2, y2), arrowstyle=style, color=color,
+                                 linewidth=lw, linestyle=ls,
+                                 connectionstyle=f"arc3,rad={rad}", mutation_scale=9))
+
+arrow(2.45, 1.55, 3.2, 1.55)
+ax.text(2.82, 1.72, "finish claim\n+ cited events", ha="center", va="bottom", fontsize=6.2, color="#55666E")
+arrow(5.8, 1.75, 6.7, 2.10)
+arrow(5.8, 1.35, 6.7, 0.95, color=GATE)
+arrow(6.9, 0.5, 1.3, 0.5, rad=0.0, color=GATE, ls=(0, (3, 2)))
+ax.text(4.1, 0.28, "gather fresh evidence, re-propose", ha="center", fontsize=6.2, color=GATE)
+ax.text(3.0, 2.42, "execution trace (evidence ledger)", ha="center", fontsize=6.4,
+        color="#55666E", style="italic")
+arrow(2.3, 2.25, 4.4, 2.25, style="-", color="#B7C3C8", lw=0.9)
+ax.text(8.25, 2.92, "hidden evaluator runs once, after termination",
+        ha="center", fontsize=6.2, color="#8A98A0", style="italic")
+fig.tight_layout(pad=0.15)
+fig.savefig(OUT / "fig_loop.pdf"); fig.savefig(OUT / "fig_loop.png")
+print("fig0: supervision loop written")
