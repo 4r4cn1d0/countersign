@@ -181,31 +181,46 @@ axA.set_ylabel("unsupported completion rate")
 axA.set_ylim(-0.02, 0.75)
 axA.set_title("(a) Truncation: no increase detected", loc="left")
 
-# resume regime, provenance cells: the three arms
 res = load("substrate-resume") + load("e5-observe")
-arms = [("memory_baseline", "baseline", BASE), ("observe_only", "observe\nonly", MID),
-        ("verification_only", "Countersign", GATE)]
-vals, lbls, cols = [], [], []
-for arm, lab, col in arms:
-    k = n = 0
+
+# resume regime, provenance cells: OUTCOME COMPOSITION (not the
+# acceptance endpoint, which a blocking arm suppresses by construction)
+arms = [("memory_baseline", "baseline"), ("observe_only", "observe\nonly"),
+        ("verification_only", "Countersign")]
+acc, blk, clean, lbls = [], [], [], []
+for arm, lab in arms:
+    a = b = c = 0
     for run in res:
         ctx = run.get("experiment_context", {})
         if ctx.get("variant") != arm or "provenance" not in run.get("task_id", ""):
             continue
-        n += 1
-        k += bool(run.get("interaction_metrics", {})
-                  .get("accepted_oracle_unsupported_finish"))
-    vals.append((k, n)); lbls.append(lab); cols.append(col)
-bars = axB.bar(range(3), [k / n if n else 0 for k, n in vals], color=cols,
-               width=0.6, edgecolor="white", linewidth=0.6)
-for b, (k, n) in zip(bars, vals):
-    axB.text(b.get_x() + b.get_width() / 2, (k / n if n else 0) + 0.02,
-             f"{k}/{n}", ha="center", fontsize=8, color=INK, weight="bold")
-axB.set_xticks(range(3)); axB.set_xticklabels(lbls)
-axB.set_ylim(0, 0.75)
-axB.set_ylabel("unsupported completion rate")
-axB.set_title("(b) Resume-summary: prompt + gate", loc="left")
+        m = run.get("interaction_metrics", {})
+        n_unsup = sum(1 for x in m.get("oracle_proposal_scores", [])
+                      if x["support_label"] == "unsupported")
+        if m.get("accepted_oracle_unsupported_finish"):
+            a += 1
+        elif n_unsup > 0:
+            b += 1          # unsupported proposal made, but blocked
+        else:
+            c += 1          # no unsupported proposal at all
+    acc.append(a); blk.append(b); clean.append(c); lbls.append(lab)
+
+x = np.arange(3)
+axB.bar(x, acc, color=GATE, width=0.6, edgecolor="white", linewidth=0.6,
+        label="accepted unsupported")
+axB.bar(x, blk, bottom=acc, color="#F4C7B8", width=0.6, edgecolor="white",
+        linewidth=0.6, label="proposed, blocked, recovered")
+axB.bar(x, clean, bottom=np.array(acc) + np.array(blk), color="#DCE3E6",
+        width=0.6, edgecolor="white", linewidth=0.6, label="no unsupported proposal")
+for xi, (a, b) in enumerate(zip(acc, blk)):
+    if a: axB.text(xi, a/2, str(a), ha="center", va="center", fontsize=8, color="white", weight="bold")
+    if b: axB.text(xi, a + b/2, str(b), ha="center", va="center", fontsize=8, color=INK, weight="bold")
+axB.set_xticks(x); axB.set_xticklabels(lbls)
+axB.set_ylabel("episodes (of 10)")
+axB.set_ylim(0, 10.5)
+axB.legend(loc="lower right", fontsize=6)
+axB.set_title("(b) Resume-summary: outcome composition", loc="left")
 fig.tight_layout(pad=0.4)
 fig.savefig(OUT / "fig_regimes.pdf")
 fig.savefig(OUT / "fig_regimes.png")
-print("fig2 lossy:", list(zip(ks, ns)), "| resume arms:", vals)
+print("fig2 lossy:", list(zip(ks, ns)), "| accepted:", acc, "blocked:", blk, "clean:", clean)

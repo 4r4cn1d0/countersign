@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.29 (TeX Live 2026/Homebrew) (preloaded format=pdflatex 2026.3.4)  20 AUG 2026 15:29
+This is pdfTeX, Version 3.141592653-2.6-1.40.29 (TeX Live 2026/Homebrew) (preloaded format=pdflatex 2026.3.4)  20 AUG 2026 15:35
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -559,7 +559,7 @@ Package microtype Info: Loading generic protrusion settings for font family
 (microtype)             `cmtt' (encoding: T1).
 (microtype)             For optimal results, create family-specific settings.
 (microtype)             See the microtype manual for details.
-LaTeX Font Info:    Trying to load font information for T1+phv on input line 69
+LaTeX Font Info:    Trying to load font information for T1+phv on input line 70
 .
 
 (/opt/homebrew/Cellar/texlive/20260301/share/texmf-dist/tex/latex/psnfss/t1phv.
@@ -580,20 +580,20 @@ enc/dvips/cm-super/cm-super-t1.enc}] [2]
 <figures/fig_ablation.pdf, id=57, 404.19347pt x 158.57845pt>
 File: figures/fig_ablation.pdf Graphic file (type pdf)
 <use figures/fig_ablation.pdf>
-Package pdftex.def Info: figures/fig_ablation.pdf  used on input line 211.
+Package pdftex.def Info: figures/fig_ablation.pdf  used on input line 212.
 (pdftex.def)             Requested size: 286.18967pt x 112.28175pt.
-<figures/fig_regimes.pdf, id=59, 410.69469pt x 165.94835pt>
+<figures/fig_regimes.pdf, id=59, 438.07135pt x 165.93018pt>
 File: figures/fig_regimes.pdf Graphic file (type pdf)
 <use figures/fig_regimes.pdf>
-Package pdftex.def Info: figures/fig_regimes.pdf  used on input line 234.
-(pdftex.def)             Requested size: 286.18967pt x 115.6414pt.
+Package pdftex.def Info: figures/fig_regimes.pdf  used on input line 235.
+(pdftex.def)             Requested size: 286.18967pt x 108.40274pt.
  [3 <./figures/fig_ablation.pdf>] [4 <./figures/fig_regimes.pdf>] (./main.bbl
 Underfull \hbox (badness 6510) in paragraph at lines 48--52
 []\T1/ptm/m/n/10 (+20) METR.  Re-cent fron-tier mod-els are re-ward hack-ing.  
 []$\T1/cmtt/m/n/10 https : / / metr . org / blog /
  []
 
-) [5] [6] (./main.aux)
+[5]) [6] (./main.aux)
  ***********
 LaTeX2e <2025-11-01>
 L3 programming layer <2026-01-19>
@@ -602,13 +602,13 @@ Package rerunfilecheck Info: File `main.out' has not changed.
 (rerunfilecheck)             Checksum: 5F5050DA8D8761B89F203A8B02939C24;1153.
  ) 
 Here is how much of TeX's memory you used:
- 13298 strings out of 467525
- 211439 string characters out of 5408440
- 672481 words of memory out of 5000000
+ 13304 strings out of 467525
+ 211499 string characters out of 5408440
+ 672818 words of memory out of 5000000
  41743 multiletter control sequences out of 15000+600000
- 672487 words of font info for 242 fonts, out of 8000000 for 9000
+ 673035 words of font info for 246 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
- 72i,8n,79p,1001b,542s stack positions out of 10000i,1000n,20000p,200000b,200000s
+ 72i,8n,79p,1001b,593s stack positions out of 10000i,1000n,20000p,200000b,200000s
 </opt/homebrew/Cellar/texlive/20260301/share/texmf-dist/fonts/type1/public/am
 sfonts/cm/cmmi10.pfb></opt/homebrew/Cellar/texlive/20260301/share/texmf-dist/fo
 nts/type1/public/amsfonts/cm/cmr10.pfb></opt/homebrew/Cellar/texlive/20260301/s
@@ -620,9 +620,9 @@ rw/times/utmb8a.pfb></opt/homebrew/Cellar/texlive/20260301/share/texmf-dist/fon
 ts/type1/urw/times/utmbi8a.pfb></opt/homebrew/Cellar/texlive/20260301/share/tex
 mf-dist/fonts/type1/urw/times/utmr8a.pfb></opt/homebrew/Cellar/texlive/20260301
 /share/texmf-dist/fonts/type1/urw/times/utmri8a.pfb>
-Output written on main.pdf (6 pages, 191655 bytes).
+Output written on main.pdf (6 pages, 193547 bytes).
 PDF statistics:
- 293 PDF objects out of 1000 (max. 8388607)
+ 295 PDF objects out of 1000 (max. 8388607)
  149 compressed objects within 2 object streams
  27 named destinations out of 1000 (max. 500000)
  45131 words of extra memory for PDF output out of 51595 (max. 10000000)

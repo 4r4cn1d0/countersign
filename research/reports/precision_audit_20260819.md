@@ -45,3 +45,42 @@ figure caption.
 Every headline proportion must ship with (a) the denominator that
 could actually have produced the event, (b) an interval, and (c) a
 statement of how much of the effect is trivially detectable.
+
+## 5. Endpoint suppressed by construction (CORRECTED — found by a second challenge)
+
+Challenge: "why do we have the 0/10, it's not believable."
+
+Correct. The primary endpoint is `accepted_oracle_unsupported_finish`.
+In a BLOCKING arm an unsupported finish is blocked and therefore never
+accepted, so a rate of zero there is partly a definitional consequence
+of the intervention, not an empirical reduction.
+
+Trace-level counts on the ten provenance cells under resume_medium:
+
+| arm | unsupported PROPOSALS | blocked | accepted-unsupported |
+|---|---|---|---|
+| memory_baseline | 5 | 0 | 5 |
+| observe_only | 3 | 0 (no authority) | 3 |
+| verification_only | 2 | 2 | 0 |
+
+Honest reading, now in the paper:
+- The PROMPT reduces unsupported proposals 5 -> 3.
+- The further 3 -> 2 is sampling noise: the gate cannot influence a
+  worker's FIRST proposal.
+- The gate's own contribution is NOT a lower rate but a different
+  OUTCOME: it blocked both unsupported proposals it saw, and both
+  episodes recovered and terminated with supported evidence rather
+  than exhausting budget.
+
+Figure 2b was rebuilt from an acceptance-rate bar into an OUTCOME
+COMPOSITION bar (accepted / blocked-then-recovered / no unsupported
+proposal) so the mechanism is visible and the suppression cannot be
+mistaken for an effect. The limitations section now names the
+suppression explicitly.
+
+## Standing rule (extended)
+
+Never report an endpoint that the intervention suppresses by
+construction as evidence for that intervention. Compare at the level
+the intervention cannot mechanically control (here: proposals), and
+report what the intervention CHANGES (here: post-block outcomes).

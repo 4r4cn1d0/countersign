@@ -61,8 +61,9 @@ continuous-integration gate catches 2 of 15 unsupported proposals where
 Countersign catches 11 of 11 it judged. Our negative results are
 equally informative: truncating the worker's visible history did not
 increase unsupported completion, the effect appearing only when history
-is \emph{replaced by a narrative summary}, and we decompose that effect
-into prompt and gate contributions. We also quantify the construct
+is \emph{replaced by a narrative summary}---an effect driven mainly by
+prompting, with the gate's own contribution being that it converts
+unsupported acceptances into blocked episodes that then recover. We also quantify the construct
 honestly---25 of 27 unsupported proposals were backed by work that
 passed hidden evaluation---so Countersign is an evidence-hygiene
 instrument whose safety value remains a hypothesis under test.
@@ -255,15 +256,24 @@ branch applies, with that power caveat attached.
 
 \textbf{The effect is regime-specific, and decomposes.} Replacing
 history with a resume summary---rather than truncating it---does
-produce unsupported completion (Figure~\ref{fig:regimes}b). Read as a
-$2\times2$ over ten matched cells, the prompt accounts for 2 of the 5
-cases and the gate for 3 (exact McNemar $p=0.50$ and $p=0.25$;
-combined $5\rightarrow0$, $p=0.0625$). We therefore report a decomposition and claim no
-significant effect. An a-priori power analysis explains why: with all
-discordant pairs in one direction the exact test requires
-$b\!\ge\!6$ for $p<.05$, so the campaign is one discordant pair short
-of significance by construction, and 16 matched cells would be needed
-for 80\% power at the observed effect.
+produce unsupported completion (Figure~\ref{fig:regimes}b). The
+comparison must be made at the level of \emph{proposals}, not
+acceptances: in a blocking arm an accepted-unsupported finish is
+suppressed by the intervention's own definition, so a rate of zero
+there is partly mechanical. Counting unsupported proposals over ten
+matched cells: baseline 5, \textsf{observe\_only} 3,
+\textsf{verification\_only} 2. The evidence-citation prompt accounts
+for the reduction from 5 to 3 (exact McNemar $p=0.50$); the further
+$3\rightarrow2$ is sampling noise, since the gate cannot influence a
+worker's \emph{first} proposal. The gate's own contribution is
+therefore not a reduction in unsupported claims but a change in what
+happens to them: it blocked both unsupported proposals it saw, and both
+episodes then recovered and terminated with supported evidence rather
+than exhausting their budget. No comparison here reaches $p<.05$, and
+an a-priori power analysis explains why---with all discordant pairs in
+one direction the exact test requires $b\ge6$, so this campaign is one
+discordant pair short of significance by construction, and 16 matched
+cells would be needed for 80\% power at the observed effect.
 
 \textbf{Measurement without power is the cleanest evidence.} In
 \textsf{observe\_only} the verifier judges but cannot act, so its
@@ -307,14 +317,17 @@ and the negative controls price the direction a self-built evaluation
 is least motivated to measure---but partial offset is not elimination.
 Second, one worker model on ten small fixture repositories establishes
 nothing about prevalence in production software, and our own null makes
-that gap sharper. Third, the online verifier and the post-hoc oracle share no code but do
-read the same trace, and the majority of agreements concern claims
+that gap sharper. Third, the primary endpoint (accepted-unsupported completion) is
+partly suppressed by construction in blocking arms, so gate effects
+must be read at the proposal level and in terms of post-block outcomes;
+we do so throughout. Fourth, the online verifier and the post-hoc
+oracle share no code but do read the same trace, and the majority of agreements concern claims
 citing no evidence at all---a case on which independence is close to
-vacuous; the four substantive catches are the informative ones. Fourth,
+vacuous; the four substantive catches are the informative ones. Fifth,
 no result reaches $p<.05$ and the null results are non-detections at
 modest power, not demonstrations of invariance: we report
-decompositions and intervals, never significance. Fifth, the degradation profiles are our own transforms, not a deployed
-scaffold's condenser. Sixth, oracle-label validation covers a
+decompositions and intervals, never significance. Sixth, the degradation profiles are our own transforms, not a deployed
+scaffold's condenser. Seventh, oracle-label validation covers a
 single-rater sample.
 
 \section{Related Work}
