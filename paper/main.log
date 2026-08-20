@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.29 (TeX Live 2026/Homebrew) (preloaded format=pdflatex 2026.3.4)  20 AUG 2026 15:41
+This is pdfTeX, Version 3.141592653-2.6-1.40.29 (TeX Live 2026/Homebrew) (preloaded format=pdflatex 2026.3.4)  20 AUG 2026 16:01
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -577,17 +577,17 @@ Package microtype Info: Loading generic protrusion settings for font family
 /pdftex.map}{/opt/homebrew/Cellar/texlive/20260301/share/texmf-dist/fonts/enc/d
 vips/base/8r.enc}{/opt/homebrew/Cellar/texlive/20260301/share/texmf-dist/fonts/
 enc/dvips/cm-super/cm-super-t1.enc}]
-<figures/fig_loop.pdf, id=52, 381.87468pt x 123.76237pt>
+<figures/fig_loop.pdf, id=52, 322.50487pt x 99.0388pt>
 File: figures/fig_loop.pdf Graphic file (type pdf)
 <use figures/fig_loop.pdf>
 Package pdftex.def Info: figures/fig_loop.pdf  used on input line 109.
-(pdftex.def)             Requested size: 341.83733pt x 110.794pt.
+(pdftex.def)             Requested size: 341.83733pt x 104.97607pt.
  [2 <./figures/fig_loop.pdf>]
-<figures/fig_regimes.pdf, id=139, 438.07135pt x 165.93018pt>
+<figures/fig_regimes.pdf, id=136, 351.78613pt x 174.34912pt>
 File: figures/fig_regimes.pdf Graphic file (type pdf)
 <use figures/fig_regimes.pdf>
 Package pdftex.def Info: figures/fig_regimes.pdf  used on input line 234.
-(pdftex.def)             Requested size: 286.18967pt x 108.40274pt.
+(pdftex.def)             Requested size: 286.18967pt x 141.8392pt.
 
 Underfull \vbox (badness 1189) has occurred while \output is active []
 
@@ -625,9 +625,9 @@ rw/times/utmb8a.pfb></opt/homebrew/Cellar/texlive/20260301/share/texmf-dist/fon
 ts/type1/urw/times/utmbi8a.pfb></opt/homebrew/Cellar/texlive/20260301/share/tex
 mf-dist/fonts/type1/urw/times/utmr8a.pfb></opt/homebrew/Cellar/texlive/20260301
 /share/texmf-dist/fonts/type1/urw/times/utmri8a.pfb>
-Output written on main.pdf (6 pages, 200042 bytes).
+Output written on main.pdf (6 pages, 197620 bytes).
 PDF statistics:
- 314 PDF objects out of 1000 (max. 8388607)
+ 308 PDF objects out of 1000 (max. 8388607)
  155 compressed objects within 2 object streams
  28 named destinations out of 1000 (max. 500000)
  45131 words of extra memory for PDF output out of 51595 (max. 10000000)

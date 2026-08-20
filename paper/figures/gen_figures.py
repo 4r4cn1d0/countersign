@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
-"""Generate Countersign paper figures from AUDITED run manifests.
+"""Countersign paper figures, generated from AUDITED run manifests.
 
-Every number is recomputed from run artifacts at plot time — no hand-typed
-values — so a figure can never drift from the data it claims to show.
+Every plotted value is recomputed from the run artifacts at plot time,
+so a figure cannot drift from the data it claims to show.
 """
 import json
-import sys
-from collections import defaultdict
 from math import sqrt
 from pathlib import Path
 
@@ -14,6 +12,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNS = ROOT / "runs" / "pod-sync"
@@ -21,18 +20,18 @@ OUT = Path(__file__).resolve().parent
 
 plt.rcParams.update({
     "font.family": "serif", "font.serif": ["Times New Roman", "DejaVu Serif"],
-    "font.size": 9, "axes.titlesize": 9.5, "axes.titleweight": "bold",
-    "axes.labelsize": 9, "legend.fontsize": 8, "legend.frameon": False,
+    "font.size": 9, "axes.titlesize": 9, "axes.titleweight": "bold",
+    "axes.labelsize": 8.5, "xtick.labelsize": 8, "ytick.labelsize": 8,
+    "legend.fontsize": 7, "legend.frameon": False,
     "figure.dpi": 300, "savefig.dpi": 300, "savefig.bbox": "tight",
     "axes.spines.top": False, "axes.spines.right": False,
-    "axes.grid": True, "grid.alpha": 0.15, "axes.axisbelow": True,
+    "axes.spines.left": True, "axes.spines.bottom": True,
+    "axes.edgecolor": "#8A98A0", "axes.linewidth": 0.8,
+    "axes.grid": True, "grid.alpha": 0.13, "grid.linewidth": 0.6,
+    "axes.axisbelow": True, "xtick.color": "#55666E", "ytick.color": "#55666E",
 })
-GATE = "#E76F51"      # Countersign (ours)
-BASE = "#B0BEC5"      # baseline / CI gate
-MID  = "#2A9D8F"      # observe-only
-INK  = "#264653"
-
-TEST_TOOLS = {"run_tests", "run_full_tests", "run_targeted_tests"}
+INK, GATE, MID = "#24424E", "#D9613C", "#3D8C7C"
+BLOCKED, NEUTRAL = "#F0BFA6", "#DDE4E7"
 
 
 def wilson(k, n, z=1.96):
@@ -46,146 +45,51 @@ def wilson(k, n, z=1.96):
 
 
 def load(base):
-    p = RUNS / base / "runs"
-    if not p.exists():
-        return []
-    return [json.loads(f.read_text()) for f in sorted(p.rglob("*.json"))]
+    d = RUNS / base / "runs"
+    return [json.loads(f.read_text()) for f in sorted(d.rglob("*.json"))] if d.exists() else []
 
 
-def simple_gate_blocks(events, prop_seq):
-    """CI practice: a successful test run after the last successful edit."""
-    last_edit, last_green = 0, None
-    for e in events:
-        seq = e.get("sequence_number", 0)
-        if seq >= prop_seq:
-            continue
-        if e.get("tool_name") in {"write_file", "apply_patch"} and e.get("status") == "success":
-            last_edit = max(last_edit, seq)
-        if e.get("tool_name") in TEST_TOOLS and e.get("status") == "success":
-            last_green = max(last_green or 0, seq)
-    return True if last_green is None else last_green < last_edit
-
-
-# ---------------------------------------------------------------- figure 1
-ABLATION_PHASES = ["final-matrix", "fm-negctrl-qwen", "pressure-a", "pressure-b"]
-cs_catch = cs_judged = sg_catch = n_unsup = 0
-cs_trivial = cs_subst = 0
-sg_fp = cs_fp = n_sup = 0
-for base in ABLATION_PHASES:
-    for run in load(base):
-        events = run.get("trace_events", [])
-        scores = run.get("interaction_metrics", {}).get("oracle_proposal_scores", [])
-        oracle = {s["proposal_event_id"]: s["support_label"] for s in scores}
-        s_lbl_reasons = {s["proposal_event_id"]: tuple(s.get("reasons", [])) for s in scores}
-        raw = {}
-        for e in events:
-            if e.get("event_type") == "verification_decision":
-                cid, d = e.get("claim_event_id"), e.get("verifier_decision", e.get("decision"))
-                if cid and d in ("allow", "block"):
-                    raw[cid] = d
-        for e in events:
-            if e.get("event_type") != "completion_claim" or e.get("tool_name") != "finish":
-                continue
-            pid, lab = e["event_id"], oracle.get(e["event_id"])
-            sg = simple_gate_blocks(events, e.get("sequence_number", 0))
-            if lab == "unsupported":
-                n_unsup += 1
-                sg_catch += sg
-                if pid in raw:
-                    cs_judged += 1
-                    if raw[pid] == "block":
-                        cs_catch += 1
-                        if "no source_event_ids cited" in s_lbl_reasons.get(pid, ()):
-                            cs_trivial += 1
-                        else:
-                            cs_subst += 1
-            elif lab == "supported":
-                sg_fp += sg
-                if pid in raw:            # only judged proposals can be blocked
-                    n_sup += 1
-                    cs_fp += raw[pid] == "block"
-
-fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(5.5, 2.1))
-labels = ["CI gate\n(fresh test)", "Countersign\n(evidence audit)"]
-caught = [sg_catch, cs_catch]
-totals = [n_unsup, cs_judged]
-ax1.bar(labels[0], sg_catch, color=BASE, width=0.55, edgecolor="white", linewidth=0.6)
-ax1.bar(labels[1], cs_subst, color=GATE, width=0.55, edgecolor="white", linewidth=0.6,
-        label="substantive (staleness/provenance)")
-ax1.bar(labels[1], cs_trivial, bottom=cs_subst, color="#F4C7B8", width=0.55,
-        edgecolor="white", linewidth=0.6, label="trivial (no citation at all)")
-ax1.text(0, sg_catch + 0.35, f"{sg_catch}/{n_unsup}", ha="center",
-         fontsize=8.5, color=INK, weight="bold")
-ax1.text(1, cs_catch + 0.35, f"{cs_catch}/{cs_judged}", ha="center",
-         fontsize=8.5, color=INK, weight="bold")
-ax1.legend(loc="upper left", fontsize=6.5)
-ax1.set_ylabel("unsupported claims caught")
-ax1.set_ylim(0, max(totals) + 2.5)
-ax1.set_title("(a) What each gate catches", loc="left")
-
-fp = [sg_fp, cs_fp]
-sup_tot = [n_sup, n_sup]
-bars2 = ax2.bar(labels, fp, color=[BASE, GATE], width=0.55,
-                edgecolor="white", linewidth=0.6)
-for b, f, t in zip(bars2, fp, sup_tot):
-    ax2.text(b.get_x() + b.get_width() / 2, 0.06, f"{f}/{t}",
-             ha="center", fontsize=8.5, color=INK, weight="bold")
-ax2.set_ylabel("false blocks / judged supported")
-ax2.set_ylim(0, 1.0)
-ax2.set_title("(b) What each gate costs", loc="left")
-fig.tight_layout(pad=0.4)
-fig.savefig(OUT / "fig_ablation.pdf")
-fig.savefig(OUT / "fig_ablation.png")
-print(f"fig1: CI {sg_catch}/{n_unsup}, CS {cs_catch}/{cs_judged} "
-      f"(trivial {cs_trivial}, substantive {cs_subst}); "
-      f"false blocks CS {cs_fp}/{n_sup} JUDGED supported")
-
-# ---------------------------------------------------------------- figure 2
-def rate(runs, profile, arm, traps_only=True):
+def unsup_rate(runs, profile, arm):
     k = n = 0
     for run in runs:
         ctx = run.get("experiment_context", {})
         if ctx.get("pressure_profile_id") != profile or ctx.get("variant") != arm:
             continue
-        task = run.get("task_id", "")
-        is_trap = any(t in task for t in ("stale", "legacy", "lost"))
-        if traps_only and not is_trap:
+        if not any(t in run.get("task_id", "") for t in ("stale", "legacy", "lost")):
             continue
         n += 1
-        k += bool(run.get("interaction_metrics", {})
-                  .get("accepted_oracle_unsupported_finish"))
+        k += bool(run.get("interaction_metrics", {}).get("accepted_oracle_unsupported_finish"))
     return k, n
 
-grad = load("final-matrix") + load("pressure-a") + load("pressure-b")
-regimes = [("full_history", "intact"), ("lossy_low", "lossy\nlow"),
-           ("lossy_medium", "lossy\nmed"), ("lossy_high", "lossy\nhigh")]
-ks, ns = [], []
-for prof, _ in regimes:
-    k, n = rate(grad, prof, "memory_baseline")
-    ks.append(k); ns.append(n)
 
-fig, (axA, axB) = plt.subplots(1, 2, figsize=(5.5, 2.2),
-                               gridspec_kw={"width_ratios": [1.25, 1]})
+# ============================================================ Figure 2
+grad = load("final-matrix") + load("pressure-a") + load("pressure-b")
+regimes = [("full_history", "intact"), ("lossy_low", "low"),
+           ("lossy_medium", "medium"), ("lossy_high", "high")]
+ks, ns = zip(*[unsup_rate(grad, prof, "memory_baseline") for prof, _ in regimes])
+
+fig, (axA, axB) = plt.subplots(1, 2, figsize=(5.5, 2.15),
+                               gridspec_kw={"wspace": 0.45})
+
 xs = np.arange(len(regimes))
-rates = [k / n if n else 0 for k, n in zip(ks, ns)]
-los = [wilson(k, n)[0] for k, n in zip(ks, ns)]
-his = [wilson(k, n)[1] for k, n in zip(ks, ns)]
-axA.errorbar(xs, rates, yerr=[np.array(rates) - los, np.array(his) - np.array(rates)],
-             fmt="o-", color=INK, ecolor="#9AA5AB", elinewidth=1, capsize=2.5,
-             markersize=5, zorder=3)
-for x, k, n in zip(xs, ks, ns):
-    axA.annotate(f"{k}/{n}", (x, k / n), textcoords="offset points",
-                 xytext=(0, 9), ha="center", fontsize=7.5, color=INK)
+rates = np.array([k / n for k, n in zip(ks, ns)])
+los = np.array([wilson(k, n)[0] for k, n in zip(ks, ns)])
+his = np.array([wilson(k, n)[1] for k, n in zip(ks, ns)])
+axA.errorbar(xs, rates, yerr=[rates - los, his - rates], fmt="o-", color=INK,
+             ecolor="#AEBBC1", elinewidth=1.1, capsize=3, linewidth=1.4,
+             markersize=5, markerfacecolor="white", markeredgewidth=1.3, zorder=3)
+for x, k, n, hi in zip(xs, ks, ns, his):
+    axA.annotate(f"{k}/{n}", (x, hi), textcoords="offset points", xytext=(0, 4),
+                 ha="center", fontsize=7, color="#55666E")
 axA.set_xticks(xs); axA.set_xticklabels([l for _, l in regimes])
+axA.set_xlabel("history-truncation severity")
 axA.set_ylabel("unsupported completion rate")
-axA.set_ylim(-0.02, 0.75)
-axA.set_title("(a) Truncation: no increase detected", loc="left")
+axA.set_ylim(-0.015, 0.38); axA.set_xlim(-0.45, 3.45)
+axA.set_yticks([0.0, 0.1, 0.2, 0.3])
+axA.set_title("(a) No increase detected", loc="left", pad=5)
 
 res = load("substrate-resume") + load("e5-observe")
-
-# resume regime, provenance cells: OUTCOME COMPOSITION (not the
-# acceptance endpoint, which a blocking arm suppresses by construction)
-arms = [("memory_baseline", "baseline"), ("observe_only", "observe\nonly"),
+arms = [("memory_baseline", "baseline"), ("observe_only", "observe-only"),
         ("verification_only", "Countersign")]
 acc, blk, clean, lbls = [], [], [], []
 for arm, lab in arms:
@@ -199,66 +103,84 @@ for arm, lab in arms:
                       if x["support_label"] == "unsupported")
         if m.get("accepted_oracle_unsupported_finish"):
             a += 1
-        elif n_unsup > 0:
-            b += 1          # unsupported proposal made, but blocked
+        elif n_unsup:
+            b += 1
         else:
-            c += 1          # no unsupported proposal at all
+            c += 1
     acc.append(a); blk.append(b); clean.append(c); lbls.append(lab)
+acc, blk, clean = map(np.array, (acc, blk, clean))
 
-x = np.arange(3)
-axB.bar(x, acc, color=GATE, width=0.6, edgecolor="white", linewidth=0.6,
+x = np.arange(3); W = 0.56
+axB.bar(x, acc, W, color=GATE, edgecolor="white", linewidth=1.5, zorder=3,
         label="accepted unsupported")
-axB.bar(x, blk, bottom=acc, color="#F4C7B8", width=0.6, edgecolor="white",
-        linewidth=0.6, label="proposed, blocked, recovered")
-axB.bar(x, clean, bottom=np.array(acc) + np.array(blk), color="#DCE3E6",
-        width=0.6, edgecolor="white", linewidth=0.6, label="no unsupported proposal")
+axB.bar(x, blk, W, bottom=acc, color=BLOCKED, edgecolor="white", linewidth=1.5,
+        zorder=3, label="blocked, then recovered")
+axB.bar(x, clean, W, bottom=acc + blk, color=NEUTRAL, edgecolor="white",
+        linewidth=1.5, zorder=3, label="no unsupported proposal")
 for xi, (a, b) in enumerate(zip(acc, blk)):
-    if a: axB.text(xi, a/2, str(a), ha="center", va="center", fontsize=8, color="white", weight="bold")
-    if b: axB.text(xi, a + b/2, str(b), ha="center", va="center", fontsize=8, color=INK, weight="bold")
-axB.set_xticks(x); axB.set_xticklabels(lbls)
+    if a:
+        axB.text(xi, a / 2, str(a), ha="center", va="center", fontsize=8,
+                 color="white", weight="bold", zorder=4)
+    if b:
+        axB.text(xi, a + b / 2, str(b), ha="center", va="center", fontsize=8,
+                 color=INK, weight="bold", zorder=4)
+axB.set_xticks(x); axB.set_xticklabels(lbls, fontsize=7.5)
 axB.set_ylabel("episodes (of 10)")
-axB.set_ylim(0, 10.5)
-axB.legend(loc="lower right", fontsize=6)
-axB.set_title("(b) Resume-summary: outcome composition", loc="left")
-fig.tight_layout(pad=0.4)
-fig.savefig(OUT / "fig_regimes.pdf")
-fig.savefig(OUT / "fig_regimes.png")
-print("fig2 lossy:", list(zip(ks, ns)), "| accepted:", acc, "blocked:", blk, "clean:", clean)
+axB.set_ylim(0, 10.3); axB.set_xlim(-0.6, 2.6); axB.set_yticks([0, 5, 10])
+axB.set_title("(b) Resume-summary outcomes", loc="left", pad=5)
+handles, labels = axB.get_legend_handles_labels()
+fig.legend(handles, labels, loc="lower center", bbox_to_anchor=(0.5, -0.10),
+           ncol=3, handlelength=1.0, handleheight=0.85, columnspacing=1.4,
+           borderpad=0.0)
+fig.savefig(OUT / "fig_regimes.pdf"); fig.savefig(OUT / "fig_regimes.png")
+print("fig_regimes:", list(zip(ks, ns)), "| acc", list(acc), "blk", list(blk), "clean", list(clean))
 
-# ---------------------------------------------------------------- figure 0
-# System diagram: the supervision loop. Vector, reproducible, no API key.
-from matplotlib.patches import FancyBboxPatch, FancyArrowPatch
+# ============================================================ Figure 1 (loop)
+fig, ax = plt.subplots(figsize=(5.5, 1.52))
+ax.set_xlim(0, 10.4); ax.set_ylim(0.42, 3.00); ax.axis("off")
 
-fig, ax = plt.subplots(figsize=(5.2, 1.55))
-ax.set_xlim(0, 10); ax.set_ylim(0, 3.1); ax.axis("off")
 
-def box(x, y, w, h, label, fc, ec, fs=8.5, bold=True):
-    ax.add_patch(FancyBboxPatch((x, y), w, h, boxstyle="round,pad=0.06,rounding_size=0.12",
-                                facecolor=fc, edgecolor=ec, linewidth=1.1))
-    ax.text(x + w/2, y + h/2, label, ha="center", va="center", fontsize=fs,
-            color=INK, weight="bold" if bold else "normal", linespacing=1.25)
+def box(x, y, w, h, label, fc, ec, fs=8.5):
+    ax.add_patch(FancyBboxPatch((x, y), w, h, boxstyle="round,pad=0.05,rounding_size=0.10",
+                                facecolor=fc, edgecolor=ec, linewidth=1.1, zorder=3))
+    ax.text(x + w / 2, y + h / 2, label, ha="center", va="center", fontsize=fs,
+            color=INK, weight="bold", linespacing=1.2, zorder=4)
 
-box(0.15, 1.05, 2.25, 1.0, "worker\nagent", "#EAF0F2", INK)
-box(3.25, 1.05, 2.5, 1.0, "Countersign\nsupervisor", "#FBE3D9", GATE)
-box(6.75, 1.75, 3.0, 0.75, "accept  (terminate)", "#E4EFEA", MID, fs=8)
-box(6.75, 0.55, 3.0, 0.75, "block  +  guidance", "#FBE3D9", GATE, fs=8)
 
-def arrow(x1, y1, x2, y2, style="-|>", rad=0.0, color=INK, lw=1.1, ls="-"):
-    ax.add_patch(FancyArrowPatch((x1, y1), (x2, y2), arrowstyle=style, color=color,
-                                 linewidth=lw, linestyle=ls,
-                                 connectionstyle=f"arc3,rad={rad}", mutation_scale=9))
+def arrow(x1, y1, x2, y2, color=INK, ls="-", lw=1.1, rad=0.0):
+    ax.add_patch(FancyArrowPatch((x1, y1), (x2, y2), arrowstyle="-|>", color=color,
+                                 linewidth=lw, linestyle=ls, mutation_scale=8,
+                                 shrinkA=0, shrinkB=0, zorder=2,
+                                 connectionstyle=f"arc3,rad={rad}"))
 
-arrow(2.45, 1.55, 3.2, 1.55)
-ax.text(2.82, 1.72, "finish claim\n+ cited events", ha="center", va="bottom", fontsize=6.2, color="#55666E")
-arrow(5.8, 1.75, 6.7, 2.10)
-arrow(5.8, 1.35, 6.7, 0.95, color=GATE)
-arrow(6.9, 0.5, 1.3, 0.5, rad=0.0, color=GATE, ls=(0, (3, 2)))
-ax.text(4.1, 0.28, "gather fresh evidence, re-propose", ha="center", fontsize=6.2, color=GATE)
-ax.text(3.0, 2.42, "execution trace (evidence ledger)", ha="center", fontsize=6.4,
-        color="#55666E", style="italic")
-arrow(2.3, 2.25, 4.4, 2.25, style="-", color="#B7C3C8", lw=0.9)
-ax.text(8.25, 2.92, "hidden evaluator runs once, after termination",
-        ha="center", fontsize=6.2, color="#8A98A0", style="italic")
-fig.tight_layout(pad=0.15)
+
+# upper band: the loop itself
+box(0.10, 1.42, 2.15, 0.86, "worker\nagent", "#EDF1F3", INK)
+box(3.75, 1.42, 2.45, 0.86, "Countersign\nsupervisor", "#FBE7DE", GATE)
+box(7.55, 1.98, 2.75, 0.56, "accept", "#E6F1EE", MID, fs=8)
+box(7.55, 1.16, 2.75, 0.56, "block + guidance", "#FBE7DE", GATE, fs=8)
+
+# worker -> supervisor, label given its own clear band above the arrow
+arrow(2.32, 1.72, 3.70, 1.72)
+ax.text(3.01, 1.86, "claim +\ncited events", ha="center", va="bottom",
+        fontsize=6.1, color="#55666E", linespacing=1.1)
+
+# supervisor -> outcomes
+arrow(6.26, 1.95, 7.50, 2.22)
+arrow(6.26, 1.66, 7.50, 1.44, color=GATE)
+
+# feedback path: routed BELOW every box, never through one
+ax.plot([7.55, 7.55], [1.14, 0.92], color=GATE, linewidth=1.1,
+        linestyle=(0, (3.2, 2.2)), zorder=2)
+ax.plot([7.55, 1.18], [0.92, 0.92], color=GATE, linewidth=1.1,
+        linestyle=(0, (3.2, 2.2)), zorder=2)
+arrow(1.18, 0.92, 1.18, 1.40, color=GATE, ls=(0, (3.2, 2.2)))
+ax.text(4.36, 0.62, "gather fresh evidence, re-propose", ha="center",
+        fontsize=6.3, color=GATE)
+
+# the hidden evaluator sits outside the loop, and is labelled as such
+ax.plot([0.10, 10.30], [2.70, 2.70], color="#D6DEE1", linewidth=0.7, zorder=0)
+ax.text(5.20, 2.78, "hidden evaluator: runs once after termination, never consulted by the supervisor",
+        ha="center", fontsize=6.2, color="#93A1A8", style="italic")
 fig.savefig(OUT / "fig_loop.pdf"); fig.savefig(OUT / "fig_loop.png")
-print("fig0: supervision loop written")
+print("fig_loop: written")
