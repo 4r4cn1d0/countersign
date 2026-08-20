@@ -62,6 +62,106 @@ def unsup_rate(runs, profile, arm):
     return k, n
 
 
+# ============================================================ Figure: ablation
+# Single panel. The old (b) panel was a bar chart of two zeros — no marks,
+# a 0-1 axis for a value of 0 — so the false-block fact is stated as an
+# annotation instead. The informative view is the DISPOSITION of the whole
+# population of unsupported claims, including what each gate MISSES.
+TEST_TOOLS = {"run_tests", "run_full_tests", "run_targeted_tests"}
+
+
+def simple_gate_blocks(events, prop_seq):
+    last_edit, last_green = 0, None
+    for e in events:
+        seq = e.get("sequence_number", 0)
+        if seq >= prop_seq:
+            continue
+        if e.get("tool_name") in {"write_file", "apply_patch"} and e.get("status") == "success":
+            last_edit = max(last_edit, seq)
+        if e.get("tool_name") in TEST_TOOLS and e.get("status") == "success":
+            last_green = max(last_green or 0, seq)
+    return True if last_green is None else last_green < last_edit
+
+
+ABL = ["final-matrix", "fm-negctrl-qwen", "pressure-a", "pressure-b"]
+sg_catch = cs_trivial = cs_subst = unjudged = n_unsup = 0
+sup_judged = sup_fp = 0
+for base in ABL:
+    for run in load(base):
+        events = run.get("trace_events", [])
+        scores = run.get("interaction_metrics", {}).get("oracle_proposal_scores", [])
+        oracle = {x["proposal_event_id"]: x["support_label"] for x in scores}
+        reasons = {x["proposal_event_id"]: tuple(x.get("reasons", ())) for x in scores}
+        raw = {}
+        for e in events:
+            if e.get("event_type") == "verification_decision":
+                cid, d = e.get("claim_event_id"), e.get("verifier_decision", e.get("decision"))
+                if cid and d in ("allow", "block"):
+                    raw[cid] = d
+        for e in events:
+            if e.get("event_type") != "completion_claim" or e.get("tool_name") != "finish":
+                continue
+            pid, lab = e["event_id"], oracle.get(e["event_id"])
+            if lab == "unsupported":
+                n_unsup += 1
+                sg_catch += simple_gate_blocks(events, e.get("sequence_number", 0))
+                if pid not in raw:
+                    unjudged += 1
+                elif raw[pid] == "block":
+                    if "no source_event_ids cited" in reasons.get(pid, ()):
+                        cs_trivial += 1
+                    else:
+                        cs_subst += 1
+            elif lab == "supported" and pid in raw:
+                sup_judged += 1
+                sup_fp += raw[pid] == "block"
+
+fig, ax = plt.subplots(figsize=(5.5, 1.75))
+rows = ["CI gate\n(fresh test)", "Countersign\n(evidence audit)"]
+y = np.arange(2)[::-1]
+H = 0.42
+# CI gate: caught / missed
+ax.barh(y[0], sg_catch, H, color=INK, edgecolor="white", linewidth=1.4, zorder=3)
+ax.barh(y[0], n_unsup - sg_catch, H, left=sg_catch, color=NEUTRAL,
+        edgecolor="white", linewidth=1.4, zorder=3)
+# Countersign: substantive / trivial / never judged
+ax.barh(y[1], cs_subst, H, color=GATE, edgecolor="white", linewidth=1.4, zorder=3,
+        label="caught: substantive (staleness / provenance)")
+ax.barh(y[1], cs_trivial, H, left=cs_subst, color=BLOCKED, edgecolor="white",
+        linewidth=1.4, zorder=3, label="caught: claim cited nothing at all")
+ax.barh(y[1], unjudged, H, left=cs_subst + cs_trivial, color=NEUTRAL,
+        edgecolor="white", linewidth=1.4, zorder=3, label="missed / never judged")
+ax.barh(y[0], 0, H, color=INK, label="caught by fresh-test rule")
+
+for xv, yv, txt, col in [(sg_catch / 2, y[0], str(sg_catch), "white"),
+                         (cs_subst / 2, y[1], str(cs_subst), "white"),
+                         (cs_subst + cs_trivial / 2, y[1], str(cs_trivial), INK)]:
+    if float(txt) > 0:
+        ax.text(xv, yv, txt, ha="center", va="center", fontsize=8.5,
+                color=col, weight="bold", zorder=4)
+ax.text(sg_catch + (n_unsup - sg_catch) / 2, y[0], f"{n_unsup - sg_catch} missed",
+        ha="center", va="center", fontsize=7.5, color="#55666E", zorder=4)
+ax.text(cs_subst + cs_trivial + unjudged / 2, y[1], f"{unjudged}",
+        ha="center", va="center", fontsize=7.5, color="#55666E", zorder=4)
+
+ax.set_yticks(y); ax.set_yticklabels(rows, fontsize=8)
+ax.set_xlim(0, n_unsup + 0.3)
+ax.set_xlabel(f"unsupported completion claims (n={n_unsup})", labelpad=2)
+ax.set_xticks([0, 5, 10, 15])
+ax.spines["left"].set_visible(False); ax.tick_params(axis="y", length=0)
+ax.grid(axis="y", alpha=0)
+ax.set_title("How each gate disposes of unsupported claims", loc="left", pad=22)
+ax.text(0, 1.05, f"neither gate blocked any of the {sup_judged} supported claims it judged",
+        transform=ax.transAxes, fontsize=7, color="#55666E", style="italic")
+h, l = ax.get_legend_handles_labels()
+order = [3, 0, 1, 2]
+fig.legend([h[i] for i in order], [l[i] for i in order], loc="lower center",
+           bbox_to_anchor=(0.5, -0.40), ncol=2, handlelength=1.0,
+           handleheight=0.85, columnspacing=1.4, borderpad=0.0)
+fig.savefig(OUT / "fig_ablation.pdf"); fig.savefig(OUT / "fig_ablation.png")
+print(f"fig_ablation: CI {sg_catch}/{n_unsup} | CS subst {cs_subst} trivial {cs_trivial} "
+      f"unjudged {unjudged} | false blocks {sup_fp}/{sup_judged}")
+
 # ============================================================ Figure 2
 grad = load("final-matrix") + load("pressure-a") + load("pressure-b")
 regimes = [("full_history", "intact"), ("lossy_low", "low"),
