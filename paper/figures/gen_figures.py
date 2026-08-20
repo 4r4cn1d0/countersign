@@ -69,12 +69,14 @@ def simple_gate_blocks(events, prop_seq):
 # ---------------------------------------------------------------- figure 1
 ABLATION_PHASES = ["final-matrix", "fm-negctrl-qwen", "pressure-a", "pressure-b"]
 cs_catch = cs_judged = sg_catch = n_unsup = 0
+cs_trivial = cs_subst = 0
 sg_fp = cs_fp = n_sup = 0
 for base in ABLATION_PHASES:
     for run in load(base):
         events = run.get("trace_events", [])
-        oracle = {s["proposal_event_id"]: s["support_label"]
-                  for s in run.get("interaction_metrics", {}).get("oracle_proposal_scores", [])}
+        scores = run.get("interaction_metrics", {}).get("oracle_proposal_scores", [])
+        oracle = {s["proposal_event_id"]: s["support_label"] for s in scores}
+        s_lbl_reasons = {s["proposal_event_id"]: tuple(s.get("reasons", [])) for s in scores}
         raw = {}
         for e in events:
             if e.get("event_type") == "verification_decision":
@@ -91,21 +93,32 @@ for base in ABLATION_PHASES:
                 sg_catch += sg
                 if pid in raw:
                     cs_judged += 1
-                    cs_catch += raw[pid] == "block"
+                    if raw[pid] == "block":
+                        cs_catch += 1
+                        if "no source_event_ids cited" in s_lbl_reasons.get(pid, ()):
+                            cs_trivial += 1
+                        else:
+                            cs_subst += 1
             elif lab == "supported":
-                n_sup += 1
                 sg_fp += sg
-                cs_fp += raw.get(pid) == "block"
+                if pid in raw:            # only judged proposals can be blocked
+                    n_sup += 1
+                    cs_fp += raw[pid] == "block"
 
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(5.5, 2.1))
 labels = ["CI gate\n(fresh test)", "Countersign\n(evidence audit)"]
 caught = [sg_catch, cs_catch]
 totals = [n_unsup, cs_judged]
-bars = ax1.bar(labels, caught, color=[BASE, GATE], width=0.55,
-               edgecolor="white", linewidth=0.6)
-for b, c, t in zip(bars, caught, totals):
-    ax1.text(b.get_x() + b.get_width() / 2, c + 0.35, f"{c}/{t}",
-             ha="center", fontsize=8.5, color=INK, weight="bold")
+ax1.bar(labels[0], sg_catch, color=BASE, width=0.55, edgecolor="white", linewidth=0.6)
+ax1.bar(labels[1], cs_subst, color=GATE, width=0.55, edgecolor="white", linewidth=0.6,
+        label="substantive (staleness/provenance)")
+ax1.bar(labels[1], cs_trivial, bottom=cs_subst, color="#F4C7B8", width=0.55,
+        edgecolor="white", linewidth=0.6, label="trivial (no citation at all)")
+ax1.text(0, sg_catch + 0.35, f"{sg_catch}/{n_unsup}", ha="center",
+         fontsize=8.5, color=INK, weight="bold")
+ax1.text(1, cs_catch + 0.35, f"{cs_catch}/{cs_judged}", ha="center",
+         fontsize=8.5, color=INK, weight="bold")
+ax1.legend(loc="upper left", fontsize=6.5)
 ax1.set_ylabel("unsupported claims caught")
 ax1.set_ylim(0, max(totals) + 2.5)
 ax1.set_title("(a) What each gate catches", loc="left")
@@ -117,14 +130,15 @@ bars2 = ax2.bar(labels, fp, color=[BASE, GATE], width=0.55,
 for b, f, t in zip(bars2, fp, sup_tot):
     ax2.text(b.get_x() + b.get_width() / 2, 0.06, f"{f}/{t}",
              ha="center", fontsize=8.5, color=INK, weight="bold")
-ax2.set_ylabel("false blocks on supported work")
+ax2.set_ylabel("false blocks / judged supported")
 ax2.set_ylim(0, 1.0)
 ax2.set_title("(b) What each gate costs", loc="left")
 fig.tight_layout(pad=0.4)
 fig.savefig(OUT / "fig_ablation.pdf")
 fig.savefig(OUT / "fig_ablation.png")
-print(f"fig1: CI {sg_catch}/{n_unsup}, CS {cs_catch}/{cs_judged}; "
-      f"FP CI {sg_fp} CS {cs_fp} of {n_sup} supported")
+print(f"fig1: CI {sg_catch}/{n_unsup}, CS {cs_catch}/{cs_judged} "
+      f"(trivial {cs_trivial}, substantive {cs_subst}); "
+      f"false blocks CS {cs_fp}/{n_sup} JUDGED supported")
 
 # ---------------------------------------------------------------- figure 2
 def rate(runs, profile, arm, traps_only=True):
@@ -165,7 +179,7 @@ for x, k, n in zip(xs, ks, ns):
 axA.set_xticks(xs); axA.set_xticklabels([l for _, l in regimes])
 axA.set_ylabel("unsupported completion rate")
 axA.set_ylim(-0.02, 0.75)
-axA.set_title("(a) Truncating history: no effect", loc="left")
+axA.set_title("(a) Truncation: no increase detected", loc="left")
 
 # resume regime, provenance cells: the three arms
 res = load("substrate-resume") + load("e5-observe")

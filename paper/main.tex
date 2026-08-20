@@ -53,8 +53,10 @@ question from whether the implementation is \emph{correct}, which a
 hidden evaluator answers once after termination. In a preregistered,
 frozen campaign of 490 real-model runs over ten held-out fixtures,
 Countersign issued 17 blocks; all 17 landed on proposals an independent
-oracle also labelled unsupported, and none on any of the 314 supported
-proposals. A counterfactual replay shows a conventional
+oracle also labelled unsupported (precision $1.00$, 95\% CI
+$[0.82,1.0]$), and none on any of the 204 supported proposals a
+verifier judged---though 13 of the 17 are the trivial case of a claim
+citing no evidence at all. A counterfactual replay shows a conventional
 continuous-integration gate catches 2 of 15 unsupported proposals where
 Countersign catches 11 of 11 it judged. Our negative results are
 equally informative: truncating the worker's visible history did not
@@ -187,15 +189,22 @@ All numbers are computed from audited run manifests; the worker is
 real-model runs yielding 341 oracle-judged finish proposals, of which
 27 are labelled unsupported.
 
-\textbf{Blocks are precise.} Across every arm in which the verifier
-ran, Countersign issued 17 blocks. All 17 landed on proposals the
-independent oracle also labelled unsupported; \textbf{none} landed on
-any of the 314 supported proposals (block precision $1.00$ against the
-oracle). On the four negative controls specifically---where every
-finish is legitimate by construction---18 proposals produced 2 raw
-would-blocks, and the oracle independently labelled both of those
-proposals unsupported, so the measured false-block count on
-oracle-supported work is zero.
+\textbf{Blocks are precise.} Across every arm in which the verifier ran,
+Countersign issued 17 blocks. All 17 landed on proposals the
+independent oracle also labelled unsupported and none on any of the
+204 supported proposals a verifier judged: precision $1.00$ (95\% CI
+$[0.82,1.0]$), false-block rate $0/204$ (95\% CI $[0,0.018]$), recall
+$17/18=0.94$ (95\% CI $[0.74,0.99]$). Two caveats bound this result.
+First, the denominator counts only judged proposals: a further 110
+supported proposals occurred in arms with no verifier and could not
+have been blocked, so they are excluded rather than counted as
+successes. Second, and more important, \textbf{13 of the 17 blocks are
+the trivial case}---a completion claim citing no evidence whatsoever,
+which any rule detects and on which the verifier and the oracle cannot
+meaningfully disagree. Only 4 blocks required substantive reasoning
+about staleness or provenance. The precision figure should therefore be
+read as ``the gate does not misfire,'' not as ``the gate is
+discriminating hard cases.''
 
 \begin{figure}[t]
 \centering
@@ -203,11 +212,11 @@ oracle-supported work is zero.
 \caption{Countersign versus the conventional CI rule ``require a
 successful test run after the last edit,'' replayed counterfactually
 over every stored proposal. (a)~The CI rule catches 2 of 15
-oracle-unsupported claims; Countersign catches all 11 it judged. The 10
-it catches alone are cases where the tests \emph{were} fresh and the
-deficiency was citation or provenance---which test-freshness gating
-cannot observe. (b)~Neither gate blocked any of the 256 supported
-proposals: the difference is blindness, not conservatism.}
+oracle-unsupported claims; Countersign catches all 11 it judged, but
+only 4 of those require substantive reasoning---the other 7 are claims
+citing no evidence at all, which any rule detects. (b)~Neither gate
+blocked any of the 161 supported proposals both judged: the difference
+is blindness, not conservatism.}
 \label{fig:ablation}
 \end{figure}
 
@@ -215,16 +224,19 @@ proposals: the difference is blindness, not conservatism.}
 replay every stored proposal against the standard-practice rule
 ``require a successful test run after the last edit,'' a strict subset
 of Countersign's temporal check (Figure~\ref{fig:ablation}).
-\textbf{Ten of the fifteen unsupported proposals are caught only by
+\textbf{Nine of the fifteen unsupported proposals are caught only by
 the evidence rules}, because in those cases the tests were fresh and
-the deficiency lay in citation or provenance.
+the deficiency lay in citation or provenance. Neither gate blocked any
+of the 161 supported proposals both judged.
 
 \begin{figure}[t]
 \centering
 \includegraphics[width=0.72\linewidth]{figures/fig_regimes.pdf}
 \caption{Memory degradation does not act uniformly. (a)~Graded
-truncation of the worker's visible history leaves unsupported
-completion flat (Wilson 95\% intervals; counts annotated).
+truncation of the worker's visible history produces no detectable
+increase in unsupported completion; note the width of the Wilson 95\%
+intervals---this is a non-detection at modest power, not a
+demonstration of invariance.
 (b)~Replacing history with a resume summary does produce the effect,
 and it decomposes: the evidence-citation prompt accounts for 2 of the 5
 cases and the gate for the remaining 3. Small $n$; we report the
@@ -232,12 +244,14 @@ decomposition, not a significance claim.}
 \label{fig:regimes}
 \end{figure}
 
-\textbf{Truncating memory does not induce false claims.} Under the
-graded lossy regime, baseline unsupported completion on trap fixtures
-was flat across severity (Figure~\ref{fig:regimes}a). The preregistered
-null branch applies: this worker's re-verification habits survive
-history truncation, and we report the finding as robustness rather
-than reframing it.
+\textbf{Truncating memory does not \emph{detectably} induce false
+claims.} Under the graded lossy regime, baseline unsupported completion
+on trap fixtures did not increase with severity
+(Figure~\ref{fig:regimes}a). We state this as a non-detection rather
+than a demonstration of invariance: at 15 runs per cell the Wilson
+intervals span roughly 0.01--0.30, so effects smaller than about 30
+percentage points are not resolvable here. The preregistered null
+branch applies, with that power caveat attached.
 
 \textbf{The effect is regime-specific, and decomposes.} Replacing
 history with a resume summary---rather than truncating it---does
@@ -293,10 +307,15 @@ and the negative controls price the direction a self-built evaluation
 is least motivated to measure---but partial offset is not elimination.
 Second, one worker model on ten small fixture repositories establishes
 nothing about prevalence in production software, and our own null makes
-that gap sharper. Third, no result reaches $p<.05$: we report
-decompositions and intervals, not significance. Fourth, the degradation
-profiles are our own transforms, not a deployed scaffold's condenser.
-Fifth, oracle-label validation covers a single-rater sample.
+that gap sharper. Third, the online verifier and the post-hoc oracle share no code but do
+read the same trace, and the majority of agreements concern claims
+citing no evidence at all---a case on which independence is close to
+vacuous; the four substantive catches are the informative ones. Fourth,
+no result reaches $p<.05$ and the null results are non-detections at
+modest power, not demonstrations of invariance: we report
+decompositions and intervals, never significance. Fifth, the degradation profiles are our own transforms, not a deployed
+scaffold's condenser. Sixth, oracle-label validation covers a
+single-rater sample.
 
 \section{Related Work}
 
