@@ -201,6 +201,31 @@ def exact_mcnemar_p(b: int, c: int) -> float | None:
     return round(min(1.0, 2 * tail), 4)
 
 
+def beta_direction_posterior(b: int, c: int) -> float | None:
+    """P(theta > 0.5) under a Beta(1+b, 1+c) posterior on the discordant
+    direction (uniform prior), the Bayesian sensitivity reading of the
+    same counts exact_mcnemar_p tests. Post-hoc analysis; see the
+    2026-08-20 deviation-ledger entry."""
+
+    from math import comb
+
+    n = b + c
+    if n == 0:
+        return None
+    # For integer a=1+b, bb=1+c: P(Beta(a,bb) > 1/2) = P(Bin(a+bb-1, 1/2) <= a-1)
+    a, bb = 1 + b, 1 + c
+    m = a + bb - 1
+    return round(sum(comb(m, k) for k in range(0, a)) / (2 ** m), 4)
+
+
+def beta_perfect_count_interval(n: int) -> tuple[float, float]:
+    """Equal-tailed 95% credible interval for a rate observed n/n under a
+    uniform prior (posterior Beta(n+1, 1), CDF x**(n+1))."""
+
+    a = n + 1
+    return (round(0.025 ** (1 / a), 4), round(0.975 ** (1 / a), 4))
+
+
 def negative_control_false_blocks(
     task_rows: list[dict],
     negative_control_families: dict[str, str],

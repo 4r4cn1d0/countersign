@@ -168,8 +168,11 @@ regimes = [("full_history", "intact"), ("lossy_low", "low"),
            ("lossy_medium", "medium"), ("lossy_high", "high")]
 ks, ns = zip(*[unsup_rate(grad, prof, "memory_baseline") for prof, _ in regimes])
 
-fig, (axA, axB) = plt.subplots(1, 2, figsize=(5.5, 2.15),
-                               gridspec_kw={"wspace": 0.45})
+# Compact native size: the paper includes this at natural scale, so the
+# canvas must be column-fraction sized for fonts to print at true size.
+fig, (axA, axB) = plt.subplots(1, 2, figsize=(4.2, 1.42),
+                               gridspec_kw={"wspace": 0.52,
+                                            "width_ratios": [1.0, 1.3]})
 
 xs = np.arange(len(regimes))
 rates = np.array([k / n for k, n in zip(ks, ns)])
@@ -181,15 +184,17 @@ axA.errorbar(xs, rates, yerr=[rates - los, his - rates], fmt="o-", color=INK,
 for x, k, n, hi in zip(xs, ks, ns, his):
     axA.annotate(f"{k}/{n}", (x, hi), textcoords="offset points", xytext=(0, 4),
                  ha="center", fontsize=7, color="#55666E")
-axA.set_xticks(xs); axA.set_xticklabels([l for _, l in regimes])
-axA.set_xlabel("history-truncation severity")
+axA.set_xticks(xs)
+# Axis meaning is carried by the caption ("graded truncation ... severity");
+# an xlabel here collides with the figure-level legend under tight bbox.
+axA.set_xticklabels([l for _, l in regimes], fontsize=6.8)
 axA.set_ylabel("unsupported completion rate")
 axA.set_ylim(-0.015, 0.38); axA.set_xlim(-0.45, 3.45)
 axA.set_yticks([0.0, 0.1, 0.2, 0.3])
 axA.set_title("(a) No increase detected", loc="left", pad=5)
 
 res = load("substrate-resume") + load("e5-observe")
-arms = [("memory_baseline", "baseline"), ("observe_only", "observe-only"),
+arms = [("memory_baseline", "baseline"), ("observe_only", "observe\nonly"),
         ("verification_only", "Countersign")]
 acc, blk, clean, lbls = [], [], [], []
 for arm, lab in arms:
@@ -224,23 +229,24 @@ for xi, (a, b) in enumerate(zip(acc, blk)):
     if b:
         axB.text(xi, a + b / 2, str(b), ha="center", va="center", fontsize=8,
                  color=INK, weight="bold", zorder=4)
-axB.set_xticks(x); axB.set_xticklabels(lbls, fontsize=7.5)
+axB.set_xticks(x); axB.set_xticklabels(lbls, fontsize=6.5)
 axB.set_ylabel("episodes (of 10)")
 axB.set_ylim(0, 10.3); axB.set_xlim(-0.6, 2.6); axB.set_yticks([0, 5, 10])
 axB.set_title("(b) Resume-summary outcomes", loc="left", pad=5)
 handles, labels = axB.get_legend_handles_labels()
-fig.legend(handles, labels, loc="lower center", bbox_to_anchor=(0.5, -0.10),
+fig.legend(handles, labels, loc="lower center", bbox_to_anchor=(0.5, -0.17),
            ncol=3, handlelength=1.0, handleheight=0.85, columnspacing=1.4,
            borderpad=0.0)
 fig.savefig(OUT / "fig_regimes.pdf"); fig.savefig(OUT / "fig_regimes.png")
 print("fig_regimes:", list(zip(ks, ns)), "| acc", list(acc), "blk", list(blk), "clean", list(clean))
 
 # ============================================================ Figure 1 (loop)
-fig, ax = plt.subplots(figsize=(5.5, 1.52))
+# Compact native size (included at natural scale in the paper).
+fig, ax = plt.subplots(figsize=(3.9, 1.20))
 ax.set_xlim(0, 10.4); ax.set_ylim(0.42, 3.00); ax.axis("off")
 
 
-def box(x, y, w, h, label, fc, ec, fs=8.5):
+def box(x, y, w, h, label, fc, ec, fs=7.2):
     ax.add_patch(FancyBboxPatch((x, y), w, h, boxstyle="round,pad=0.05,rounding_size=0.10",
                                 facecolor=fc, edgecolor=ec, linewidth=1.1, zorder=3))
     ax.text(x + w / 2, y + h / 2, label, ha="center", va="center", fontsize=fs,
@@ -257,13 +263,13 @@ def arrow(x1, y1, x2, y2, color=INK, ls="-", lw=1.1, rad=0.0):
 # upper band: the loop itself
 box(0.10, 1.42, 2.15, 0.86, "worker\nagent", "#EDF1F3", INK)
 box(3.75, 1.42, 2.45, 0.86, "Countersign\nsupervisor", "#FBE7DE", GATE)
-box(7.55, 1.98, 2.75, 0.56, "accept", "#E6F1EE", MID, fs=8)
-box(7.55, 1.16, 2.75, 0.56, "block + guidance", "#FBE7DE", GATE, fs=8)
+box(7.55, 1.98, 2.75, 0.56, "accept", "#E6F1EE", MID, fs=7)
+box(7.55, 1.16, 2.75, 0.56, "block + guidance", "#FBE7DE", GATE, fs=7)
 
 # worker -> supervisor, label given its own clear band above the arrow
 arrow(2.32, 1.72, 3.70, 1.72)
 ax.text(3.01, 1.86, "claim +\ncited events", ha="center", va="bottom",
-        fontsize=6.1, color="#55666E", linespacing=1.1)
+        fontsize=6.0, color="#55666E", linespacing=1.1)
 
 # supervisor -> outcomes
 arrow(6.26, 1.95, 7.50, 2.22)
@@ -276,11 +282,11 @@ ax.plot([7.55, 1.18], [0.92, 0.92], color=GATE, linewidth=1.1,
         linestyle=(0, (3.2, 2.2)), zorder=2)
 arrow(1.18, 0.92, 1.18, 1.40, color=GATE, ls=(0, (3.2, 2.2)))
 ax.text(4.36, 0.62, "gather fresh evidence, re-propose", ha="center",
-        fontsize=6.3, color=GATE)
+        fontsize=6.0, color=GATE)
 
 # the hidden evaluator sits outside the loop, and is labelled as such
 ax.plot([0.10, 10.30], [2.70, 2.70], color="#D6DEE1", linewidth=0.7, zorder=0)
 ax.text(5.20, 2.78, "hidden evaluator: runs once after termination, never consulted by the supervisor",
-        ha="center", fontsize=6.2, color="#93A1A8", style="italic")
+        ha="center", fontsize=6.0, color="#93A1A8", style="italic")
 fig.savefig(OUT / "fig_loop.pdf"); fig.savefig(OUT / "fig_loop.png")
 print("fig_loop: written")

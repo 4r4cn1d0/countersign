@@ -317,3 +317,24 @@ distribution. Three facts that govern the expansion decision:
   direction, report replication with per-model rates and CIs and state
   plainly that no single model reaches p<.05. If models disagree,
   report the disagreement as the finding.
+
+## Post-hoc Bayesian sensitivity readings (2026-08-20)
+
+Disclosed as POST-HOC: designed and computed after all frequentist
+analyses above were predeclared, run, and reported. No new data; no new
+endpoint; uniform Beta(1,1) priors; exact conjugate posteriors (closed
+form, no sampling). Implemented as `beta_direction_posterior` /
+`beta_perfect_count_interval` in research/runner/matrix_analysis.py,
+pinned by test_bayes_sensitivity_readings_pin_paper_appendix_numbers.
+
+- Direction of the prompt effect (proposal-level b=2, c=0 discordant
+  cells, the same counts as the exact McNemar p=.50): posterior
+  Beta(3,1), P(direction beneficial) = 0.875 (7:1 posterior odds).
+- Computed but NOT claimed as gate effects (accepted-endpoint
+  suppression rule): b=3 -> 0.9375; b=5 -> 0.9844.
+- observe_only discrimination: sensitivity 3/3 posterior mean 0.80,
+  95% CrI [0.40, 0.99]; specificity 7/7 mean 0.89, CrI [0.63, 1.00];
+  campaign block precision 17/17 CrI [0.81, 1.00] (agrees with Wilson).
+- Reported in the paper only as an appendix sensitivity analysis with
+  the post-hoc label and the skeptical-prior caveat; direction and
+  uncertainty statements only, never magnitude or significance.

@@ -1452,3 +1452,29 @@ def test_supervision_decomposition_separates_prompt_from_gate():
     assert exact_mcnemar_p(0, 0) is None
     assert exact_mcnemar_p(3, 0) == 0.25
     assert exact_mcnemar_p(5, 0) == 0.0625
+
+
+def test_bayes_sensitivity_readings_pin_paper_appendix_numbers():
+    """The paper's Bayesian sensitivity appendix quotes exact conjugate
+    numbers; pin them to the closed-form implementations so the prose can
+    never drift from the computation (post-hoc analysis, disclosed in the
+    2026-08-20 deviation-ledger entry)."""
+    from research.runner.matrix_analysis import (
+        beta_direction_posterior,
+        beta_perfect_count_interval,
+    )
+
+    # Prompt contrast b=2, c=0: P(direction beneficial) = 7/8.
+    assert beta_direction_posterior(2, 0) == 0.875
+    # Gate-level and combined counts, computed but not claimed as gate
+    # effects (accepted-endpoint suppression; reported for completeness).
+    assert beta_direction_posterior(3, 0) == 0.9375
+    assert beta_direction_posterior(5, 0) == 0.9844
+    # Symmetry and refusal cases.
+    assert beta_direction_posterior(0, 0) is None
+    assert beta_direction_posterior(1, 1) == 0.5
+
+    # observe_only sensitivity 3/3, specificity 7/7, precision 17/17.
+    assert beta_perfect_count_interval(3) == (0.3976, 0.9937)
+    assert beta_perfect_count_interval(7) == (0.6306, 0.9968)
+    assert beta_perfect_count_interval(17) == (0.8147, 0.9986)
