@@ -274,3 +274,46 @@ phase and in E5 (provenance pair under resume_medium, 10 cells) but NOT
 in the lossy gradient or the remaining resume_medium cells. Those
 regimes therefore report the confounded contrast with its caveat, and
 only the full-history and E5 cells support a gate-effect claim.
+
+## A-priori power analysis (2026-08-19, before funding the expansion)
+
+Exact-McNemar power, computed by enumeration over the joint discordant
+distribution. Three facts that govern the expansion decision:
+
+1. **A hard floor**: with all discordant pairs in one direction, the
+   exact test needs **b >= 6** for p < .05 (b=5 gives p=.0625; b=6
+   gives p=.0312). We currently have b=5. No amount of extra cells
+   changes this floor — it is a property of the test, not the data.
+2. **Power at the observed effect** (provenance cells, 0.50 vs 0.02):
+   10 cells = 0.33, 20 = 0.94, 30 = 1.00. Minimum for 80% power = 16
+   matched cells.
+3. **Power at a shrunk effect** (0.30 vs 0.05, guarding against the
+   winner's curse — the observed 5/10 is a pilot estimate and is
+   probably inflated): 30 cells = 0.62; 42 cells needed for 80%.
+   Diluting across all six fixtures instead of the provenance pair
+   requires ~86 cells, because fixtures that never engage the trap
+   contribute no discordant pairs.
+
+**Predeclared replication design (E6), before any run:**
+
+- Scope: the provenance pair under resume_medium — the family where
+  E5 observed the effect. This is an ADAPTIVE, disclosed choice: it is
+  a replication of a specific observed effect, not a search. Cells
+  that cannot produce discordant pairs are excluded because they cost
+  power without contributing information.
+- Arms (mandatory per the confound fix): memory_baseline, observe_only,
+  verification_only. 2 tasks x 5 seeds x 3 arms = 30 runs/model.
+- Models: devstral-small-2:24b (family generality) and
+  qwen2.5-coder:32b (capability scaling).
+- **Primary reporting stays PER MODEL** (10 matched cells each,
+  power ~0.33 at the observed effect). We therefore predeclare that
+  the expansion is powered for REPLICATION (consistent direction and
+  magnitude across three models), NOT for per-model significance.
+- Pooled inference, if reported, uses the predeclared cluster-aware
+  sensitivity analysis (mixed-effects with model and task as random
+  effects), never a naive pooled McNemar across models — cells within
+  a model share fixtures and seeds and are not independent.
+- Interpretation committed now: if all three models show the same
+  direction, report replication with per-model rates and CIs and state
+  plainly that no single model reaches p<.05. If models disagree,
+  report the disagreement as the finding.
