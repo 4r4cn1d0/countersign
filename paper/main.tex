@@ -72,10 +72,12 @@ of a claim citing no evidence. A counterfactual replay shows a
 conventional continuous-integration gate catches 2 of 15 unsupported
 proposals; Countersign catches 11 of 11 it judged. Negative
 results are equally informative: truncating the worker's visible
-history did not detectably increase unsupported completion; the effect appears
-only when history is \emph{replaced by a narrative summary}, driven
-mainly by prompting, the gate's contribution being to convert
-unsupported acceptances into blocked episodes that recover. And we
+history did not detectably increase unsupported completion, and a
+treatment-identical control arm disagrees with the baseline more often
+than the gated arm does---so we report a measured noise floor rather
+than an effect, and locate the gate's contribution where it is
+deterministic: the unsupported proposals it sees become blocked
+episodes that recover. And we
 quantify the construct honestly: all 18 accepted unsupported
 completions passed hidden evaluation---Countersign is an
 evidence-hygiene instrument whose safety value remains a hypothesis
@@ -107,11 +109,10 @@ abstention) with halting authority, scored against an independent
 post-hoc oracle it does not compute (\S\ref{sec:method});
 (ii)~a preregistered evaluation on matched pairs and negative controls
 pricing false blocks, under a frozen protocol with a public deviation
-ledger (\S\ref{sec:design}); (iii)~results across 490 runs:
-perfect block precision, a CI-gate ablation, a truncation null, and a
-regime-specific summarization effect decomposed into prompt and gate
-contributions
-(\S\ref{sec:results}); (iv)~a calibrated account of the gate as
+ledger (\S\ref{sec:design}); (iii)~results across 490 runs---perfect
+block precision, a CI-gate ablation, a truncation null, and a noise
+floor measured from a treatment-identical control arm that bounds what
+any rate contrast here can claim (\S\ref{sec:results}); (iv)~a calibrated account of the gate as
 evidence hygiene, not a demonstrated safety mechanism
 (\S\ref{sec:failure}).
 
@@ -175,17 +176,18 @@ can still elicit an evidence-free claim, which blocking is correct. A
 separate development suite, on which the rules were iterated, is never
 used for evaluation.
 
-\textbf{Conditions.} Arms cross a worker prompt variant with verifier
-authority: \textsf{memory\_baseline} (naive prompt, no gate),
-\textsf{observe\_only} (evidence-citation prompt; logs but never
-blocks nor feeds back),
-\textsf{verification\_only} (same prompt, blocking),
+\textbf{Conditions.} Every arm runs the \emph{same} instrumented worker
+prompt---a deliberate choice, pinned by a regression test---so the only
+treatment is what happens \emph{after} a proposal:
+\textsf{memory\_baseline} (no gate), \textsf{observe\_only} (verifier
+judges and logs, never blocks, zero worker-visible feedback),
+\textsf{verification\_only} (blocking),
 \textsf{verification\_and\_repair}, and an evaluation-only
-\textsf{oracle\_supervisor} upper bound. Because
-\textsf{memory\_baseline} and \textsf{verification\_only} differ in
-\emph{both} prompt and gate, that contrast is never reported as a gate
-effect; \textsf{observe\_only} is the prompt-matched control, verified
-in-trace to emit zero feedback events.
+\textsf{oracle\_supervisor} bound. The baseline is thus
+\emph{instrumented}, not naive, and the primary contrast isolates the
+gate alone; in the traces, the first two arms issue byte-identical
+first prompts in $10/10$ matched cells and identical first responses in
+$9/10$.
 
 \textbf{Memory degradation.} A frozen registry of degradation profiles
 applies only to \emph{model-visible}
@@ -223,10 +225,10 @@ labelled unsupported, none on the 204 supported proposals a verifier
 judged: precision $1.00$ (95\% CI $[0.82,1.0]$), false-block rate
 $0/204$ (95\% CI $[0,0.018]$), recall $17/18=0.94$ (95\% CI
 $[0.74,0.99]$). The one miss is a boundary case: a post-block
-re-proposal cited evidence the verifier's test check accepted but the
-oracle did not. Two caveats bound this. First, the
-denominator counts only judged proposals: 110 supported proposals in
-the no-verifier arm are excluded, not counted as successes. Second, and more important, \textbf{13 of the 17 blocks are
+re-proposal cited evidence the verifier accepted but the oracle did
+not. Two caveats bound this. First, the denominator counts only judged
+proposals: 110 supported proposals in the no-verifier arm are excluded,
+not counted as successes. Second, and more important, \textbf{13 of the 17 blocks are
 the trivial case}---a claim citing no evidence, which any rule detects.
 Only 4 required substantive reasoning: read the result as ``the gate
 does not misfire,'' not ``it discriminates hard cases.''
@@ -247,18 +249,18 @@ judged: the difference is blindness, not conservatism.
 \caption{(a)~Graded truncation: no detectable increase; the wide
 Wilson 95\% intervals mark a non-detection at modest power, not
 invariance. (b)~The resume-summary regime does produce the effect: the
-prompt reduces unsupported proposals ($5{\to}3$) and the gate converts
-those it sees into blocked episodes that recover (2 of 2). Small $n$;
-decomposition, not significance.}
+counts are $5/3/2$, but the first two arms are treatment-identical, so
+their $4/10$-cell disagreement is the endpoint's noise floor---larger
+than the gate contrast's $3/10$. No proposal-level effect is claimed;
+both proposals the gate saw became blocked episodes that recovered.}
 \label{fig:regimes}
 \end{figure}
 
 \textbf{Truncation does not detectably induce false claims.} Baseline
 unsupported completion on trap fixtures did not increase with
-truncation severity (Figure~\ref{fig:regimes}a). A non-detection, not invariance: Wilson
-intervals at 15 runs per cell span ${\sim}$0.01--0.30, so effects
-under ${\sim}30$ points are unresolvable; the preregistered null
-branch applies.
+truncation severity (Figure~\ref{fig:regimes}a): a non-detection, not
+invariance, since Wilson intervals at 15 runs per cell span
+${\sim}$0.01--0.30. The preregistered null branch applies.
 
 \textbf{The resume-summary regime does produce the effect, and it
 decomposes} (Figure~\ref{fig:regimes}b). The
@@ -266,23 +268,22 @@ comparison must be read at the \emph{proposal} level: a blocking arm
 suppresses accepted-unsupported finishes by definition, so a zero
 there is partly mechanical. Counting unsupported proposals over ten
 matched cells: baseline 5, \textsf{observe\_only} 3,
-\textsf{verification\_only} 2. Pairing the cells, the prompt contrast
-has discordant cells 3 vs.\ 1 (exact McNemar $p=0.625$); the further
-$3\rightarrow2$ is sampling noise, since the gate cannot influence a
-worker's \emph{first} proposal. The gate's contribution is not fewer
-unsupported claims but a different fate for them: both proposals it saw
-were blocked, and both episodes recovered and terminated with supported
-evidence. Campaign-wide, 7 of the 8 enforced-block episodes recovered
-to supported termination and none exhausted its budget; the repair
-arm's path never fired (no unsupported proposal in 40 runs) and the
-oracle upper bound admitted zero incorrect completions
-(Appendix~\ref{sec:appendix-accounting}). No comparison here reaches $p<.05$, and
-an a-priori power analysis explains why---even with every discordant
-pair in one direction the exact test requires $b\ge6$, one more than
-this campaign could produce, and ${\sim}84$ matched cells would be
-needed for 80\% power at the observed rates ($p_{10}{=}0.3$,
-$p_{01}{=}0.1$; Appendix~\ref{sec:appendix-bayes} gives a Bayesian
-reading). The cleanest evidence is
+\textsf{verification\_only} 2. \textbf{None of that gradient is
+interpretable.} The arms are identical until a proposal is made, so
+\textsf{memory\_baseline} vs.\ \textsf{observe\_only} is
+\emph{treatment-identical} and its disagreement is pure sampling
+variation: $4/10$ cells (3 vs.\ 1)---a noise floor \emph{larger} than
+the gate contrast's own $3/10$ (3 vs.\ 0). We claim no proposal-level
+effect. The gate's contribution is instead a different fate for the
+proposals it sees: both were blocked and both episodes recovered.
+Campaign-wide, 7 of 8 enforced-block episodes recovered to supported
+termination with no budget exhaustion; the repair arm never fired and
+the oracle bound admitted zero incorrect completions
+(Appendix~\ref{sec:appendix-accounting}). No comparison reaches $p<.05$, and the power
+analysis explains why: even with every discordant pair in one direction
+the exact test needs $b\ge6$, one more than this campaign could
+produce, and ${\sim}84$ matched cells would be needed for 80\% power at
+these rates (Appendix~\ref{sec:appendix-bayes}). The cleanest evidence is
 measurement without power: the \textsf{observe\_only} verifier judges
 but cannot act, and its would-blocks fired in exactly the 3
 unsupported cells and none of the other 7 (TP$=3$, FP$=0$,
@@ -360,12 +361,11 @@ audits (cited-evidence chronology with abstention) and in pricing
 false blocks. The justified/correct split descends from process-vs-outcome
 supervision~\citep{uesato2022process,lightman2024verify}, instantiated
 at termination with a hidden
-evaluator~\citep{cobbe2021gsm8k,jimenez2024swebench}. Trajectory
-judges score completion without termination
-authority~\citep{zhuge2024agentjudge}, SCATE targets premature
-termination~\citep{gu2026scate}, and concurrent work checks completion
+evaluator~\citep{cobbe2021gsm8k,jimenez2024swebench}. Trajectory judges score completion without termination
+authority~\citep{zhuge2024agentjudge}; SCATE targets premature
+termination~\citep{gu2026scate}; concurrent work checks completion
 evidence in workflow graphs~\citep{matrix2026provenance} and at GUI
-agents' finish step~\citep{han2026vlaagui};
+agents' finish step~\citep{han2026vlaagui}; and
 self-verification~\citep{shinn2023reflexion} is the complement.
 
 \section*{Responsible-Use Statement}
@@ -478,14 +478,12 @@ false blocks on oracle-supported work remained zero campaign-wide.
 As a post-hoc sensitivity analysis (recorded as such in the deviation
 ledger; no new data, uniform $\mathrm{Beta}(1,1)$ priors, exact
 conjugate posteriors, no sampling), we re-read the paper's key
-small-$n$ counts in Bayesian form. \emph{Direction of the prompt
-effect}: conditioning on discordant matched cells as in the exact
-McNemar test, $b{=}3$ cells favour \textsf{observe\_only} over
-\textsf{memory\_baseline} and $c{=}1$ the reverse, giving posterior
-$\mathrm{Beta}(4,2)$ on the probability that a discordant cell favours
-the prompt and $P(\theta>0.5)=0.8125$---roughly four-to-one posterior
-odds on a beneficial direction from the same data whose two-sided $p$
-is $0.625$.
+small-$n$ counts in Bayesian form. \emph{The noise floor}: the treatment-identical
+contrast has discordant cells $b{=}3$, $c{=}1$, giving posterior
+$\mathrm{Beta}(4,2)$ and $P(\theta>0.5)=0.8125$ on the direction of a
+difference \emph{no treatment produces}. That a pure-noise contrast
+yields four-to-one posterior odds cautions against reading direction
+from small-$n$ discordant counts, including ours.
 \emph{Discrimination in the arm that cannot act}: the
 \textsf{observe\_only} verifier's sensitivity $3/3$ has posterior mean
 $0.80$ with 95\% credible interval $[0.40, 0.99]$, and its specificity

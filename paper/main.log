@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.29 (TeX Live 2026/Homebrew) (preloaded format=pdflatex 2026.3.4)  21 AUG 2026 12:00
+This is pdfTeX, Version 3.141592653-2.6-1.40.29 (TeX Live 2026/Homebrew) (preloaded format=pdflatex 2026.3.4)  22 AUG 2026 02:18
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -559,7 +559,7 @@ Package microtype Info: Loading generic protrusion settings for font family
 (microtype)             `cmtt' (encoding: T1).
 (microtype)             For optimal results, create family-specific settings.
 (microtype)             See the microtype manual for details.
-LaTeX Font Info:    Trying to load font information for T1+phv on input line 83
+LaTeX Font Info:    Trying to load font information for T1+phv on input line 85
 .
 
 (/opt/homebrew/Cellar/texlive/20260301/share/texmf-dist/tex/latex/psnfss/t1phv.
@@ -580,20 +580,16 @@ enc/dvips/cm-super/cm-super-t1.enc}]
 <figures/fig_loop.pdf, id=68, 232.89008pt x 70.1019pt>
 File: figures/fig_loop.pdf Graphic file (type pdf)
 <use figures/fig_loop.pdf>
-Package pdftex.def Info: figures/fig_loop.pdf  used on input line 120.
+Package pdftex.def Info: figures/fig_loop.pdf  used on input line 121.
 (pdftex.def)             Requested size: 232.8895pt x 70.10172pt.
  [2 <./figures/fig_loop.pdf>]
 <figures/fig_regimes.pdf, id=162, 295.40509pt x 127.01227pt>
 File: figures/fig_regimes.pdf Graphic file (type pdf)
 <use figures/fig_regimes.pdf>
-Package pdftex.def Info: figures/fig_regimes.pdf  used on input line 246.
+Package pdftex.def Info: figures/fig_regimes.pdf  used on input line 248.
 (pdftex.def)             Requested size: 295.40436pt x 127.01193pt.
 
-[3 <./figures/fig_regimes.pdf>]
-Underfull \vbox (badness 7168) has occurred while \output is active []
-
- [4]
-(./main.bbl
+[3 <./figures/fig_regimes.pdf>] [4] (./main.bbl
 Underfull \hbox (badness 1748) in paragraph at lines 25--29
 \T1/ptm/m/n/10 (+20) ward hack-ing.  METR Tech-ni-cal Re-port, 2025.  URL []$\T
 1/cmtt/m/n/10 https : / / metr . org / blog /
@@ -613,27 +609,26 @@ Package rerunfilecheck Info: File `main.out' has not changed.
  ) 
 Here is how much of TeX's memory you used:
  13350 strings out of 467525
- 212502 string characters out of 5408440
- 674894 words of memory out of 5000000
+ 212505 string characters out of 5408440
+ 675189 words of memory out of 5000000
  41780 multiletter control sequences out of 15000+600000
- 669780 words of font info for 242 fonts, out of 8000000 for 9000
+ 670068 words of font info for 242 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
  72i,8n,79p,1001b,603s stack positions out of 10000i,1000n,20000p,200000b,200000s
 </opt/homebrew/Cellar/texlive/20260301/share/texmf-dist/fonts/type1/public/am
 sfonts/cm/cmmi10.pfb></opt/homebrew/Cellar/texlive/20260301/share/texmf-dist/fo
 nts/type1/public/amsfonts/cm/cmr10.pfb></opt/homebrew/Cellar/texlive/20260301/s
-hare/texmf-dist/fonts/type1/public/amsfonts/cm/cmr7.pfb></opt/homebrew/Cellar/t
-exlive/20260301/share/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb></op
-t/homebrew/Cellar/texlive/20260301/share/texmf-dist/fonts/type1/public/cm-super
-/sftt1000.pfb></opt/homebrew/Cellar/texlive/20260301/share/texmf-dist/fonts/typ
-e1/urw/helvetic/uhvr8a.pfb></opt/homebrew/Cellar/texlive/20260301/share/texmf-d
-ist/fonts/type1/urw/times/utmb8a.pfb></opt/homebrew/Cellar/texlive/20260301/sha
-re/texmf-dist/fonts/type1/urw/times/utmr8a.pfb></opt/homebrew/Cellar/texlive/20
-260301/share/texmf-dist/fonts/type1/urw/times/utmri8a.pfb>
-Output written on main.pdf (7 pages, 217362 bytes).
+hare/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb></opt/homebrew/Cellar
+/texlive/20260301/share/texmf-dist/fonts/type1/public/cm-super/sftt1000.pfb></o
+pt/homebrew/Cellar/texlive/20260301/share/texmf-dist/fonts/type1/urw/helvetic/u
+hvr8a.pfb></opt/homebrew/Cellar/texlive/20260301/share/texmf-dist/fonts/type1/u
+rw/times/utmb8a.pfb></opt/homebrew/Cellar/texlive/20260301/share/texmf-dist/fon
+ts/type1/urw/times/utmr8a.pfb></opt/homebrew/Cellar/texlive/20260301/share/texm
+f-dist/fonts/type1/urw/times/utmri8a.pfb>
+Output written on main.pdf (7 pages, 209611 bytes).
 PDF statistics:
- 371 PDF objects out of 1000 (max. 8388607)
- 218 compressed objects within 3 object streams
+ 366 PDF objects out of 1000 (max. 8388607)
+ 215 compressed objects within 3 object streams
  43 named destinations out of 1000 (max. 500000)
  41067 words of extra memory for PDF output out of 42996 (max. 10000000)
 
