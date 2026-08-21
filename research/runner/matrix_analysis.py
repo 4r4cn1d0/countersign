@@ -218,6 +218,29 @@ def beta_direction_posterior(b: int, c: int) -> float | None:
     return round(sum(comb(m, k) for k in range(0, a)) / (2 ** m), 4)
 
 
+def mcnemar_exact_power(
+    n_cells: int, p10: float, p01: float, alpha: float = 0.05
+) -> float:
+    """Exact unconditional power of the two-sided exact McNemar test over
+    n_cells i.i.d. matched cells with discordant probabilities p10/p01.
+    Used for the paper's cells-for-80%-power statement (2026-08-21
+    correction entry: 84 cells at the corrected observed effect)."""
+
+    from math import comb
+
+    p00 = 1.0 - p10 - p01
+    total = 0.0
+    for b in range(n_cells + 1):
+        for c in range(n_cells - b + 1):
+            p = exact_mcnemar_p(b, c)
+            if p is not None and p <= alpha:
+                total += (
+                    comb(n_cells, b) * comb(n_cells - b, c)
+                    * (p10 ** b) * (p01 ** c) * (p00 ** (n_cells - b - c))
+                )
+    return round(total, 4)
+
+
 def beta_perfect_count_interval(n: int) -> tuple[float, float]:
     """Equal-tailed 95% credible interval for a rate observed n/n under a
     uniform prior (posterior Beta(n+1, 1), CDF x**(n+1))."""

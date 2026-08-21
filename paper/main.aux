@@ -3,15 +3,16 @@
 \providecommand\HyField@AuxAddToFields[1]{}
 \providecommand\HyField@AuxAddToCoFields[2]{}
 \@writefile{toc}{\contentsline {section}{\numberline {1}Introduction}{1}{section.1}\protected@file@percent }
-\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces The supervision loop. The worker proposes termination with cited evidence; Countersign audits the claim against the trace and accepts or blocks with a specific deficiency, after which the worker gathers fresh evidence and re-proposes. The hidden evaluator runs once, after termination, and is never consulted by the supervisor.}}{2}{figure.1}\protected@file@percent }
-\newlabel{fig:loop}{{1}{2}{The supervision loop. The worker proposes termination with cited evidence; Countersign audits the claim against the trace and accepts or blocks with a specific deficiency, after which the worker gathers fresh evidence and re-proposes. The hidden evaluator runs once, after termination, and is never consulted by the supervisor}{figure.1}{}}
+\citation{liu2024lost,packer2023memgpt}
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces The supervision loop: the worker proposes termination with cited evidence; Countersign accepts, or blocks with the specific deficiency and the worker re-proposes with fresh evidence. The hidden evaluator runs once, post-termination, never consulted by the supervisor.}}{2}{figure.1}\protected@file@percent }
+\newlabel{fig:loop}{{1}{2}{The supervision loop: the worker proposes termination with cited evidence; Countersign accepts, or blocks with the specific deficiency and the worker re-proposes with fresh evidence. The hidden evaluator runs once, post-termination, never consulted by the supervisor}{figure.1}{}}
 \def\@LN@column{1}
 \@writefile{toc}{\contentsline {section}{\numberline {2}The Countersign Supervisor}{2}{section.2}\protected@file@percent }
 \newlabel{sec:method}{{2}{2}{The Countersign Supervisor}{section.2}{}}
 \@writefile{toc}{\contentsline {section}{\numberline {3}Evaluation Design}{2}{section.3}\protected@file@percent }
 \newlabel{sec:design}{{3}{2}{Evaluation Design}{section.3}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Memory degradation does not act uniformly. (a)~Graded truncation: no detectable increase in unsupported completion; the Wilson 95\% intervals mark this a non-detection at modest power, not invariance. (b)~Replacing history with a resume summary does produce the effect: the evidence-citation prompt reduces unsupported proposals ($5{\to }3$), and the gate converts those it sees from silent acceptances into blocked episodes that recover (2 of 2). Small $n$; decomposition, not significance.}}{3}{figure.2}\protected@file@percent }
-\newlabel{fig:regimes}{{2}{3}{Memory degradation does not act uniformly. (a)~Graded truncation: no detectable increase in unsupported completion; the Wilson 95\% intervals mark this a non-detection at modest power, not invariance. (b)~Replacing history with a resume summary does produce the effect: the evidence-citation prompt reduces unsupported proposals ($5{\to }3$), and the gate converts those it sees from silent acceptances into blocked episodes that recover (2 of 2). Small $n$; decomposition, not significance}{figure.2}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces (a)~Graded truncation: no detectable increase; the wide Wilson 95\% intervals mark a non-detection at modest power, not invariance. (b)~The resume-summary regime does produce the effect: the prompt reduces unsupported proposals ($5{\to }3$) and the gate converts those it sees into blocked episodes that recover (2 of 2). Small $n$; decomposition, not significance.}}{3}{figure.2}\protected@file@percent }
+\newlabel{fig:regimes}{{2}{3}{(a)~Graded truncation: no detectable increase; the wide Wilson 95\% intervals mark a non-detection at modest power, not invariance. (b)~The resume-summary regime does produce the effect: the prompt reduces unsupported proposals ($5{\to }3$) and the gate converts those it sees into blocked episodes that recover (2 of 2). Small $n$; decomposition, not significance}{figure.2}{}}
 \def\@LN@column{1}
 \@writefile{toc}{\contentsline {section}{\numberline {4}Results}{3}{section.4}\protected@file@percent }
 \newlabel{sec:results}{{4}{3}{Results}{section.4}{}}
@@ -24,42 +25,45 @@
 \citation{matrix2026provenance}
 \citation{han2026vlaagui}
 \citation{shinn2023reflexion}
-\citation{liu2024lost,packer2023memgpt}
-\bibstyle{unsrtnat}
-\bibdata{references}
-\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Accepted completions ($n{=}327$): oracle verdict on the claim vs.\ hidden-evaluator verdict on the work. The empty bottom-right cell is the paper's central caveat.}}{4}{table.1}\protected@file@percent }
-\newlabel{tab:twobytwo}{{1}{4}{Accepted completions ($n{=}327$): oracle verdict on the claim vs.\ hidden-evaluator verdict on the work. The empty bottom-right cell is the paper's central caveat}{table.1}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Accepted completions ($n{=}327$): claim verdict (oracle) vs.\ work verdict (evaluator); the empty cell is the central caveat.}}{4}{table.1}\protected@file@percent }
+\newlabel{tab:twobytwo}{{1}{4}{Accepted completions ($n{=}327$): claim verdict (oracle) vs.\^^Mwork verdict (evaluator); the empty cell is the central caveat}{table.1}{}}
 \def\@LN@column{1}
 \@writefile{toc}{\contentsline {section}{\numberline {5}Supervisor-Failure Analysis and Limitations}{4}{section.5}\protected@file@percent }
 \newlabel{sec:failure}{{5}{4}{Supervisor-Failure Analysis and Limitations}{section.5}{}}
 \@writefile{toc}{\contentsline {section}{\numberline {6}Related Work}{4}{section.6}\protected@file@percent }
-\bibcite{vonarx2025rewardhacking}{{1}{2025}{{Von~Arx et~al.}}{{Von~Arx, Chan, and Barnes}}}
-\bibcite{baker2025monitoring}{{2}{2025}{{Baker et~al.}}{{Baker, Huizinga, Gao, Dou, Guan, Madry, Zaremba, Pachocki, and Farhi}}}
-\bibcite{greenblatt2023control}{{3}{2024}{{Greenblatt et~al.}}{{Greenblatt, Shlegeris, Sachan, and Roger}}}
-\bibcite{xiang2024guardagent}{{4}{2025}{{Xiang et~al.}}{{Xiang, Zheng, Li, Hong, Li, Xie, Zhang, Xiong, Xie, Yang, Song, and Li}}}
-\bibcite{agentspec2025}{{5}{2026}{{Wang et~al.}}{{Wang, Poskitt, and Sun}}}
-\bibcite{chennabasappa2025llamafirewall}{{6}{2025}{{Chennabasappa et~al.}}{{}}}
-\bibcite{uesato2022process}{{7}{2022}{{Uesato et~al.}}{{Uesato, Kushman, Kumar, Song, Siegel, Wang, Creswell, Irving, and Higgins}}}
-\bibcite{lightman2024verify}{{8}{2024}{{Lightman et~al.}}{{Lightman, Kosaraju, Burda, Edwards, Baker, Lee, Leike, Schulman, Sutskever, and Cobbe}}}
-\bibcite{cobbe2021gsm8k}{{9}{2021}{{Cobbe et~al.}}{{Cobbe, Kosaraju, Bavarian, Chen, Jun, Kaiser, Plappert, Tworek, Hilton, Nakano, Hesse, and Schulman}}}
-\bibcite{jimenez2024swebench}{{10}{2024}{{Jimenez et~al.}}{{Jimenez, Yang, Wettig, Yao, Pei, Press, and Narasimhan}}}
-\bibcite{zhuge2024agentjudge}{{11}{2025}{{Zhuge et~al.}}{{Zhuge, Zhao, Ashley, Wang, Khizbullin, Xiong, Liu, Chang, Krishnamoorthi, Tian, Shi, Chandra, and Schmidhuber}}}
-\bibcite{gu2026scate}{{12}{2026}{{Gu et~al.}}{{Gu, Nashid, and Mesbah}}}
-\bibcite{matrix2026provenance}{{13}{2026}{{Salas}}{{}}}
-\bibcite{han2026vlaagui}{{14}{2026}{{Han et~al.}}{{Han, Tu, Wang, Dai, Zhou, Lau, Cardenas, Xu, Xu, Xiong, Zheng, Yao, Zhou, and Xie}}}
-\bibcite{shinn2023reflexion}{{15}{2023}{{Shinn et~al.}}{{Shinn, Cassano, Gopinath, Narasimhan, and Yao}}}
+\bibstyle{unsrtnat}
+\bibdata{references}
+\bibcite{liu2024lost}{{1}{2024}{{Liu et~al.}}{{Liu, Lin, Hewitt, Paranjape, Bevilacqua, Petroni, and Liang}}}
+\bibcite{packer2023memgpt}{{2}{2023}{{Packer et~al.}}{{Packer, Wooders, Lin, Fang, Patil, Stoica, and Gonzalez}}}
+\bibcite{vonarx2025rewardhacking}{{3}{2025}{{Von~Arx et~al.}}{{Von~Arx, Chan, and Barnes}}}
+\bibcite{baker2025monitoring}{{4}{2025}{{Baker et~al.}}{{Baker, Huizinga, Gao, Dou, Guan, Madry, Zaremba, Pachocki, and Farhi}}}
+\bibcite{greenblatt2023control}{{5}{2024}{{Greenblatt et~al.}}{{Greenblatt, Shlegeris, Sachan, and Roger}}}
+\bibcite{xiang2024guardagent}{{6}{2025}{{Xiang et~al.}}{{Xiang, Zheng, Li, Hong, Li, Xie, Zhang, Xiong, Xie, Yang, Song, and Li}}}
+\bibcite{agentspec2025}{{7}{2026}{{Wang et~al.}}{{Wang, Poskitt, and Sun}}}
+\bibcite{chennabasappa2025llamafirewall}{{8}{2025}{{Chennabasappa et~al.}}{{Chennabasappa, Nikolaidis, Song, Molnar, Ding, Wan, Whitman, Deason, Doucette, Montilla, Gampa, de~Paola, Gabi, Crnkovich, Testud, He, Chaturvedi, Zhou, and Saxe}}}
+\bibcite{uesato2022process}{{9}{2022}{{Uesato et~al.}}{{Uesato, Kushman, Kumar, Song, Siegel, Wang, Creswell, Irving, and Higgins}}}
+\bibcite{lightman2024verify}{{10}{2024}{{Lightman et~al.}}{{Lightman, Kosaraju, Burda, Edwards, Baker, Lee, Leike, Schulman, Sutskever, and Cobbe}}}
+\bibcite{cobbe2021gsm8k}{{11}{2021}{{Cobbe et~al.}}{{Cobbe, Kosaraju, Bavarian, Chen, Jun, Kaiser, Plappert, Tworek, Hilton, Nakano, Hesse, and Schulman}}}
+\bibcite{jimenez2024swebench}{{12}{2024}{{Jimenez et~al.}}{{Jimenez, Yang, Wettig, Yao, Pei, Press, and Narasimhan}}}
 \def\@LN@column{1}
-\bibcite{liu2024lost}{{16}{2024}{{Liu et~al.}}{{Liu, Lin, Hewitt, Paranjape, Bevilacqua, Petroni, and Liang}}}
-\bibcite{packer2023memgpt}{{17}{2023}{{Packer et~al.}}{{Packer, Wooders, Lin, Fang, Patil, Stoica, and Gonzalez}}}
+\bibcite{zhuge2024agentjudge}{{13}{2025}{{Zhuge et~al.}}{{Zhuge, Zhao, Ashley, Wang, Khizbullin, Xiong, Liu, Chang, Krishnamoorthi, Tian, Shi, Chandra, and Schmidhuber}}}
+\bibcite{gu2026scate}{{14}{2026}{{Gu et~al.}}{{Gu, Nashid, and Mesbah}}}
+\bibcite{matrix2026provenance}{{15}{2026}{{Salas}}{{}}}
+\bibcite{han2026vlaagui}{{16}{2026}{{Han et~al.}}{{Han, Tu, Wang, Dai, Zhou, Lau, Cardenas, Xu, Xu, Xiong, Zheng, Yao, Zhou, and Xie}}}
+\bibcite{shinn2023reflexion}{{17}{2023}{{Shinn et~al.}}{{Shinn, Cassano, Gopinath, Narasimhan, and Yao}}}
 \def\@LN@column{1}
 \@writefile{toc}{\contentsline {section}{\numberline {A}Design Details}{6}{appendix.A}\protected@file@percent }
 \newlabel{sec:appendix-design}{{A}{6}{Design Details}{appendix.A}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {B}Additional Failure Modes}{6}{appendix.B}\protected@file@percent }
-\newlabel{sec:appendix-failures}{{B}{6}{Additional Failure Modes}{appendix.B}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {C}A Blocked-then-Recovered Trajectory}{6}{appendix.C}\protected@file@percent }
-\newlabel{sec:appendix-traj}{{C}{6}{A Blocked-then-Recovered Trajectory}{appendix.C}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {D}Bayesian Sensitivity Readings}{6}{appendix.D}\protected@file@percent }
-\newlabel{sec:appendix-bayes}{{D}{6}{Bayesian Sensitivity Readings}{appendix.D}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {B}Proposal Accounting}{6}{appendix.B}\protected@file@percent }
+\newlabel{sec:appendix-accounting}{{B}{6}{Proposal Accounting}{appendix.B}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {C}Additional Failure Modes}{6}{appendix.C}\protected@file@percent }
+\newlabel{sec:appendix-failures}{{C}{6}{Additional Failure Modes}{appendix.C}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Proposal ledger by arm.}}{7}{table.2}\protected@file@percent }
+\newlabel{tab:accounting}{{2}{7}{Proposal ledger by arm}{table.2}{}}
 \def\@LN@column{1}
-\@writefile{toc}{\contentsline {section}{\numberline {E}Reproducibility}{7}{appendix.E}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {D}A Blocked-then-Recovered Trajectory}{7}{appendix.D}\protected@file@percent }
+\newlabel{sec:appendix-traj}{{D}{7}{A Blocked-then-Recovered Trajectory}{appendix.D}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {E}Bayesian Sensitivity Readings}{7}{appendix.E}\protected@file@percent }
+\newlabel{sec:appendix-bayes}{{E}{7}{Bayesian Sensitivity Readings}{appendix.E}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {F}Reproducibility}{7}{appendix.F}\protected@file@percent }
 \gdef \@abspage@last{7}

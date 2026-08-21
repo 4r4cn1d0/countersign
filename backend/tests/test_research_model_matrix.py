@@ -1479,3 +1479,15 @@ def test_bayes_sensitivity_readings_pin_paper_appendix_numbers():
     assert beta_perfect_count_interval(3) == (0.3976, 0.9937)
     assert beta_perfect_count_interval(7) == (0.6306, 0.9968)
     assert beta_perfect_count_interval(17) == (0.8147, 0.9986)
+
+
+def test_mcnemar_exact_power_pins_paper_cells_number():
+    """The paper's ~84-cells-for-80%-power statement (2026-08-21 panel
+    correction) must match the exact enumeration at the corrected
+    observed discordant rates."""
+    from research.runner.matrix_analysis import mcnemar_exact_power
+
+    assert mcnemar_exact_power(84, 0.3, 0.1) >= 0.80
+    assert mcnemar_exact_power(83, 0.3, 0.1) < 0.80
+    # The superseded all-one-direction model that yielded the old "16".
+    assert mcnemar_exact_power(15, 0.5, 0.0) >= 0.80

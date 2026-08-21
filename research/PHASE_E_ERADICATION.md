@@ -376,3 +376,48 @@ campaign whose manifest/artifact_index pair is not present locally
 (balance-exhaustion pod migration); regenerate or recover it before
 building the anonymized artifact so the integrity audit covers all
 seven campaigns.
+
+## Panel-review fix pass (2026-08-21)
+
+A five-referee pre-submission panel (planning/PRESUB_PANEL_REVIEW_
+20260821.md, local-only) returned 1 accept / 4 weak-accept with 9
+major comments. Fixes applied to the paper, all recomputed from
+artifacts before writing:
+
+- POWER CORRECTION: the "16 matched cells for 80% power" figure was
+  derived under the superseded all-one-direction model. Exact
+  unconditional enumeration at the corrected observed discordant rates
+  (p10=0.3, p01=0.1, two-sided alpha=.05) gives 84 cells (83 falls
+  short). Implemented as mcnemar_exact_power() in matrix_analysis.py,
+  pinned by test. The old model reproduces ~15-16, confirming its
+  provenance. E6 remains replication-framed; 84 cells makes
+  significance-chasing decisively unaffordable, which strengthens that
+  framing.
+- PROPOSAL ACCOUNTING (paper Appendix): per-arm ledger over 341
+  proposals verified from artifacts: baseline 180 runs/119 props/9
+  unsup(9 acc); observe 70/52/7(7 acc, 7 would-blocks); oracle_sup
+  40/30/1(1 acc, 1 would-block, 5 refusals); ver_and_repair 40/28/0;
+  verification_only 160/112/10(9 enforced blocks, 1 accepted = the
+  recall miss). Identities: 341=327+9+5; 27=18+9; 17 raw = 9 enforced
+  + 8 would-blocks; judged 222 = 204 supported + 18 unsupported.
+- ARMS NOW REPORTED: repair arm never fired (0 unsupported proposals
+  in 40 runs; uninformative cell). Oracle bound: 5 refusals, zero
+  incorrect admissions, one unsupported-but-correct acceptance.
+- LIVENESS: 9 enforced blocks in 8 episodes; 7 recovered to supported
+  termination, 1 ended on the missed proposal, 0 post-block budget
+  exhaustions.
+- RECALL MISS characterized: substrate-resume x requirement_lost x
+  seed 1 (verification arm): post-block re-proposal allowed by the
+  verifier (empty reasons) but oracle-unsupported ("no successful test
+  cited") — a genuine verifier/oracle boundary disagreement; episode
+  passed hidden evaluation.
+- Also fixed: negative-control definition aligned with the operative
+  oracle-supported rule; predeclared primary named in §3; LlamaFirewall
+  citation completed (19 authors verified from arXiv); clustering
+  limitation added; figure arm-label consistency; workshop notice
+  string.
+- PAGE-LIMIT POSITION: sections 1-6 end exactly at page 4; the
+  mandatory responsible-use statement immediately follows (page 5, "
+  before references), per the standard NeurIPS convention that impact
+  statements do not count toward the page limit. Recorded here in case
+  the workshop clarifies otherwise before the deadline.

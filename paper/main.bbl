@@ -5,6 +5,21 @@
   \providecommand{\doi}[1]{doi: #1}\else
   \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
 
+\bibitem[Liu et~al.(2024)Liu, Lin, Hewitt, Paranjape, Bevilacqua, Petroni, and
+  Liang]{liu2024lost}
+Nelson~F. Liu, Kevin Lin, John Hewitt, Ashwin Paranjape, Michele Bevilacqua,
+  Fabio Petroni, and Percy Liang.
+\newblock Lost in the middle: How language models use long contexts.
+\newblock \emph{Transactions of the Association for Computational Linguistics},
+  12, 2024.
+
+\bibitem[Packer et~al.(2023)Packer, Wooders, Lin, Fang, Patil, Stoica, and
+  Gonzalez]{packer2023memgpt}
+Charles Packer, Sarah Wooders, Kevin Lin, Vivian Fang, Shishir~G. Patil, Ion
+  Stoica, and Joseph~E. Gonzalez.
+\newblock {MemGPT}: Towards {LLMs} as operating systems.
+\newblock \emph{arXiv preprint arXiv:2310.08560}, 2023.
+
 \bibitem[Von~Arx et~al.(2025)Von~Arx, Chan, and
   Barnes]{vonarx2025rewardhacking}
 Sydney Von~Arx, Lawrence Chan, and Beth Barnes.
@@ -45,12 +60,17 @@ Haoyu Wang, Christopher~M. Poskitt, and Jun Sun.
   on Software Engineering ({ICSE} 2026)}, 2026.
 \newblock URL \url{https://arxiv.org/abs/2503.18666}.
 
-\bibitem[Chennabasappa et~al.(2025)]{chennabasappa2025llamafirewall}
-Sahana Chennabasappa et~al.
+\bibitem[Chennabasappa et~al.(2025)Chennabasappa, Nikolaidis, Song, Molnar,
+  Ding, Wan, Whitman, Deason, Doucette, Montilla, Gampa, de~Paola, Gabi,
+  Crnkovich, Testud, He, Chaturvedi, Zhou, and
+  Saxe]{chennabasappa2025llamafirewall}
+Sahana Chennabasappa, Cyrus Nikolaidis, Daniel Song, David Molnar, Stephanie
+  Ding, Shengye Wan, Spencer Whitman, Lauren Deason, Nicholas Doucette, Abraham
+  Montilla, Alekhya Gampa, Beto de~Paola, Dominik Gabi, James Crnkovich,
+  Jean-Christophe Testud, Kat He, Rashnil Chaturvedi, Wu~Zhou, and Joshua Saxe.
 \newblock {LlamaFirewall}: An open source guardrail system for building secure
-  {AI} agents.
-\newblock \emph{arXiv preprint arXiv:2505.03574}, 2025.
-\newblock Author list to be verified against the arXiv page before submission.
+  {AI} agents, 2025.
+\newblock URL \url{https://arxiv.org/abs/2505.03574}.
 
 \bibitem[Uesato et~al.(2022)Uesato, Kushman, Kumar, Song, Siegel, Wang,
   Creswell, Irving, and Higgins]{uesato2022process}
@@ -124,20 +144,5 @@ Noah Shinn, Federico Cassano, Ashwin Gopinath, Karthik Narasimhan, and Shunyu
 \newblock Reflexion: Language agents with verbal reinforcement learning.
 \newblock In \emph{Advances in Neural Information Processing Systems
   (NeurIPS)}, 2023.
-
-\bibitem[Liu et~al.(2024)Liu, Lin, Hewitt, Paranjape, Bevilacqua, Petroni, and
-  Liang]{liu2024lost}
-Nelson~F. Liu, Kevin Lin, John Hewitt, Ashwin Paranjape, Michele Bevilacqua,
-  Fabio Petroni, and Percy Liang.
-\newblock Lost in the middle: How language models use long contexts.
-\newblock \emph{Transactions of the Association for Computational Linguistics},
-  12, 2024.
-
-\bibitem[Packer et~al.(2023)Packer, Wooders, Lin, Fang, Patil, Stoica, and
-  Gonzalez]{packer2023memgpt}
-Charles Packer, Sarah Wooders, Kevin Lin, Vivian Fang, Shishir~G. Patil, Ion
-  Stoica, and Joseph~E. Gonzalez.
-\newblock {MemGPT}: Towards {LLMs} as operating systems.
-\newblock \emph{arXiv preprint arXiv:2310.08560}, 2023.
 
 \end{thebibliography}

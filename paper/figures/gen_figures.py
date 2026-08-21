@@ -170,7 +170,7 @@ ks, ns = zip(*[unsup_rate(grad, prof, "memory_baseline") for prof, _ in regimes]
 
 # Compact native size: the paper includes this at natural scale, so the
 # canvas must be column-fraction sized for fonts to print at true size.
-fig, (axA, axB) = plt.subplots(1, 2, figsize=(4.2, 1.36),
+fig, (axA, axB) = plt.subplots(1, 2, figsize=(4.2, 1.32),
                                gridspec_kw={"wspace": 0.52,
                                             "width_ratios": [1.0, 1.3]})
 
@@ -195,7 +195,7 @@ axA.set_title("(a) No increase detected", loc="left", pad=5)
 
 res = load("substrate-resume") + load("e5-observe")
 arms = [("memory_baseline", "baseline"), ("observe_only", "observe\nonly"),
-        ("verification_only", "Countersign")]
+        ("verification_only", "verification\nonly")]
 acc, blk, clean, lbls = [], [], [], []
 for arm, lab in arms:
     a = b = c = 0
@@ -234,7 +234,7 @@ axB.set_ylabel("episodes (of 10)")
 axB.set_ylim(0, 10.3); axB.set_xlim(-0.6, 2.6); axB.set_yticks([0, 5, 10])
 axB.set_title("(b) Resume-summary outcomes", loc="left", pad=5)
 handles, labels = axB.get_legend_handles_labels()
-fig.legend(handles, labels, loc="lower center", bbox_to_anchor=(0.5, -0.17),
+fig.legend(handles, labels, loc="lower center", bbox_to_anchor=(0.5, -0.22),
            ncol=3, handlelength=1.0, handleheight=0.85, columnspacing=1.4,
            borderpad=0.0)
 fig.savefig(OUT / "fig_regimes.pdf"); fig.savefig(OUT / "fig_regimes.png")
@@ -242,7 +242,7 @@ print("fig_regimes:", list(zip(ks, ns)), "| acc", list(acc), "blk", list(blk), "
 
 # ============================================================ Figure 1 (loop)
 # Compact native size (included at natural scale in the paper).
-fig, ax = plt.subplots(figsize=(3.9, 1.13))
+fig, ax = plt.subplots(figsize=(3.9, 1.00))
 ax.set_xlim(0, 10.4); ax.set_ylim(0.42, 3.00); ax.axis("off")
 
 
