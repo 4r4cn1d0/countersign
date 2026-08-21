@@ -12,13 +12,18 @@ is validation.
 
 ## Open items
 
-### BLOCKER-001 — the paper describes a prompt treatment that is not implemented
+### BLOCKER-001 — the paper described a prompt treatment that is not implemented — RESOLVED
 
 Raised by: Codex (independent read-only review, 2026-08-21)
 Confirmed by: Claude against source, tests, and run artifacts (same day)
-Status: OPEN — blocks the abstract, §3, §4, and Appendix D as written
-Severity: BLOCKER (paper claim contradicted by the shipped implementation;
-the artifact ships the code, so any reviewer can find this)
+Status: **CLOSED 2026-08-21.** Paper corrected at b74bb22, ledger at
+0190584, shipped analysis code (docstring + `prompt_effect` →
+`noise_floor`) at f753017. Resolution summary at the end of this entry;
+the original finding is preserved verbatim below because the reasoning
+is the record.
+Severity: was BLOCKER (paper claim contradicted by the shipped
+implementation; the artifact ships the code, so any reviewer could have
+found it)
 
 **Codex's claim.** `paper/main.tex` describes `memory_baseline` as a
 "naive prompt" and `observe_only` as an "evidence-citation prompt", and
@@ -93,6 +98,17 @@ be naive. The repository deliberately took the opposite path and pinned
 it with a test. The paper was written to the plan, not to the
 implementation.
 
+**RESOLUTION (2026-08-21).** All four proposed corrections were applied.
+The paper now states the shared instrumented prompt, reports the
+treatment-identical contrast as the endpoint's noise floor (4/10 cells
+disagreeing, exceeding the gate contrast's 3/10), claims no
+proposal-level effect, and locates the gate's contribution in the
+deterministic post-block outcome. `supervision_decomposition` was
+renamed and its docstring rewritten so the shipped code no longer
+asserts the retracted treatment. Residual uncertainty: none on the fact;
+the reframing is a judgement the operator ratified by instructing the
+fix to proceed.
+
 ### CONFLICT-001 — canonical venue files disagreed — RESOLVED 2026-08-21
 
 Raised by: Claude (Phase-5 venue resolution, 2026-08-21)
@@ -138,15 +154,6 @@ differs: the demo-track plan and the venue string in the PDF footer.
 `.claude/skills/neurips-workshop-submission/SKILL.md`,
 `paper/README.md`, `paper/main.tex`, `research/ROADMAP_HELD_OUT_EVALUATION.md`,
 `.ai/CURRENT_STATE.md`, and `.ai/DECISIONS.md` (DEC-CTR-002).
-
-### BLOCKER-001 — RESOLVED 2026-08-21
-
-Fixed at commits 0190584 (ledger) and b74bb22 (paper). The paper no
-longer claims a prompt treatment; it reports the measured noise floor
-instead (treatment-identical arms disagree in 4/10 cells, exceeding the
-gate contrast's 3/10). `supervision_decomposition`'s docstring and keys
-were corrected at f753017 so the shipped analysis code matches the
-retraction. Original record preserved below.
 
 ### OPEN-004 — two of four audit checks never fired — DISCLOSED, not resolvable here
 
