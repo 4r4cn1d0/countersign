@@ -30,3 +30,6 @@ build/
 # Local-only: run mirrors and private planning docs (never push)
 runs/pod-sync/
 planning/
+
+# Local MCP tool scratch output (not research artifacts)
+.playwright-mcp/
