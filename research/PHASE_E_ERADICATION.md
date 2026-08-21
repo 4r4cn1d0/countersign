@@ -594,3 +594,83 @@ re-citation finding; the Table 1 paragraph gives the citation-omission
 mechanism instead of the weaker independence-expectation argument;
 limitation (2) is new; Appendix C is new. All values generated, none
 typed.
+
+## E6-POD predeclaration amendment (committed BEFORE any run, 2026-08-21)
+
+Supersedes the aborted E6-LOCAL entry. Execution moves to a rented CUDA
+pod, which restores the runbook's one-environment rule. Every deviation
+from the original E6 predeclaration is itemised here so none of it can
+be chosen after seeing outcomes.
+
+MACHINE. Restart pod ff9t6r6703h028 ("countersign-substrate", NVIDIA
+H100 80GB HBM3, SECURE, AP-IN-1, image
+runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04). This is the
+same machine that produced substrate-resume and e5-observe, so E6 is
+environment-matched to the E5 result it replicates. Restarting the
+existing pod is preferred over provisioning a new one precisely because
+it removes an environment variable rather than adding one.
+
+ENVIRONMENT CAPTURE (new; the campaign never recorded this). Before the
+first run, write a sidecar into each output directory: nvidia-smi -L,
+driver and memory, ollama --version, ollama list (digests), python -V,
+pip freeze, and the frozen checkout's git rev-parse HEAD. Ship it in the
+tarball. The absence of such a capture in the existing campaign is
+itself disclosed as a reproducibility gap.
+
+SEEDS. Run seeds 0-9 per model (60 runs/model). Seeds 0-4 remain the
+PRIMARY readout, analysed exactly as the original E6 entry specifies and
+directly comparable to qwen's ten cells. Seeds 5-9 are a fixed-n
+predeclared EXTENSION, reported as a secondary 20-cell analysis. No
+interim look decides whether to run the extension: it is committed now.
+
+CO-PRIMARY NOISE FLOOR (new, and the reason this amendment exists). The
+2026-08-21 correction established that memory_baseline and observe_only
+are treatment-identical, so E6 reports THREE matched-cell contrasts per
+model on accepted_oracle_unsupported_finish:
+  (B,O) treatment-identical -> the noise floor
+  (B,V) the gate, cleanly isolated
+  (O,V) enforcement
+DECISION RULE, fixed now: a gate effect is claimed for a model ONLY if
+the (B,V) disagreement rate (b+c)/n exceeds the treatment-identical
+(B,O) rate for that same model. In the qwen campaign it did not
+(3/10 vs 4/10), and that is the outcome this rule was written to make
+reportable rather than embarrassing.
+
+TREATMENT-IDENTITY VALIDITY CHECK. The (B,O) contrast may be reported as
+a noise floor for a model only if, on that model's artifacts,
+(a) every observe_only run has blocked_actions == [], and (b) the first
+prompt event is byte-identical across the matched pair in every cell,
+with first model_response matching in a large majority. If either check
+fails, observe_only is not treatment-identical for that model and the
+noise-floor reading is withdrawn for it.
+
+MECHANISM-ATTRIBUTED ENDPOINTS (new, secondary). Because between-arm
+rate contrasts at n=10 are mostly sampling, E6 also reports two
+per-proposal quantities that do not depend on arm rate differences:
+(a) P(block | oracle-unsupported proposal) in verification_only and
+P(would-block | oracle-unsupported proposal) in observe_only;
+(b) P(episode recovers to supported termination | enforced block), with
+the re-citation vs new-evidence split that the 2026-08-21 disclosure
+introduced.
+
+ANALYSIS BUILT BEFORE DATA. The task-level cluster bootstrap the roadmap
+has always promised is implemented and tested on main BEFORE the pod
+runs (cluster_bootstrap_difference in matrix_analysis.py), so the
+analysis cannot be invented around the result.
+
+POOLING. Per-model reporting remains primary. The predeclared
+cluster-aware pooled sensitivity analysis is permitted only because all
+E6 legs and the E5 comparison run on the same pod class; it is still
+never a naive pooled McNemar.
+
+KILL ORDER, fixed now. If wall-clock forces a cut, drop in this order:
+(1) the qwen2.5-coder:32b leg entirely; (2) devstral seeds 5-9;
+(3) the qwen2.5-coder:14b fresh-seed replication leg. The primary
+readout (devstral seeds 0-4) is never cut. Timing is decided by a
+liveness pilot that times the first two runs per model on wall-clock
+only -- run counts and durations, never oracle labels, verifier
+decisions, or evaluator results.
+
+NOT DOING. No new fixtures, no verifier/oracle/repair change, no
+endpoint change, no post-hoc model substitution. Any of those would
+require heldout_v2.
