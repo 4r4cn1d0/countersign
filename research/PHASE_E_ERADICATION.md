@@ -723,3 +723,90 @@ verifier, oracle, or fixture logic.
   budget exhaustion 59->57, gate latency median 0.32 ms over 222
   decisions. The introduction promised this pricing and the campaign had
   computed it as predeclared secondary endpoints without reporting it.
+
+## Round-2 referee corrections (2026-08-21)
+
+A four-seat referee panel plus an independent Codex review of the
+REVISED paper returned three BORDERLINE (5/10) scores and ~20 major
+findings. Several were further paper-vs-implementation contradictions.
+All verified independently before change; corrections applied.
+
+FACTUAL ERRORS FOUND AND FIXED:
+
+1. THE NOISE-FLOOR COMPARISON WAS A CATEGORY ERROR (mine, introduced
+   2026-08-21). The paper compared TOTAL discordance b+c between the
+   treatment-identical contrast (4/10) and the gate contrast (3/10) and
+   concluded the noise floor was "larger". b+c measures volatility, not
+   effect. On the effect scale the ordering REVERSES:
+     treatment-identical: b=3 c=1, net 2, p=0.625, direction 0.8125
+     gate contrast:       b=3 c=0, net 3, p=0.25,  direction 0.9375
+   The gate contrast is nominally the STRONGER of the two. The
+   conclusion (claim no proposal-level effect) survives and is still
+   correct, but the argument for it did not. Paper now reports both
+   scales and says plainly that the gate contrast is nominally stronger
+   and still far from significance. matrix_analysis docstring corrected.
+
+2. APPENDIX SELECTIVE REPORTING. The Bayesian appendix reported
+   beta_direction_posterior(3,1)=0.8125 for the null contrast as a
+   caution while omitting (3,0)=0.9375 for the gate contrast, which
+   points the other way. Both (and the accepted-level 0.9844) are now
+   reported together.
+
+3. A DEPLOYABLE PROPERTY THAT DOES NOT EXIST. §2 advertised four audit
+   properties including "no cited source is marked superseded". The
+   deployable verifier has NO legacy/superseded check: verification.py's
+   blocking set is {lost provenance, stale evidence, unsupported claim,
+   contradicted claim, missing required source type} and the finish
+   gate adds only missing-test, missing-implementation-change, and
+   requirement-recency. The superseded-source check exists ONLY in
+   support_oracle.py (fixture-authored legacy_sources). The paper was
+   describing an ORACLE property as a deployable one - exactly the
+   conflation this project exists to prevent. §2 now lists three
+   deployable properties and names the fourth as oracle-only.
+
+4. PROPERTY SCOPE MISDESCRIBED. Property (i) is evaluated over the
+   transitive provenance closure of cited events, and (iii) over the
+   whole trace - not "over the cited evidence" as §2 implied. Corrected.
+
+5. "EVERY ARM LOGS THE RAW VERIFIER DECISION" was false for the largest
+   arm: memory_baseline has verifier_enabled=False and contributes zero
+   verification_decision events across all 180 runs. Corrected.
+
+6. THE RECALL MISS WAS MISDESCRIBED as a generic "boundary case". The
+   actual proposal cited two file reads and two of the worker's own
+   failed actions, no test; the gate allowed it because the provenance
+   closure reached an earlier successful run. Now described accurately.
+
+7. "IMMUNE TO THE CIRCULARITY OBJECTION" was too strong: all 17 blocks
+   fire reasons that mirror an oracle predicate. Now claims only
+   freedom from BEHAVIOURAL circularity, with the definitional overlap
+   disclosed.
+
+MISSING COMPARISONS AND RESULTS ADDED:
+
+8. THE OBVIOUS CHEAPER BASELINE. On the same 15 unsupported proposals:
+   CI rule catches 2, a one-line "cites nothing" rule catches 10,
+   Countersign catches 11 of the 11 it judged. The citation requirement,
+   not the chronology reasoning, does most of the work. This is now the
+   ablation's headline and a limitation.
+
+9. THE PREDECLARED PRIMARY RESULT, never previously reported: 9/180 vs
+   1/160 per run, b=5 c=0 paired, exact p=0.0625.
+
+10. CAMPAIGN-WIDE observe_only discrimination (TP=7, FP=0, FN=0, TN=45)
+    replaces the 10-cell subgroup (TP=3) as the reported figure - the
+    full arm is strictly stronger evidence.
+
+11. UNDELIVERED PREDECLARED ELEMENTS now disclosed in the main text: a
+    second worker model and the post-hoc LLM-judge comparison.
+
+PRESENTATION:
+
+12. The mandatory responsible-use statement now sits INSIDE the 4-page
+    main text (two reviewers flagged its page-5 position as a
+    desk-reject risk under a strict reading of the CFP). Space was made
+    by moving the 2x2 table and the regimes figure to appendices - the
+    2x2 because with 2 incorrect completions in 327 it has no power to
+    show an association (expected 0.11, Fisher p=1.0), and the regimes
+    figure because the paper now claims no effect from that regime, so
+    a main-text figure over-weighted an uninterpretable result.

@@ -57,10 +57,10 @@ Completion Claims}
 Coding agents terminate when they believe a task is done, but that
 belief is not always supported by their own execution trace. We present \emph{Countersign}, a deterministic supervisory
 meta-agent that audits a worker's completion claim against the
-trace---checking that cited tests exist, remain fresh for the files
-they cover, postdate the latest requirement update, and rest on no
-superseded source---and can block termination to demand fresh
-evidence. Countersign is deliberately \emph{trace-only}: it
+trace---checking that the cited evidence resolves to a successful test,
+that no cited test predates a later edit to a file it covers, and that
+no requirement update postdates the evidence---and can block
+termination to demand fresh evidence. Countersign is deliberately \emph{trace-only}: it
 judges whether a claim is \emph{justified} at claim time---distinct
 from whether the implementation is \emph{correct}, which a hidden
 evaluator answers once after termination. In a preregistered,
@@ -68,16 +68,17 @@ frozen campaign of 490 real-model runs over ten held-out fixtures, all
 17 blocks landed on proposals an independent oracle also labelled
 unsupported (precision $1.00$, 95\% CI $[0.82,1.0]$) and none on the
 204 supported proposals judged---though 13 of 17 are the trivial case
-of a claim citing no evidence. A counterfactual replay shows a
-conventional continuous-integration gate catches 2 of 15 unsupported
-proposals; Countersign catches 11 of 11 it judged. Negative
-results are equally informative: truncating the worker's visible
-history did not detectably increase unsupported completion, and a
-treatment-identical control arm disagrees with the baseline more often
-than the gated arm does---so we report a measured noise floor rather
-than an effect, and locate the gate's contribution where it is
-deterministic: unsupported proposals become blocked episodes that
-recover. And we
+of a claim citing no evidence. A counterfactual replay puts that in
+proportion: a conventional continuous-integration gate catches 2 of 15
+unsupported proposals, a one-line ``cites nothing'' rule catches 10,
+and Countersign catches 11 of the 11 it judged. Negative results are
+equally informative: truncating the worker's visible history did not
+detectably increase unsupported completion, and a treatment-identical
+control arm disagrees with the baseline on 4 of 10 matched cells---so
+the endpoint is too volatile at this $n$ to carry any rate contrast,
+and we locate the gate's contribution where it is deterministic
+instead: unsupported proposals become blocked episodes that recover,
+usually by re-citing evidence the trace already held. And we
 quantify the construct honestly: all 18 accepted unsupported
 completions passed hidden evaluation---Countersign is an
 evidence-hygiene instrument whose safety value remains a hypothesis
@@ -106,15 +107,15 @@ correct and unjustified, and conflating the two makes ``the verifier
 improved outcomes'' unfalsifiable.
 
 \textbf{Contributions.} We contribute (i)~a termination audit of
-cited-evidence chronology (freshness, requirement recency, provenance,
-abstention) with halting authority, scored against an independent
-post-hoc oracle it does not compute (\S\ref{sec:method});
+cited-evidence chronology with halting authority, scored against an
+independent post-hoc oracle it does not compute (\S\ref{sec:method});
 (ii)~a preregistered evaluation on matched pairs and negative controls
 pricing false blocks, under a frozen protocol with a public deviation
 ledger (\S\ref{sec:design}); (iii)~results across 490 runs---perfect
-block precision, a CI-gate ablation, a truncation null, and a noise
-floor measured from a treatment-identical control arm that bounds what
-any rate contrast here can claim (\S\ref{sec:results}); (iv)~a calibrated account of the gate as
+block precision, an ablation against two cheaper rules, a truncation
+null, and a volatility measurement from a treatment-identical control
+arm that bounds what any rate contrast here can claim
+(\S\ref{sec:results}); (iv)~a calibrated account of the gate as
 evidence hygiene, not a demonstrated safety mechanism
 (\S\ref{sec:failure}).
 
@@ -140,19 +141,25 @@ file mutations, test runs with inferred coverage, requirement
 updates---and it finishes by emitting a claim with cited evidence
 identifiers.
 
-\textbf{The audit.} Countersign checks four properties of the cited
-evidence: (i)~at least one cited event is a successful test run;
-(ii)~no cited test predates a later mutation of a file it covers
-(Appendix~\ref{sec:appendix-design}); (iii)~cited evidence postdates
-the latest requirement update; (iv)~no cited source is marked
-superseded. Freshness is tri-state: the supervisor abstains when
-coverage is unknown. On failure it blocks and returns the specific
-deficiency (Figure~\ref{fig:loop}); a repair variant additionally
-issues the smallest evidence-refreshing action.
+\textbf{The audit.} Countersign checks three properties: (i)~the cited
+events resolve, through their provenance chain, to a successful test
+run; (ii)~no cited test predates a later mutation of a file it covers;
+(iii)~the trace holds no requirement update newer than the latest
+successful test evidence. Property~(i) is evaluated over the transitive
+closure of the cited events and (iii) over the whole trace, not over
+the citation list alone (Appendix~\ref{sec:appendix-design}). Freshness
+is tri-state: the supervisor abstains when coverage is unknown. On
+failure it blocks and returns the specific deficiency
+(Figure~\ref{fig:loop}); a repair variant additionally issues the
+smallest evidence-refreshing action. A fourth property---rejecting
+citations of a superseded source---exists only in the evaluation-only
+oracle below, never in the deployable gate.
 Determinism is deliberate: halting authority must be auditable and
-replayable. Every arm logs the \emph{raw} verifier
-decision separately from the \emph{enforced} one, so non-blocking arms
-still measure what the supervisor would have done.
+replayable. Every arm that runs a verifier logs its \emph{raw} decision
+separately from the \emph{enforced} one, so non-blocking arms still
+measure what the supervisor would have done;
+\textsf{memory\_baseline} runs no verifier at all and therefore
+contributes no decisions.
 
 \textbf{Independent oracle.} A post-hoc oracle labels every proposal
 \textsf{supported}/\textsf{unsupported}/\textsf{uncertain} from
@@ -216,6 +223,13 @@ All numbers come from audited run manifests; the worker is
 instrument and calibrate power, not to detect effects; its 490 runs
 yield 341 oracle-judged proposals, 27 unsupported
 (Appendix~\ref{sec:appendix-accounting} reconciles every denominator).
+\textbf{The predeclared primary returned null}: accepted unsupported
+completion, \textsf{memory\_baseline} vs.\ \textsf{verification\_only},
+is $9/180$ vs.\ $1/160$ per run, $b{=}5$/$c{=}0$ paired ($p=0.0625$)---but
+a blocking arm suppresses that endpoint mechanically, so everything
+below is read at the proposal level. Two predeclared elements went
+undelivered for funding: a second worker model and a post-hoc LLM-judge
+comparison.
 
 \textbf{Blocks are precise.} Countersign issued 17 blocks with a live
 verifier---9 enforced, plus 8 raw would-blocks in non-enforcing arms
@@ -223,40 +237,31 @@ whose proposals were still accepted---all on proposals the independent
 oracle also labelled unsupported, none on the 204 supported proposals a
 verifier judged: precision $1.00$ (95\% CI $[0.82,1.0]$), false-block rate
 $0/204$ (95\% CI $[0,0.018]$), recall $17/18=0.94$ (95\% CI
-$[0.74,0.99]$). The one miss is a boundary case: a post-block
-re-proposal cited evidence the verifier accepted but the oracle did
-not. Two caveats bound this. First, the denominator counts only judged
+$[0.74,0.99]$). The one miss is instructive: after a correct block the worker
+re-proposed citing two file reads and two of its own failed
+actions---no test---and the gate allowed it because those events'
+provenance chain reached an earlier successful run, which the oracle's
+stricter policy rejected. Two caveats bound this. First, the denominator counts only judged
 proposals: 110 supported proposals in the no-verifier arm are excluded,
 not counted as successes. Second, and more important, the blocks have only three signatures: 13
 fire the no-citation bundle (a claim citing nothing, which any rule
 detects), 3 requirement recency alone, 1 the missing-test rule alone.
-\textbf{The freshness check never fired once in 490 runs}, nor did the
-superseded-source check outside that bundle
-(Appendix~\ref{sec:appendix-checks}), so two of four rules go untested
-here: read this as ``the gate does not misfire,'' not ``it
-discriminates hard cases.''
+\textbf{The freshness check never fired once in 490 runs}
+(Appendix~\ref{sec:appendix-checks}), so the property the method leads
+with goes untested here: read this as ``the gate does not misfire,''
+not ``it discriminates hard cases.''
 
-\textbf{A conventional CI gate is mostly blind.} We replay every stored
-proposal of the four ablation campaigns against the standard-practice
-rule ``require a successful test run after the last edit,'' a strict
-subset of Countersign's temporal check. Of the subset's 15 unsupported
-proposals the CI rule catches 2; Countersign judged 11 (4 arose in
-no-verifier arms) and caught all 11.
-Neither gate blocked any of the 161 supported proposals both judged:
-the difference is blindness, not conservatism.
+\textbf{Most of the gate's yield comes from one trivial rule.} We
+replay every stored proposal of the four ablation campaigns against two
+cheaper rules. The standard CI rule (``a successful test run after the
+last edit'') catches 2 of the subset's 15 unsupported proposals; a
+one-line ``block a finish that cites nothing'' catches 10; Countersign
+judged 11 online (4 arose in no-verifier arms) and caught all 11. The
+citation requirement, not the chronology reasoning, does most of the
+work, and the margin over the one-line rule is too small for this
+campaign to separate them. Neither replayed rule blocked any of the 161
+supported proposals both judged.
 
-\begin{figure}[t]
-\centering
-\includegraphics{figures/fig_regimes.pdf}
-\caption{(a)~Graded truncation: no detectable increase; the wide
-Wilson 95\% intervals mark a non-detection at modest power, not
-invariance. (b)~The resume-summary regime does produce the effect: the
-counts are $5/3/2$, but the first two arms are treatment-identical, so
-their $4/10$-cell disagreement is the endpoint's noise floor---larger
-than the gate contrast's $3/10$. No proposal-level effect is claimed;
-both proposals the gate saw became blocked episodes that recovered.}
-\label{fig:regimes}
-\end{figure}
 
 \textbf{Truncation does not detectably induce false claims.} Baseline
 unsupported completion on trap fixtures did not rise with truncation
@@ -268,11 +273,15 @@ preregistered null branch applies.
 interpretably} (Figure~\ref{fig:regimes}b). Read at the
 \emph{proposal} level---a blocking arm suppresses accepted-unsupported
 finishes by definition---the ten matched cells give baseline 5,
-\textsf{observe\_only} 3, \textsf{verification\_only} 2. The arms are
-identical until a proposal is made, so the first pair is
-\emph{treatment-identical} and its $4/10$-cell disagreement (3 vs.\ 1)
-is a noise floor \emph{larger} than the gate contrast's own $3/10$
-(3 vs.\ 0). We claim no proposal-level effect. The gate's contribution
+\textsf{observe\_only} 3, \textsf{verification\_only} 2. The arms are identical until a proposal
+is made, so the first pair is \emph{treatment-identical}: its
+disagreement on $4/10$ cells (3 vs.\ 1) is pure sampling variation and
+shows the endpoint is volatile at this $n$---individual cells are not
+stable readouts. On the effect scale the gate contrast is nominally the
+stronger of the two (net 3 vs.\ 2; exact McNemar $p=0.25$ vs.\
+$0.625$), but neither is close to significance and a contrast that
+cannot be distinguished from an arm pair with \emph{no treatment at
+all} supports no claim. We claim no proposal-level effect. The gate's contribution
 is the fate of the proposals it sees: 7 of 8 enforced-block episodes
 recovered to supported termination with no budget exhaustion---though
 in 6 of those 8 the worker ran \emph{no new test or edit}, re-citing
@@ -285,36 +294,24 @@ the exact test needs $b\ge6$, one more than this campaign could
 produce, and ${\sim}84$ matched cells would be needed for 80\% power at
 these rates (Appendix~\ref{sec:appendix-bayes}). The cleanest evidence is
 measurement without power: the \textsf{observe\_only} verifier judges
-but cannot act, and its would-blocks fired in exactly the 3
-unsupported cells and none of the other 7 (TP$=3$, FP$=0$,
-FN$=0$)---immune to the circularity objection blocking invites.
+but cannot act, so its verdicts cannot have shaped the trajectories they
+score. Campaign-wide it flagged every unsupported proposal it saw and
+no supported one (TP$=7$, FP$=0$, FN$=0$, TN$=45$)---avoiding the
+\emph{behavioural} circularity blocking invites, though not
+definitional overlap (Appendix~\ref{sec:appendix-checks}).
 
-\textbf{What ``unsupported'' means.} Table~\ref{tab:twobytwo}
-crosses the oracle's judgement of the accepted claim against the hidden
-evaluator's judgement of the work. All 18 unsupported completions
-concerned work that was \emph{correct}: an unjustified claim never
-coincided with a wrong implementation. The traces show why: 25 of the 27
-unsupported proposals came \emph{after} a successful test postdating the
-last edit, and 21 cited nothing. The failure is not claiming work the
-worker did not do---it is doing the work and failing to say so. So
-Countersign is measured against citation omission; its value against
-genuine overclaiming is untested here.
+\textbf{What ``unsupported'' means.} All 18 accepted unsupported
+completions concerned work that was \emph{correct}; only 2 of 327
+accepted completions failed hidden evaluation at all, so the
+claim-by-correctness table (Appendix~\ref{sec:appendix-accounting})
+has no power to show an association and we draw none. The traces do
+show the mechanism: 25 of the 27 unsupported proposals came
+\emph{after} a successful test postdating the last edit, and 21 cited
+nothing. The failure is not claiming work the worker did not do---it is
+doing the work and failing to say so. Countersign is therefore measured
+against citation omission; its value against genuine overclaiming is
+untested here.
 
-\begin{table}[t]
-\centering
-\caption{Accepted completions ($n{=}327$): claim verdict (oracle) vs.\
-work verdict (evaluator); the empty cell is the central caveat.}
-\label{tab:twobytwo}
-\renewcommand{\arraystretch}{0.95}
-\begin{tabular}{lcc}
-\toprule
-& correct & incorrect \\
-\midrule
-claim supported   & 307 & 2 \\
-claim unsupported & 18  & 0 \\
-\bottomrule
-\end{tabular}
-\end{table}
 
 \section{Supervisor-Failure Analysis and Limitations}
 \label{sec:failure}
@@ -330,23 +327,22 @@ modes: classifier/oracle divergence under degradation and a family
 censored by task weight, not budget.
 
 \textbf{Limitations.} (1)~Most important: the traps and the rules share
-authors. The dev/held-out split prevents tuning on evaluation fixtures
-but not the conceptual correlation between what we trap and what we
-detect; that correlation can inflate only the block numerator, since
-false blocks and post-block recoveries are organic. (2)~Two of the four
-audit checks never fired (Appendix~\ref{sec:appendix-checks}), so this
-campaign tests the two rules the worker tripped far more than the rule
-set we built. (3)~One worker model on ten small fixtures establishes
-nothing about prevalence in production software. (4)~The primary
-endpoint is partly suppressed by construction in blocking arms, so gate
-effects are read at the proposal level and in post-block outcomes.
-(5)~The verifier and oracle share no code but read the same trace, and
-most agreements concern claims citing nothing---near-vacuous
-independence. (6)~No predeclared comparison reaches $p<.05$; nulls are
-non-detections at modest power. (7)~The degradation profiles are our
-own transforms, not a deployed scaffold's condenser; (8)~oracle-label
-validation covers a single-rater sample; (9)~intervals treat cells as
-independent though proposals nest in episodes and fixtures.
+authors, so the dev/held-out split prevents tuning but not the
+conceptual correlation between what we trap and what we detect---which
+can inflate only the block numerator, since false blocks and recoveries
+are organic. (2)~The freshness check never fired, and a one-line
+citation rule recovers 10 of the 11 replay catches, so this campaign
+tests the citation requirement far more than the chronology reasoning.
+(3)~One worker model on ten small fixtures establishes nothing about
+prevalence in production software. (4)~The primary endpoint is
+suppressed by construction in blocking arms. (5)~Verifier and oracle
+share no code but read the same trace, and every block's reasons mirror
+an oracle predicate---near-vacuous independence. (6)~No predeclared
+comparison reaches $p<.05$, and the treatment-identical arm shows why:
+this endpoint is volatile at $n{=}10$. (7)~Degradation profiles are our
+own transforms; (8)~oracle labels have a single-rater sample;
+(9)~intervals treat cells as independent though proposals nest in
+episodes and fixtures.
 
 \section{Related Work}
 
@@ -458,21 +454,55 @@ blocking gate could plausibly impose are, in this campaign, not
 measurable. These are descriptive secondary endpoints on paired cells,
 never pooled.
 
+\begin{table}[t]
+\centering
+\caption{Accepted completions ($n{=}327$): claim verdict (oracle) vs.\
+work verdict (evaluator). With only 2 incorrect completions the
+expected count in the empty cell under independence is ${\approx}0.11$
+(Fisher $p=1.0$), so the table bounds the construct rather than
+testing it.}
+\label{tab:twobytwo}
+\renewcommand{\arraystretch}{0.95}
+\begin{tabular}{lcc}
+\toprule
+& correct & incorrect \\
+\midrule
+claim supported   & 307 & 2 \\
+claim unsupported & 18  & 0 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics{figures/fig_regimes.pdf}
+\caption{(a)~Graded truncation: no detectable increase; the wide
+Wilson 95\% intervals mark a non-detection at modest power, not
+invariance. (b)~The resume-summary regime does produce the effect: the
+counts are $5/3/2$, but the first two arms are treatment-identical, so
+their $4/10$-cell disagreement is the endpoint's noise floor---larger
+than the gate contrast's $3/10$. No proposal-level effect is claimed;
+both proposals the gate saw became blocked episodes that recovered.}
+\label{fig:regimes}
+\end{figure}
+
 \section{Which Checks Actually Fired}
 \label{sec:appendix-checks}
 Every block in the campaign carries one of exactly three reason
 signatures (Table~\ref{tab:checks}), recomputed from the run artifacts
-by \texttt{gen\_appendix\_tables.py}. The freshness check never fired,
-and the superseded-source check never fired outside the no-citation
-bundle, so two of the four audit properties in \S\ref{sec:method} are
+by \texttt{gen\_appendix\_tables.py}. The freshness check---property
+(ii) of \S\ref{sec:method}, the one Figure~\ref{fig:loop}
+illustrates---never fired, so one of the three deployable properties is
 exercised by no block in this campaign. This is a fixture-yield
 finding, not a claim that those rules are unnecessary: the temporal
 family's trap requires the worker to cite a specific stale test, and
 this worker overwhelmingly cited nothing at all instead
-(21 of 27 unsupported proposals). It also bounds the ablation of
-\S\ref{sec:results}: the conventional CI rule is a strict subset of the
-freshness check, and the 11 catches Countersign adds come from
-requiring citations, not from reasoning about staleness.
+(21 of 27 unsupported proposals). It also explains the ablation of
+\S\ref{sec:results}: Countersign's catches come from requiring
+citations, not from reasoning about staleness, which is why a one-line
+citation rule recovers 10 of its 11. Every block's reason set also
+mirrors a predicate the oracle evaluates, so verifier/oracle agreement
+on these blocks is definitional rather than independent.
 
 \begin{table}[h]
 \centering
@@ -487,7 +517,6 @@ claim cited no evidence (6-reason bundle) & 13 \\
 requirement recency, alone                & 3 \\
 missing successful test, alone            & 1 \\
 freshness/staleness of cited evidence     & \textbf{0} \\
-superseded source, outside the bundle     & \textbf{0} \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -528,12 +557,15 @@ false blocks on oracle-supported work remained zero campaign-wide.
 As a post-hoc sensitivity analysis (recorded as such in the deviation
 ledger; no new data, uniform $\mathrm{Beta}(1,1)$ priors, exact
 conjugate posteriors, no sampling), we re-read the paper's key
-small-$n$ counts in Bayesian form. \emph{The noise floor}: the treatment-identical
-contrast has discordant cells $b{=}3$, $c{=}1$, giving posterior
-$\mathrm{Beta}(4,2)$ and $P(\theta>0.5)=0.8125$ on the direction of a
-difference \emph{no treatment produces}. That a pure-noise contrast
-yields four-to-one posterior odds cautions against reading direction
-from small-$n$ discordant counts, including ours.
+small-$n$ counts in Bayesian form. \emph{Both contrasts, side by side}: the
+treatment-identical contrast ($b{=}3$, $c{=}1$) gives
+$\mathrm{Beta}(4,2)$, $P(\theta>0.5)=0.8125$; the gate contrast
+($b{=}3$, $c{=}0$) gives $\mathrm{Beta}(4,1)$, $P=0.9375$; the
+accepted-level primary ($b{=}5$, $c{=}0$) gives $0.9844$. The gate
+readings are the larger, and we still claim no effect from them: a
+contrast with \emph{no treatment behind it} already yields four-to-one
+posterior odds, which is how much direction small-$n$ discordant counts
+manufacture on their own. Direction only, never magnitude.
 \emph{Discrimination in the arm that cannot act}: the
 \textsf{observe\_only} verifier's sensitivity $3/3$ has posterior mean
 $0.80$ with 95\% credible interval $[0.40, 0.99]$, and its specificity

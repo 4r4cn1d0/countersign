@@ -7,7 +7,7 @@ from the data it claims to describe. Prints a report and emits
 `appendix_numbers.json` next to this file for the pinning test.
 
 Answers three questions the campaign never reported:
-  1. WHICH of the four advertised audit checks actually produced blocks?
+  1. WHICH of the advertised audit checks actually produced blocks?
   2. What did a blocked worker DO next - gather evidence, or re-cite it?
   3. Did unsupported proposals lack evidence, or merely fail to cite it?
 """

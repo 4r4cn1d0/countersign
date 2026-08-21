@@ -112,10 +112,14 @@ def supervision_decomposition(task_rows: list[dict]) -> dict | None:
             (the arms differ in nothing else), which is why it is the
             predeclared primary comparison.
 
-    In the frozen campaign the noise floor (4/10 cells disagreeing)
-    EXCEEDED the gate contrast (3/10), so no proposal-level effect was
-    claimed. Callers must report the noise floor alongside any contrast
-    they quote from this function.
+    In the frozen campaign the treatment-identical pair disagreed on
+    4/10 cells, which shows the endpoint is volatile at that n. Note the
+    comparison is about VOLATILITY (b+c), not effect size: on the effect
+    scale (net b-c, or the exact p) the gate contrast was nominally the
+    stronger of the two (net 3 vs 2; p=0.25 vs 0.625) and still nowhere
+    near significance. Callers must quote the treatment-identical
+    contrast alongside any other contrast from this function, and must
+    not read "larger b+c" as "larger effect".
 
     Returns None when the three arms are not all present, so a caller
     cannot quote a contrast without the noise-floor arm that calibrates
