@@ -472,3 +472,81 @@ launcher were deleted in full so no locally-generated artifact can be
 merged with pod data (re-execution replaces, never merges). The E6
 design, endpoints, and interpretation branches are unchanged and the
 pod execution runs under the same freeze tag and predeclaration.
+
+## CORRECTION: there is no prompt treatment (2026-08-21)
+
+Found by the first independent Codex review under the new collaboration
+layer; independently verified by Claude against source, tests, and run
+artifacts before any change. Recorded as BLOCKER-001 in .ai/HANDOFF.md.
+
+WHAT WAS WRONG. The E5 predeclaration and every downstream write-up
+described memory_baseline as carrying a "naive prompt" and observe_only
+as carrying an "evidence-citation prompt", and attributed the 5->3
+proposal reduction to prompting. The implementation does not work that
+way. All primary arms receive one IDENTICAL instrumented prompt:
+
+- backend/tests/test_research_benchmark_runner.py:2290
+  (test_tool_action_prompt_is_identical_across_conditions) asserts
+  baseline_prompt == verified_prompt and states the design intent:
+  "The treatment under study is the online gate and repair - not prompt
+  coaching... The baseline is an 'instrumented baseline', not a naive
+  agent."
+- _tool_action_prompt has no agent_variant branch; the prompt is built
+  from the evidence ledger, and verification_decision is a trace event
+  that never enters it.
+- Artifacts, ten matched provenance cells: first prompts BYTE-IDENTICAL
+  in 10/10; first model responses identical in 9/10. The arms diverge
+  only afterwards, through temperature-0.7 sampling variation.
+- observe_only's only extra events are verification_decision and
+  memory_corruption_detection; the latter records "the non-blocking gate
+  recorded it and allowed the proposal through" with empty
+  target_memory_ids and no repair.
+
+A superseded plan (Critical #2 of the pre-freeze review) proposed
+splitting the prompt so the baseline would be naive. The repository
+deliberately took the opposite path and pinned it with a test. The
+write-ups were written to the plan, not to the implementation.
+
+CONSEQUENCE - AN EMPIRICAL NOISE FLOOR (post-hoc, disclosed). Because
+memory_baseline and observe_only are worker-identical, their contrast
+measures run-to-run sampling variation, not treatment. Proposal-level
+discordant cells over the ten matched provenance cells:
+
+  memory_baseline vs observe_only        3 vs 1  -> 4/10 cells disagree
+      (IDENTICAL treatment: this is the noise floor)   exact p = 0.625
+  memory_baseline vs verification_only   3 vs 0  -> 3/10 cells disagree
+      (differs ONLY in the gate)                       exact p = 0.25
+  observe_only vs verification_only      2 vs 1  -> 3/10 cells disagree
+      (differs ONLY in enforcement)                    exact p = 1.0
+
+The noise floor (4 disagreeing cells) EXCEEDS the treatment contrast
+(3 disagreeing cells). At this sample size the proposal-level endpoint
+cannot separate any arm effect from sampling variation, and no
+proposal-level effect claim survives - not for a prompt (which does not
+exist) and not for the gate.
+
+WHAT STILL STANDS, and why it is unaffected:
+- Block precision 17/17 and false blocks 0/204: measurements of the
+  supervisor against oracle labels, not between-arm contrasts.
+- The CI-gate ablation (2/15 vs 11/11 on the SAME stored proposals):
+  a within-proposal replay of two rules, immune to sampling noise.
+- observe_only discrimination TP=3, FP=0, FN=0: measurement in the arm
+  that cannot act.
+- Post-block liveness: 7 of 8 enforced-block episodes recovered to
+  supported termination, 0 post-block budget exhaustions. This is a
+  deterministic consequence of the gate firing, not a rate contrast.
+- The justified-vs-correct 2x2 and its empty cell.
+
+The predeclared primary comparison is unaffected in DEFINITION
+(memory_baseline vs verification_only remains primary) and is in fact
+CLEANLY IDENTIFIED - the arms differ only in the gate, so the confound
+that motivated the observe_only arm never existed. What changes is that
+its proposal-level effect estimate is not distinguishable from noise at
+n=10, which the power analysis (~84 cells for 80% power) already
+predicted.
+
+Superseded by this entry: the "prompt=2 / gate=3" decomposition in the
+E5 RESULT entry, the 2026-08-20 discordant-count correction's "prompt
+contrast" LABEL (its counts b=3, c=1 remain correct), and the Bayesian
+appendix's "direction of the prompt effect" framing. The numbers were
+right; the causal label on them was wrong.
