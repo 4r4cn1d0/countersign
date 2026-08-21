@@ -1,8 +1,10 @@
 # Workshop paper: Supervisory Runtime Verification
 
-Target: **Managing Agents that Manage Agents** (Meta-Agents), NeurIPS
-2026 — 4-page Short Paper + Demo Track. Deadline **Aug 29, 2026 AoE**,
-OpenReview, double-blind, non-archival. Venue facts and framing rules:
+Target (**option 1**, operator decision 2026-08-21): **Managing Agents
+that Manage Agents** (Meta-Agents), NeurIPS 2026 — 4-page Short Paper +
+Demo Track. Deadline **Aug 29, 2026 AoE**, OpenReview, double-blind,
+non-archival. **Option 2 (fallback)**: AgentWild — same deadline, 4-page
+short paper, **no demo track**. Venue facts and framing rules:
 `.claude/skills/neurips-workshop-submission/SKILL.md`.
 
 ## Files

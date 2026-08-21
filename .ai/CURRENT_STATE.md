@@ -24,28 +24,30 @@ Former project name(s): Agent Memory Observatory / AI-Agent-Observer
 
 ## Current venue plan
 
-**CONFLICT — OPERATOR DECISION REQUIRED** (see CONFLICT-001 in
-`.ai/HANDOFF.md`). Two canonical files dated 2026-08-16 disagree:
+RESOLVED 2026-08-21 by operator decision (CONFLICT-001 closed; see
+DEC-CTR-002).
 
-- venue: `.claude/skills/neurips-workshop-submission/SKILL.md` and
-  `paper/README.md` say **Meta-Agents** (Managing Agents that Manage
-  Agents, NeurIPS 2026); `research/ROADMAP_HELD_OUT_EVALUATION.md`
-  §"Target venue" says **AgentWild** (Third Workshop on Agents in the
-  Wild, NeurIPS 2026).
-- track: Short Paper in both readings.
-- deadline: **August 29, 2026 AoE** — agreed by all sources.
-- page limit: **4 pages** main text, references and appendices
-  excluded — agreed by all sources.
-- demo plan: **contested.** Meta-Agents has a Demo Track (the plan of
-  record in the skill and paper README); the roadmap states AgentWild
-  has no demo track.
-- responsible-use requirement: mandatory, desk-reject if omitted (venue
-  skill; `paper/README.md` hard rule 3). Present in `paper/main.tex`.
-- source file that establishes this: unresolved — do not resolve from
-  chat memory.
-
-Not affected by the conflict: deadline, page limit, double-blind rules,
-non-archival status, OpenReview submission.
+- venue: **Option 1 (primary) — Managing Agents that Manage Agents
+  (Meta-Agents), NeurIPS 2026.** Option 2 (fallback) — AgentWild (Third
+  Workshop on Agents in the Wild), same deadline, **no demo track**.
+- track: Short Paper.
+- deadline: **August 29, 2026 AoE**; notification on or before
+  September 29, 2026 AoE.
+- page limit: **4 pages** main text (references and appendices
+  excluded; main text must be self-contained).
+- demo plan: Demo Track submission alongside the short paper — a live
+  side-by-side baseline-vs-verified trajectory with hidden evaluation
+  revealed only post-termination. Dropped if the fallback venue is used.
+- responsible-use requirement: mandatory, desk-reject if omitted.
+  Present in `paper/main.tex`.
+- source files that establish this:
+  `.claude/skills/neurips-workshop-submission/SKILL.md` (authoritative
+  venue facts), `paper/README.md`, and
+  `research/ROADMAP_HELD_OUT_EVALUATION.md` §"Target venue" — all three
+  updated in one commit and now agreeing.
+- anonymization: the artifact is held to AgentWild's stricter rule
+  (double-blind extending to code and supplementary material)
+  regardless of which venue is used.
 
 ## Current paper identity
 

@@ -47,44 +47,63 @@ ACTIVE
 
 ---
 
-## DEC-CTR-002 — Venue and track are Meta-Agents NeurIPS 2026, 4-page Short Paper + Demo
+## DEC-CTR-002 — Venue ordering: Meta-Agents is option 1, AgentWild is option 2
 
-Date: 2026-08-16 (locked), reconfirmed 2026-08-21
+Date: 2026-08-16 (initial lock), conflict resolved 2026-08-21
 Operator: repository owner
-Commit: venue skill creation
+Commit: venue-reconciliation commit (2026-08-21)
 
 ### Decision
 
-Target: "Managing Agents that Manage Agents" (Meta-Agents), NeurIPS
-2026. Track: Short Paper, max 4 pages main text, plus the Demo Track.
-Deadline 2026-08-29 AoE, OpenReview, double-blind, non-archival.
+**Option 1 (primary):** "Managing Agents that Manage Agents"
+(Meta-Agents), NeurIPS 2026 — Short Paper track, max 4 pages of main
+text, plus the Demo Track. **Option 2 (fallback):** AgentWild (Third
+Workshop on Agents in the Wild), same Aug 29 2026 AoE deadline, 4-page
+short paper, **no demo track**. "Who Verifies the Agents?" remains a
+documented alternate. The same paper goes to only one of them.
 
 ### Reason
 
-The supervision loop matches the CFP's meta-agent, oversight, and
-evaluation topics; the dashboard's side-by-side trajectory view fits
-the demo track.
+The supervision loop matches Meta-Agents' meta-agent, oversight, and
+evaluation topics, and only that venue offers a Demo Track for the
+side-by-side baseline-vs-verified trajectory. The operator resolved the
+ordering explicitly on 2026-08-21 after a canonical-file conflict was
+surfaced.
 
 ### Evidence
 
+Before resolution the repository genuinely disagreed:
 `.claude/skills/neurips-workshop-submission/SKILL.md` and
-`paper/README.md` agree (verified byte-identical skill copy at
-`~/.claude/skills/...`, 2026-08-21). No conflict.
+`paper/README.md` named Meta-Agents, while
+`research/ROADMAP_HELD_OUT_EVALUATION.md` §"Target venue" named
+AgentWild primary and noted it has no demo track. All three files were
+dated 2026-08-16; git showed the skill's retarget commit (`e64bb6e`,
+"retarget to Meta-Agents workshop with supervisory framing") and the
+roadmap's venue lock (`5f59e53`) landing the same day. Recorded as
+CONFLICT-001 in `.ai/HANDOFF.md` and referred to the operator rather
+than resolved from chat memory.
 
 ### Alternatives rejected
 
-"Who Verifies the Agents?" and AgentWild — documented as alternates in
-the venue skill; the same paper must not go to more than one.
+Making AgentWild primary (would drop the demo track and change the PDF
+venue string); leaving the conflict unresolved (blocks venue-dependent
+paper work).
 
 ### Consequences
 
-4-page limit governs; responsible-use statement is mandatory
-(desk-reject item); prior self-work cited in the third person.
+4-page limit governs either way; the responsible-use statement is
+mandatory at Meta-Agents (desk-reject item) and stays regardless. The
+artifact is held to AgentWild's stricter anonymization rule — extending
+to code and supplementary material — whichever venue is used, so a
+fallback switch needs no artifact rework. Demo-track material is
+Meta-Agents-only.
 
 ### Revisit condition
 
-Only an operator decision, applied to the venue skill, paper README,
-`paper/main.tex`, `.ai/CURRENT_STATE.md`, and this file in one commit.
+Rejection at option 1, or an operator decision. Any change updates the
+venue skill, `paper/README.md`, `paper/main.tex`,
+`research/ROADMAP_HELD_OUT_EVALUATION.md`, `.ai/CURRENT_STATE.md`, and
+this file in one commit.
 
 ### Status
 

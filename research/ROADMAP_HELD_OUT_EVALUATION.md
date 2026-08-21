@@ -291,21 +291,39 @@ oracle upper bound — and two analyses are predeclared as first-class:
   gate (post-block behavior, redundant test runs) — all computed from
   fields the runner already records.
 
-### Target venue (decided 2026-08-16)
+### Target venue (decided 2026-08-16; ordering resolved 2026-08-21)
 
-Primary: **Third Workshop on Agents in the Wild: Safety, Security, and
-Beyond (NeurIPS 2026)** — Short Paper track, 4 pages (references and
-supplementary material excluded), NeurIPS/ICLR/ICML templates accepted,
-no NeurIPS checklist required, OpenReview, non-archival. **Deadline
-August 29, 2026 AoE; notification September 29.** Anonymization is fully
-double-blind and explicitly extends to "any supplementary or linked
-material as well, including code" — the released artifact must be the
-relocatable anonymized bundle, never the public repository. AgentWild
-has **no demo track**; the 4-page format is a Short Paper.
+This section previously named AgentWild as primary, which conflicted
+with the venue skill and `paper/README.md`. Operator decision
+2026-08-21 (see `.ai/DECISIONS.md` DEC-CTR-002 and CONFLICT-001 in
+`.ai/HANDOFF.md`) sets the ordering below. The venue skill
+(`.claude/skills/neurips-workshop-submission/SKILL.md`) remains the
+authoritative source for venue facts.
 
-Fallback (same deadline, same anonymization discipline): "Who Verifies
-the Agents?" (NeurIPS 2026), demo-paper track, ≤4 pages, NeurIPS 2026
-template required. Do not submit the same paper to both.
+**Option 1 (primary): Managing Agents that Manage Agents: Workshop on
+Responsible Use of Meta-Agents (NeurIPS 2026)** — Short Paper track,
+max 4 pages of main text (references and appendices excluded, main text
+self-contained), plus the **Demo Track** for the side-by-side
+baseline-vs-verified trajectory demonstration. NeurIPS 2026 workshop
+template, OpenReview, double-blind, non-archival. **Deadline August 29,
+2026 AoE; notification on or before September 29, 2026 AoE.** A short
+responsible-use statement covering potential societal impacts is
+mandatory — omitting it warrants desk rejection.
+
+**Option 2 (fallback, same deadline): Third Workshop on Agents in the
+Wild: Safety, Security, and Beyond (NeurIPS 2026)** — Short Paper track,
+4 pages, NeurIPS/ICLR/ICML templates accepted, no NeurIPS checklist
+required, OpenReview, non-archival. AgentWild has **no demo track**, so
+the demo material would be dropped. Its anonymization rule is the
+strictest of the candidates — fully double-blind and explicitly
+extending to "any supplementary or linked material as well, including
+code" — and **we hold the artifact to that stricter standard regardless
+of which venue is used**: the released artifact is always the
+relocatable anonymized bundle, never the public repository.
+
+"Who Verifies the Agents?" (NeurIPS 2026), demo-paper track, ≤4 pages,
+NeurIPS 2026 template, remains a documented alternate. Do not submit the
+same paper to more than one of these workshops.
 
 Select the two models via a predeclared full-history capability
 calibration against the *development* fixtures (never the held-out set)

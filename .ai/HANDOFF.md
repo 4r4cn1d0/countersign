@@ -93,11 +93,16 @@ be naive. The repository deliberately took the opposite path and pinned
 it with a test. The paper was written to the plan, not to the
 implementation.
 
-### CONFLICT-001 — canonical venue files disagree (OPERATOR DECISION REQUIRED)
+### CONFLICT-001 — canonical venue files disagreed — RESOLVED 2026-08-21
 
 Raised by: Claude (Phase-5 venue resolution, 2026-08-21)
-Status: OPEN — paper work on venue-dependent items is paused per the
-hard venue rule
+Status: **CLOSED** — operator decision: **Meta-Agents is option 1,
+AgentWild is option 2.** All canonical files updated in one commit
+(venue skill, `paper/README.md`,
+`research/ROADMAP_HELD_OUT_EVALUATION.md`, `.ai/CURRENT_STATE.md`,
+`.ai/DECISIONS.md` DEC-CTR-002). The artifact is held to AgentWild's
+stricter anonymization rule regardless of venue, so a fallback switch
+requires no artifact rework. Original conflict record preserved below.
 
 Two canonical files, both dated 2026-08-16, name different target
 venues:

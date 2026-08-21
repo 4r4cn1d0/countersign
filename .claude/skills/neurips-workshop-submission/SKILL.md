@@ -87,6 +87,19 @@ accept / block / repair.
   "operational memory"; no literal dementia claims; "self-hosted
   open-weight models" (final runs execute on rented GPUs).
 
+## Venue ordering (operator decision 2026-08-21)
+
+**Option 1 (primary): Meta-Agents** — the target above.
+**Option 2 (fallback): AgentWild** — listed below; no demo track, so the
+demo material would be dropped. Its stricter anonymization rule
+(extending to code and supplementary material) is applied to the
+artifact regardless of venue.
+
+This resolves a conflict in which
+`research/ROADMAP_HELD_OUT_EVALUATION.md` had named AgentWild primary;
+that file now points here. Recorded as DEC-CTR-002 in
+`.ai/DECISIONS.md`.
+
 ## Documented alternates (same deadline, not the target)
 
 - **"Who Verifies the Agents?"** (NeurIPS 2026) — regular 4–9pp, demo
