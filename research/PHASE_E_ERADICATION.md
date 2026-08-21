@@ -421,3 +421,35 @@ artifacts before writing:
   before references), per the standard NeurIPS convention that impact
   statements do not count toward the page limit. Recorded here in case
   the workshop clarifies otherwise before the deadline.
+
+## E6-LOCAL predeclaration + deviation (2026-08-21, committed BEFORE any run)
+
+Executing the E6 replication for devstral-small-2:24b LOCALLY (Apple
+M-series, 24 GB unified memory, ollama/Metal) instead of a rented CUDA
+pod. Committed before the first run; the runs execute from a clean git
+worktree at heldout-v1-freeze.2 (5acd35e), the exact revision that
+produced E5, under --strict-freeze.
+
+Deviations disclosed now:
+1. HARDWARE/KERNEL: Metal, not CUDA. Per the pod runbook's
+   non-negotiable ("never mix Mac and pod runs in one dataset"), this
+   campaign is its OWN per-model dataset. Consequence accepted in
+   advance: the predeclared cluster-aware POOLED sensitivity analysis
+   across models is DROPPED for this model (pooling would mix kernel
+   families in one inference); reporting for devstral is per-model
+   direction/magnitude replication only, exactly the E6 primary.
+2. SCOPE: devstral-small-2:24b only. qwen2.5-coder:32b does not fit
+   24 GB and remains gated on pod funding; its absence shrinks E6 from
+   two new models to one and is a funding constraint, not a result-
+   dependent choice (decided before any devstral run).
+3. THROUGHPUT: ~6.5 tok/s measured (smoke test, 64-token generation);
+   expected 25-50 min/run, 13-25 h for 30 runs. Interruption recovery
+   uses the standard matrix reuse path.
+
+Design (unchanged from the E6 predeclaration above): provenance pair
+x resume_medium x {memory_baseline, observe_only, verification_only}
+x seeds 0-4 = 30 runs; temperature 0.7, max-tokens 1024, budget 24,
+model_driven, langgraph_tools. Endpoints and interpretation branches:
+as predeclared above (consistent direction = replication; disagreement
+= the finding). No peeking before all 30 runs complete except for
+liveness checks (run counts, not outcomes).
