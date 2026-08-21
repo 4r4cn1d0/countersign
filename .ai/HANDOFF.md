@@ -139,10 +139,37 @@ differs: the demo-track plan and the venue string in the PDF footer.
 `paper/README.md`, `paper/main.tex`, `research/ROADMAP_HELD_OUT_EVALUATION.md`,
 `.ai/CURRENT_STATE.md`, and `.ai/DECISIONS.md` (DEC-CTR-002).
 
+### BLOCKER-001 — RESOLVED 2026-08-21
+
+Fixed at commits 0190584 (ledger) and b74bb22 (paper). The paper no
+longer claims a prompt treatment; it reports the measured noise floor
+instead (treatment-identical arms disagree in 4/10 cells, exceeding the
+gate contrast's 3/10). `supervision_decomposition`'s docstring and keys
+were corrected at f753017 so the shipped analysis code matches the
+retraction. Original record preserved below.
+
+### OPEN-004 — two of four audit checks never fired — DISCLOSED, not resolvable here
+
+Found by the improvement sweep, verified independently, disclosed at
+commit 0e07c77. All 17 blocks carry one of three reason signatures
+(13 no-citation bundle, 3 requirement-recency, 1 missing-test); the
+freshness check fired zero times in 490 runs and the superseded-source
+check never fired outside the bundle. Now stated in §4, quantified in
+Appendix C, and carried as limitation (2). Not fixable within the
+freeze: exercising those rules requires fixtures this worker actually
+trips, which is heldout_v2 work.
+
 ### OPEN-001 — final-matrix manifest and artifact index are missing locally
 
 Raised by: Claude (artifact audit, 2026-08-20)
-Status: OPEN — blocks the anonymized-artifact build
+Status: PARTIALLY CLOSED 2026-08-21 — artifact_index.json regenerated
+locally (3,380 files) and runs/pod-sync/final-matrix/PROVENANCE.md now
+states exactly what is present, what was lost when the first pod was
+released, and what verification remains. FULL recovery is still
+possible: both original pods are EXITED but startable (A100
+s0i9vgo86hi62s wrote final-matrix; H100 ff9t6r6703h028 wrote
+substrate-resume/e5-observe), and /workspace is a persistent mount.
+Starting a pod is a spend decision for the operator.
 
 `runs/pod-sync/final-matrix/` has run artifacts but no
 `model_matrix_manifest.json` / `artifact_index.json` pair (left on the
