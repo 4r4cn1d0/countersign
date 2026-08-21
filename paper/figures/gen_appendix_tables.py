@@ -40,12 +40,16 @@ CAMPAIGNS = ("final-matrix", "fm-negctrl-qwen", "pressure-a", "pressure-b",
 
 
 def runs():
+    """Yield (campaign, run). The campaign name is part of a cell's identity:
+    substrate-b40 re-executed 50 final-matrix cells at action budget 40 vs 24,
+    so merging them by (task, profile, seed) alone would silently pair runs
+    from different conditions."""
     for campaign in CAMPAIGNS:
         directory = RUNS / campaign / "runs"
         if not directory.exists():
             continue
         for f in sorted(directory.rglob("*.json")):
-            yield json.loads(f.read_text())
+            yield campaign, json.loads(f.read_text())
 
 
 def blocks_of(run):
@@ -57,7 +61,8 @@ def blocks_of(run):
 
 
 def main():
-    all_runs = list(runs())
+    all_pairs = list(runs())
+    all_runs = [run for _, run in all_pairs]
 
     # ---- 1. Which checks fired? -------------------------------------
     signatures = Counter()
@@ -122,7 +127,47 @@ def main():
             if "no source_event_ids cited" in tuple(score.get("reasons", ())):
                 uncited += 1
 
+    # ---- 4. What did halting authority cost? -------------------------
+    # The introduction promises "what that authority costs" and the
+    # responsible-use statement promises counter-metrics; both are priced
+    # here, on matched cells, as predeclared secondary endpoints.
+    cells = {}
+    latencies = []
+    for campaign, run in all_pairs:
+        ctx = run.get("experiment_context", {})
+        metrics = run.get("interaction_metrics", {})
+        key = (campaign, run.get("task_id"), ctx.get("pressure_profile_id"),
+               ctx.get("seed"))
+        cells.setdefault(key, {})[ctx.get("variant")] = {
+            "actions": metrics.get("model_action_count"),
+            "hidden_ok": bool(metrics.get("hidden_validation_success")
+                              or metrics.get("evaluator_success")),
+            "exhausted": "budget" in str(metrics.get("termination_reason", "")).lower(),
+        }
+        for ev in run.get("trace_events", []):
+            if ev.get("event_type") == "verification_decision" \
+                    and ev.get("gate_latency_ms") is not None:
+                latencies.append(ev["gate_latency_ms"])
+
+    pairs = [(v["memory_baseline"], v["verification_only"]) for v in cells.values()
+             if "memory_baseline" in v and "verification_only" in v]
+    deltas = [t["actions"] - b["actions"] for b, t in pairs
+              if b["actions"] is not None and t["actions"] is not None]
+    latencies.sort()
+    cost = {
+        "matched_cells": len(pairs),
+        "mean_extra_actions": round(sum(deltas) / len(deltas), 3) if deltas else None,
+        "hidden_eval_success_baseline": sum(b["hidden_ok"] for b, _ in pairs),
+        "hidden_eval_success_gated": sum(t["hidden_ok"] for _, t in pairs),
+        "budget_exhaustion_baseline": sum(b["exhausted"] for b, _ in pairs),
+        "budget_exhaustion_gated": sum(t["exhausted"] for _, t in pairs),
+        "gate_decisions": len(latencies),
+        "gate_latency_median_ms": round(latencies[len(latencies) // 2], 2) if latencies else None,
+        "gate_latency_max_ms": round(max(latencies), 1) if latencies else None,
+    }
+
     report = {
+        "cost_of_authority": cost,
         "blocks": {
             "total": total_blocks,
             "no_citation_bundle": trivial,
@@ -153,6 +198,14 @@ def main():
     print(f"\nUNSUPPORTED PROPOSALS ({unsupported})")
     print(f"  already had a fresh green test        : {had_evidence}")
     print(f"  cited nothing at all                  : {uncited}")
+    print(f"\nCOST OF AUTHORITY ({cost['matched_cells']} matched cells)")
+    print(f"  mean extra model actions              : {cost['mean_extra_actions']:+}")
+    print(f"  hidden-eval success  base -> gated    : "
+          f"{cost['hidden_eval_success_baseline']} -> {cost['hidden_eval_success_gated']}")
+    print(f"  budget exhaustion    base -> gated    : "
+          f"{cost['budget_exhaustion_baseline']} -> {cost['budget_exhaustion_gated']}")
+    print(f"  gate latency (n={cost['gate_decisions']})            : "
+          f"median {cost['gate_latency_median_ms']} ms, max {cost['gate_latency_max_ms']} ms")
 
 
 if __name__ == "__main__":

@@ -86,29 +86,40 @@ def _negative_control_tasks_from_manifest(
 
 
 def supervision_decomposition(task_rows: list[dict]) -> dict | None:
-    """Separate the PROMPT effect from the GATE effect.
+    """Separate the measurable GATE effect from the endpoint's NOISE FLOOR.
 
-    The intervention conditions deliberately bundle an agent prompt
-    variant with verifier settings (memory_baseline = naive prompt + no
-    gate; observe_only = verified prompt + verifier that logs but never
-    blocks and never emits agent-visible feedback; verification_only =
-    verified prompt + blocking gate). A memory_baseline vs
-    verification_only contrast therefore CONFOUNDS prompt coaching with
-    gating, and must never be reported as a gate effect on its own.
+    CORRECTED 2026-08-21 (see research/PHASE_E_ERADICATION.md, "there is
+    no prompt treatment"). An earlier version of this docstring claimed
+    memory_baseline carried a naive prompt and observe_only an
+    evidence-citation prompt, so that the first contrast measured prompt
+    coaching. That is false: EVERY arm receives one identical
+    instrumented prompt, pinned by
+    test_tool_action_prompt_is_identical_across_conditions, and the
+    artifacts agree (byte-identical first prompts in 10/10 matched
+    provenance cells, identical first responses in 9/10).
 
-    Read as a 2x2 over matched (model, task, pressure profile, seed)
-    cells, the same three arms decompose cleanly:
+    What the three arms actually give, over matched
+    (model, task, pressure profile, seed) cells:
 
-        prompt effect = memory_baseline  -> observe_only
-        gate effect   = observe_only     -> verification_only
+        memory_baseline -> observe_only      TREATMENT-IDENTICAL.
+            The verifier judges and logs but never blocks and never
+            reaches the worker, so any disagreement here is run-to-run
+            sampling variation. This is the endpoint's NOISE FLOOR and
+            the yardstick every other contrast must clear.
 
-    observe_only is the valid prompt-matched control precisely because
-    its verdicts never reach the worker (verified in-trace: zero
-    verification_feedback events in that arm).
+        observe_only -> verification_only    ENFORCEMENT only.
+        memory_baseline -> verification_only THE GATE, cleanly isolated
+            (the arms differ in nothing else), which is why it is the
+            predeclared primary comparison.
 
-    Returns None when the three arms are not all present, so callers
-    fall back to reporting the confounded contrast WITH its caveat
-    rather than silently attributing it to the gate.
+    In the frozen campaign the noise floor (4/10 cells disagreeing)
+    EXCEEDED the gate contrast (3/10), so no proposal-level effect was
+    claimed. Callers must report the noise floor alongside any contrast
+    they quote from this function.
+
+    Returns None when the three arms are not all present, so a caller
+    cannot quote a contrast without the noise-floor arm that calibrates
+    it.
     """
 
     ARMS = ("memory_baseline", "observe_only", "verification_only")
@@ -164,13 +175,18 @@ def supervision_decomposition(task_rows: list[dict]) -> dict | None:
         "matched_cells": len(complete),
         "endpoint": "accepted_oracle_unsupported_finish",
         "rates": {arm: _rate(arm) for arm in ARMS},
-        "prompt_effect": {
+        "noise_floor": {
             "contrast": "memory_baseline__vs__observe_only",
+            "interpretation": (
+                "TREATMENT-IDENTICAL: all arms share one instrumented "
+                "prompt, so this disagreement is sampling variation, not "
+                "an effect. Use it to calibrate the contrasts below."
+            ),
             "discordant_reference_only": prompt_b,
             "discordant_treatment_only": prompt_c,
             "mcnemar_p_two_sided_exact": exact_mcnemar_p(prompt_b, prompt_c),
         },
-        "gate_effect": {
+        "enforcement_effect": {
             "contrast": "observe_only__vs__verification_only",
             "discordant_reference_only": gate_b,
             "discordant_treatment_only": gate_c,
@@ -182,8 +198,9 @@ def supervision_decomposition(task_rows: list[dict]) -> dict | None:
             "discordant_treatment_only": total_c,
             "mcnemar_p_two_sided_exact": exact_mcnemar_p(total_b, total_c),
             "caveat": (
-                "confounds prompt coaching with gating; report the "
-                "decomposition above instead of attributing this to the gate"
+                "isolates the gate (arms differ in nothing else), but "
+                "compare its discordance against noise_floor before "
+                "reading any effect into it"
             ),
         },
     }
@@ -216,6 +233,73 @@ def beta_direction_posterior(b: int, c: int) -> float | None:
     a, bb = 1 + b, 1 + c
     m = a + bb - 1
     return round(sum(comb(m, k) for k in range(0, a)) / (2 ** m), 4)
+
+
+def cluster_bootstrap_difference(
+    clusters: list[list[tuple[bool, bool]]],
+    *,
+    iterations: int = 10_000,
+    seed: int = 0,
+    alpha: float = 0.05,
+) -> dict | None:
+    """Percentile CI for a paired rate difference, resampling CLUSTERS.
+
+    The roadmap has predeclared a task-level cluster bootstrap as the
+    sensitivity analysis since the freeze: cells within a task share a
+    fixture and are not independent, so an interval that resamples cells
+    overstates precision. This resamples whole clusters with replacement
+    and recomputes the difference each time.
+
+    `clusters` is one list per cluster (a task, or a model x task), each
+    holding (reference_hit, treatment_hit) pairs for that cluster's cells.
+    Returns the observed difference (treatment rate minus reference rate)
+    and a percentile interval, or None when there is nothing to resample.
+
+    Implemented and tested BEFORE the E6 data lands (see the E6-POD
+    amendment) so the analysis cannot be shaped around an outcome.
+    Deliberately dependency-free: no numpy, so it runs anywhere the
+    artifacts do.
+    """
+
+    import random
+
+    clusters = [c for c in clusters if c]
+    if not clusters:
+        return None
+
+    def difference(sample: list[list[tuple[bool, bool]]]) -> float | None:
+        cells = [cell for cluster in sample for cell in cluster]
+        if not cells:
+            return None
+        reference = sum(1 for ref, _ in cells if ref) / len(cells)
+        treatment = sum(1 for _, treat in cells if treat) / len(cells)
+        return treatment - reference
+
+    observed = difference(clusters)
+    rng = random.Random(seed)
+    draws: list[float] = []
+    for _ in range(iterations):
+        resampled = [clusters[rng.randrange(len(clusters))] for _ in clusters]
+        value = difference(resampled)
+        if value is not None:
+            draws.append(value)
+    draws.sort()
+
+    lo_index = int((alpha / 2) * len(draws))
+    hi_index = min(len(draws) - 1, int((1 - alpha / 2) * len(draws)))
+    return {
+        "observed_difference": round(observed, 4),
+        "ci_low": round(draws[lo_index], 4),
+        "ci_high": round(draws[hi_index], 4),
+        "clusters": len(clusters),
+        "cells": sum(len(c) for c in clusters),
+        "iterations": len(draws),
+        "method": (
+            "cluster (task-level) percentile bootstrap; resamples whole "
+            "clusters with replacement because cells within a task share a "
+            "fixture and are not independent"
+        ),
+    }
 
 
 def mcnemar_exact_power(

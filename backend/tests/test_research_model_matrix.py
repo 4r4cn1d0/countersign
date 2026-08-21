@@ -1436,16 +1436,20 @@ def test_supervision_decomposition_separates_prompt_from_gate():
     assert report["rates"]["memory_baseline"]["unsupported"] == 5
     assert report["rates"]["observe_only"]["unsupported"] == 3
     assert report["rates"]["verification_only"]["unsupported"] == 0
-    # prompt effect: baseline 5 -> observe 3 => 2 discordant one-way
-    assert report["prompt_effect"]["discordant_reference_only"] == 2
-    assert report["prompt_effect"]["discordant_treatment_only"] == 0
-    # gate effect: observe 3 -> verification 0 => 3 discordant one-way
-    assert report["gate_effect"]["discordant_reference_only"] == 3
-    assert report["gate_effect"]["discordant_treatment_only"] == 0
+    # NOISE FLOOR: baseline 5 -> observe 3 => 2 discordant one-way. These
+    # two arms are treatment-identical (one shared instrumented prompt),
+    # so this is sampling variation, not an effect.
+    assert report["noise_floor"]["discordant_reference_only"] == 2
+    assert report["noise_floor"]["discordant_treatment_only"] == 0
+    assert "TREATMENT-IDENTICAL" in report["noise_floor"]["interpretation"]
+    # enforcement: observe 3 -> verification 0 => 3 discordant one-way
+    assert report["enforcement_effect"]["discordant_reference_only"] == 3
+    assert report["enforcement_effect"]["discordant_treatment_only"] == 0
     assert report["combined_confounded"]["discordant_reference_only"] == 5
-    assert "confounds prompt" in report["combined_confounded"]["caveat"]
+    assert "noise_floor" in report["combined_confounded"]["caveat"]
 
-    # Refuses rather than guessing when the prompt-matched arm is missing.
+    # Refuses rather than guessing when the noise-floor arm is missing, so a
+    # caller cannot quote a contrast without the yardstick that calibrates it.
     gate_only = [r for r in rows if r["treatment_condition"] == "verification_only"]
     assert supervision_decomposition(gate_only) is None
 
@@ -1532,3 +1536,53 @@ def test_appendix_check_exercise_numbers_match_artifacts():
     assert unsupported["total"] == 27
     assert unsupported["had_fresh_green_test_in_trace"] == 25
     assert unsupported["cited_nothing_at_all"] == 21
+
+    # Appendix B: the price of halting authority, which the introduction
+    # promises and the responsible-use statement commits to reporting.
+    cost = report["cost_of_authority"]
+    assert cost["matched_cells"] == 160
+    assert cost["mean_extra_actions"] == 0.013
+    assert cost["hidden_eval_success_baseline"] == 107
+    assert cost["hidden_eval_success_gated"] == 112
+    assert cost["budget_exhaustion_baseline"] == 59
+    assert cost["budget_exhaustion_gated"] == 57
+    assert cost["gate_decisions"] == 222
+    assert cost["gate_latency_median_ms"] == 0.32
+
+
+def test_cluster_bootstrap_widens_intervals_relative_to_naive_resampling():
+    """The predeclared task-level sensitivity analysis, built before E6 data.
+
+    The point of clustering is that cells within a task are correlated, so
+    an interval that ignores clusters is too narrow. Construct data where
+    the correlation is total -- every cell in a cluster agrees -- and
+    assert the cluster bootstrap reports the wider interval.
+    """
+    from research.runner.matrix_analysis import cluster_bootstrap_difference
+
+    # Four tasks, five cells each. Two tasks show the effect in every cell,
+    # two show it in none: perfectly clustered, so resampling tasks must
+    # produce a much wider interval than resampling cells would.
+    clustered = [[(True, False)] * 5, [(True, False)] * 5,
+                 [(True, True)] * 5, [(True, True)] * 5]
+    result = cluster_bootstrap_difference(clustered, iterations=2000, seed=7)
+    assert result is not None
+    assert result["clusters"] == 4
+    assert result["cells"] == 20
+    assert result["observed_difference"] == -0.5
+    # With whole-task resampling the difference can range from 0 (draw only
+    # the no-effect tasks) to -1 (draw only the effect tasks).
+    assert result["ci_low"] <= -0.9
+    assert result["ci_high"] >= -0.05
+
+    # Same marginal rates, but the effect spread evenly across every task:
+    # far less between-cluster variance, so a far tighter interval.
+    spread = [[(True, False)] * 2 + [(True, True)] * 3 for _ in range(4)]
+    even = cluster_bootstrap_difference(spread, iterations=2000, seed=7)
+    assert even["observed_difference"] == -0.4
+    assert (even["ci_high"] - even["ci_low"]) < (result["ci_high"] - result["ci_low"])
+
+    # Refuses rather than inventing an interval when there is nothing to
+    # resample.
+    assert cluster_bootstrap_difference([]) is None
+    assert cluster_bootstrap_difference([[], []]) is None

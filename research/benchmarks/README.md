@@ -27,12 +27,13 @@ Every benchmark task includes:
 - Targeted failure modes such as semantic drift, temporal disordering, source confusion, and
   false completion.
 
-The current seed file contains 13 manually auditable tasks: 11 coding tasks, one
-repository-audit task, and one research-synthesis task. All eleven coding tasks are
-checked-in fixture repositories with 20 planned model actions, multiple source and test
+The current seed file contains 23 manually auditable tasks: 21 coding tasks, one
+repository-audit task, and one research-synthesis task. The coding tasks are
+checked-in fixture repositories with planned model actions, multiple source and test
 files, a staged false lead and rollback, a mid-run requirement update, stale test
 evidence, delayed final validation, hidden validation, and a stable repository hash.
-Every fixture also carries `evaluation_split: development` — these tasks were iterated
+The 21 scenario fixtures split into **11 `evaluation_split: development`** and **10
+`evaluation_split: heldout_v1`**. Only the development tasks were iterated
 against while building the verifier, prompts, and repair logic, so they are a
 development set, not held-out evaluation data — plus a `completion_policy` block
 (relevant paths, authoritative versus legacy sources, requirement-update
@@ -51,8 +52,9 @@ measure degraded or resumed model-visible memory without changing evaluator stat
 ## Files
 
 - `ground_truth_schema.json` documents the expected fields and enums.
-- `seed_tasks.json` contains the 10 benchmark tasks.
-- `coding_scenarios/` contains all eight repository fixtures, staged false-lead patches,
+- `seed_tasks.json` contains the 23 benchmark tasks (10 of them held-out).
+- `coding_scenarios/` contains all 21 repository fixtures (11 development, 10
+  held-out), staged false-lead patches,
   solution patches, versioned scenario manifests, and hidden validators.
 
 Each coding scenario manifest records:

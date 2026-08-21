@@ -95,7 +95,9 @@ the agent has not necessarily produced wrong code, but its report is
 
 We study whether a second agent with authority over the first's
 termination can tell warranted completion claims from unwarranted ones,
-and what that authority costs. Countersign reads only the worker's
+and what that authority costs
+(\S\ref{sec:results}, Appendix~\ref{sec:appendix-cost}).%
+\label{sec:intro-cost} Countersign reads only the worker's
 execution trace and never consults ground truth; the hidden evaluator
 that determines correctness runs once, post-termination, identically in
 every condition. This separation is
@@ -438,6 +440,24 @@ total                   & 490 & 341 & 27 & 17 & 9 & 18 \\
 \end{tabular}
 \end{table}
 
+\section{The Price of Halting Authority}
+\label{sec:appendix-cost}
+\S\ref{sec:intro-cost} promises to price the authority; the frozen
+protocol predeclares the endpoints below as secondary, and they are
+reported here in full rather than selectively. Over the 160 matched
+\textsf{memory\_baseline}/\textsf{verification\_only} cells (matched on
+campaign, task, degradation profile, and seed), supervision is close to
+free: mean extra model actions $+0.013$ (median $0$); hidden-evaluator
+success $107\rightarrow112$; action-budget exhaustion
+$59\rightarrow57$; and across all 222 gate decisions the median
+decision latency is $0.32$\,ms (max $80.7$\,ms). Post-block spend across
+every enforced-block episode totals 21 model actions---0.26\% of the
+campaign's action budget. Nothing here reaches significance and nothing
+is claimed to: the point is that the liveness and utility costs a
+blocking gate could plausibly impose are, in this campaign, not
+measurable. These are descriptive secondary endpoints on paired cells,
+never pooled.
+
 \section{Which Checks Actually Fired}
 \label{sec:appendix-checks}
 Every block in the campaign carries one of exactly three reason
@@ -536,7 +556,11 @@ decisions, and one corrected over-interpretation---is recorded in the
 deviation ledger shipped with the artifact; the interim analyses
 changed scope only---no endpoint or allocation rule was altered post
 hoc. The artifact is a relocatable bundle whose integrity audit passes
-from the copied location; it contains only fixtures, protocols, and
-run records.
+from the copied location for six of the seven campaigns (15{,}182
+indexed files, zero mismatches); the seventh lost two derived
+bookkeeping files when a rented pod was released mid-campaign, so it is
+verified at the artifact-hash and frozen-protocol level instead, as its
+shipped provenance note states. Every number in this paper is
+recomputed from run records directly and consults no manifest.
 
 \end{document}

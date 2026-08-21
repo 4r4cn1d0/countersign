@@ -674,3 +674,52 @@ decisions, or evaluator results.
 NOT DOING. No new fixtures, no verifier/oracle/repair change, no
 endpoint change, no post-hoc model substitution. Any of those would
 require heldout_v2.
+
+## Rigor-gap closures (2026-08-21)
+
+Cheap guards for invariants that were stated in prose but never
+enforced, plus corrections to shipped documentation. None touches
+verifier, oracle, or fixture logic.
+
+- SUPPORT-ORACLE INDEPENDENCE now has an executable guard
+  (test_support_oracle_is_architecturally_independent_of_the_verifier):
+  AST-parses support_oracle.py and asserts it imports no project module,
+  and that claims.py / verification.py do not import it back. The rule
+  was previously enforced by convention only, which .ai/EXPERIMENTS.md
+  recorded as a known gap.
+- DOUBLE-BLIND now has an executable guard
+  (backend/tests/test_artifact_anonymization.py): scans paper sources and
+  the compiled PDF (extracted text AND raw bytes, for metadata) for the
+  identifier list the venue skill names. paper/README.md hard rule 2 had
+  no check behind it.
+- FROZEN-CONFIG DIVERGENCES are pinned rather than "fixed"
+  (test_frozen_config_divergence.py). model_matrix.json says
+  max_tokens 256 while every protocol recorded 1024, and its
+  hardware_profile is a local Mac while runs were CUDA pods. Both files
+  are hashed into the frozen protocols, so EDITING them would break the
+  freeze; pinning documents the divergence and stops it drifting.
+- SHIPPED README CORRECTED: research/benchmarks/README.md claimed 13
+  tasks, eight fixtures, and that every fixture is development. Truth:
+  23 tasks, 21 fixtures, 11 development + 10 heldout_v1.
+- CLUSTER BOOTSTRAP IMPLEMENTED BEFORE E6 DATA
+  (cluster_bootstrap_difference): the task-level sensitivity analysis the
+  roadmap has predeclared since the freeze, dependency-free, tested on
+  perfectly-clustered vs evenly-spread data to show it widens intervals
+  where it should.
+- matrix_analysis.supervision_decomposition docstring and result keys
+  corrected: prompt_effect -> noise_floor (with an explicit
+  TREATMENT-IDENTICAL interpretation string), gate_effect ->
+  enforcement_effect. The shipped analysis code had continued to assert
+  the prompt treatment the paper retracted.
+- OPEN-001 partially closed: final-matrix's artifact_index.json is
+  regenerated locally (3,380 files) and a PROVENANCE.md in that directory
+  states exactly what is present, what was lost when the first pod was
+  released, and what verification remains available. Both original pods
+  (A100 s0i9vgo86hi62s, H100 ff9t6r6703h028) are still EXITED-but-
+  startable, so full recovery of the pod-written manifest may be
+  possible; that is a spend decision for the operator.
+- COST OF AUTHORITY now reported (paper Appendix B), from 160 matched
+  cells: mean extra model actions +0.013, hidden-eval success 107->112,
+  budget exhaustion 59->57, gate latency median 0.32 ms over 222
+  decisions. The introduction promised this pricing and the campaign had
+  computed it as predeclared secondary endpoints without reporting it.

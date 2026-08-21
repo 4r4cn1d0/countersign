@@ -7,6 +7,17 @@
     "staleness": 0,
     "total": 17
   },
+  "cost_of_authority": {
+    "budget_exhaustion_baseline": 59,
+    "budget_exhaustion_gated": 57,
+    "gate_decisions": 222,
+    "gate_latency_max_ms": 80.7,
+    "gate_latency_median_ms": 0.32,
+    "hidden_eval_success_baseline": 107,
+    "hidden_eval_success_gated": 112,
+    "matched_cells": 160,
+    "mean_extra_actions": 0.013
+  },
   "recovery": {
     "episodes": 8,
     "gathered_evidence": 2,

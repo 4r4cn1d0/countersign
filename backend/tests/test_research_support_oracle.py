@@ -391,3 +391,47 @@ def test_scores_every_proposal_not_just_accepted():
     ]
     assert scores[0]["support_label"] == UNSUPPORTED
     assert scores[1]["support_label"] == SUPPORTED
+
+
+def test_support_oracle_is_architecturally_independent_of_the_verifier():
+    """The independence rule is stated in two docstrings; pin it in code.
+
+    The verifier's claim classifier and this oracle must be able to
+    disagree -- that disagreement is the entire reason both exist. A
+    shared helper would silently collapse the two signals into one, which
+    is the 'label_source: shared_claim_classifier' problem the oracle was
+    written to fix. Convention and careful test construction had been the
+    only things enforcing this; now an import-graph assertion does.
+    """
+    import ast
+    from pathlib import Path
+
+    runner_dir = Path(__file__).resolve().parents[2] / "research" / "runner"
+    forbidden = {"claims", "verification", "benchmark_runner", "support_oracle"}
+
+    def imported_modules(path: Path) -> set[str]:
+        tree = ast.parse(path.read_text())
+        names: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                names.update(alias.name.split(".")[-1] for alias in node.names)
+            elif isinstance(node, ast.ImportFrom):
+                if node.module:
+                    names.add(node.module.split(".")[-1])
+                # `from .claims import X` -> the module is the alias source
+                names.update(alias.name.split(".")[-1] for alias in node.names)
+        return names
+
+    # Forward: the oracle imports nothing from the verifier side.
+    oracle_imports = imported_modules(runner_dir / "support_oracle.py")
+    assert not (oracle_imports & (forbidden - {"support_oracle"})), (
+        "support_oracle.py must not import verifier/classifier logic; found "
+        f"{sorted(oracle_imports & forbidden)}"
+    )
+
+    # Reverse: the verifier side does not import the oracle either, so the
+    # two label sources cannot converge through a back edge.
+    for module in ("claims.py", "verification.py"):
+        assert "support_oracle" not in imported_modules(runner_dir / module), (
+            f"{module} must not import support_oracle"
+        )

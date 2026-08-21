@@ -254,10 +254,18 @@ Listed with code path and test in `.ai/FINDINGS.md`. Highlights:
    the frozen environment is RunPod CUDA.
 4. The support-oracle import rule is stated in two docstrings but has no
    executable guard; a one-line AST test would pin it.
-5. `research/benchmarks/README.md` says "eight repository fixtures";
-   there are 21 (11 development + 10 held-out).
-6. No `tier` field exists in scenario manifests; the split field is
-   `evaluation_split`.
+5. ~~`research/benchmarks/README.md` fixture counts~~ — FIXED
+   2026-08-21: it said 13 tasks / eight fixtures / "every fixture is
+   development"; the truth is 23 tasks, 21 fixtures (11 development +
+   10 held-out).
+6. CORRECTED STATEMENT (the earlier wording here was itself wrong):
+   `tier` **does** exist — it is a required field of every task in
+   `seed_tasks.json` (`ground_truth_schema.json`, asserted by
+   `test_research_benchmark_seed.py`). What is true is the inverse
+   pair: `tier` is absent from the 21 `coding_scenarios/*/scenario.json`
+   manifests, and `evaluation_split` is absent from the development
+   entries in `seed_tasks.json` (present only on the held-out ten).
+   Pinned by `test_frozen_config_divergence.py`.
 
 ## Current blockers
 
