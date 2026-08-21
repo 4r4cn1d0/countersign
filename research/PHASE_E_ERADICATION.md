@@ -453,3 +453,22 @@ model_driven, langgraph_tools. Endpoints and interpretation branches:
 as predeclared above (consistent direction = replication; disagreement
 = the finding). No peeking before all 30 runs complete except for
 liveness checks (run counts, not outcomes).
+
+## E6-LOCAL aborted before completion (2026-08-21)
+
+User decision, ~40 minutes after launch: execute E6 on a RunPod CUDA
+pod instead of locally, superseding the E6-LOCAL entry above. This
+restores the runbook's one-environment rule (no Metal/CUDA mixing) and
+re-enables the predeclared cluster-aware pooled sensitivity analysis,
+and it may restore the qwen2.5-coder:32b scaling arm if pod memory
+allows.
+
+State at abort: 1 of 30 runs complete, 1 in flight. Outcome peeking:
+none — the only values inspected were liveness-level (event count 47,
+duration 29.6 min, proposal count 1 for run 1); no oracle label,
+verifier decision, or evaluator result was read. The local output
+directory (runs/e6-devstral-local), the freeze.2 worktree, and the
+launcher were deleted in full so no locally-generated artifact can be
+merged with pod data (re-execution replaces, never merges). The E6
+design, endpoints, and interpretation branches are unchanged and the
+pod execution runs under the same freeze tag and predeclaration.
