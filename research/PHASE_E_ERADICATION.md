@@ -550,3 +550,47 @@ E5 RESULT entry, the 2026-08-20 discordant-count correction's "prompt
 contrast" LABEL (its counts b=3, c=1 remain correct), and the Bayesian
 appendix's "direction of the prompt effect" framing. The numbers were
 right; the causal label on them was wrong.
+
+## DISCLOSURE: which audit checks actually fired (2026-08-21)
+
+Post-hoc analysis of the frozen campaign, found by a six-lane
+improvement sweep and verified independently before writing. Computed
+by paper/figures/gen_appendix_tables.py over the seven campaign
+directories (490 runs) and pinned by
+test_appendix_check_exercise_numbers_match_artifacts.
+
+All 17 blocks carry one of exactly THREE reason signatures:
+  13x  the no-citation bundle (six reasons fire together when a
+       completion claim cites nothing at all)
+   3x  unresolved requirement update, alone
+   1x  missing successful test evidence, alone
+
+Therefore, of the four audit properties advertised in the method:
+  (i)   successful cited test        - fired (1 alone, 13 in bundle)
+  (ii)  FRESHNESS / staleness        - NEVER FIRED in 490 runs
+  (iii) requirement recency          - fired 3 times
+  (iv)  superseded source/provenance - never fired outside the bundle
+
+The freshness check is the rule the loop figure illustrates and the
+method section leads with. It has zero instances in this campaign. Two
+of four rules are untested here.
+
+WHY, mechanically: the worker rarely produces the failure the freshness
+rule targets. Of 27 unsupported proposals, 25 were made AFTER a
+successful test that postdated the last edit, and 21 cited nothing at
+all. This worker does the work, tests it, and then fails to cite it.
+The detected population is citation omission, not overclaiming.
+
+RELATED CORRECTION - what "recovery" means. Of the 8 episodes that hit
+an enforced block, only 2 ran any new test or edit afterwards; the other
+6 re-proposed by citing evidence their trace already contained. The
+figure caption and results text previously implied the worker gathers
+fresh evidence. What the gate repairs in this campaign is the audit
+trail, not the engineering.
+
+Paper updates: §2 audit list unchanged (the rules exist); §4 now names
+the three signatures and states the freshness zero; §4 states the 6-of-8
+re-citation finding; the Table 1 paragraph gives the citation-omission
+mechanism instead of the weaker independence-expectation argument;
+limitation (2) is new; Appendix C is new. All values generated, none
+typed.

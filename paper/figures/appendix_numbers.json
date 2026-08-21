@@ -1,0 +1,21 @@
+{
+  "blocks": {
+    "distinct_signatures": 3,
+    "missing_test_alone": 1,
+    "no_citation_bundle": 13,
+    "requirement_recency_alone": 3,
+    "staleness": 0,
+    "total": 17
+  },
+  "recovery": {
+    "episodes": 8,
+    "gathered_evidence": 2,
+    "recited_only": 6
+  },
+  "runs_scanned": 490,
+  "unsupported_proposals": {
+    "cited_nothing_at_all": 21,
+    "had_fresh_green_test_in_trace": 25,
+    "total": 27
+  }
+}

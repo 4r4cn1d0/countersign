@@ -4,8 +4,8 @@
 \providecommand\HyField@AuxAddToCoFields[2]{}
 \@writefile{toc}{\contentsline {section}{\numberline {1}Introduction}{1}{section.1}\protected@file@percent }
 \citation{liu2024lost,packer2023memgpt}
-\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces The supervision loop: the worker proposes termination with cited evidence; Countersign accepts, or blocks with the specific deficiency and the worker re-proposes with fresh evidence. The hidden evaluator runs once, post-termination, never consulted by the supervisor.}}{2}{figure.1}\protected@file@percent }
-\newlabel{fig:loop}{{1}{2}{The supervision loop: the worker proposes termination with cited evidence; Countersign accepts, or blocks with the specific deficiency and the worker re-proposes with fresh evidence. The hidden evaluator runs once, post-termination, never consulted by the supervisor}{figure.1}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces The supervision loop: the worker proposes termination with cited evidence; Countersign accepts, or blocks with the specific deficiency and the worker re-proposes. In this campaign that repair was usually \emph  {re-citation} rather than new work (\S  \ref {sec:results}). The hidden evaluator runs once, post-termination, never consulted by the supervisor.}}{2}{figure.1}\protected@file@percent }
+\newlabel{fig:loop}{{1}{2}{The supervision loop: the worker proposes termination with cited evidence; Countersign accepts, or blocks with the specific deficiency and the worker re-proposes. In this campaign that repair was usually \emph {re-citation} rather than new work (\S \ref {sec:results}). The hidden evaluator runs once, post-termination, never consulted by the supervisor}{figure.1}{}}
 \def\@LN@column{1}
 \@writefile{toc}{\contentsline {section}{\numberline {2}The Countersign Supervisor}{2}{section.2}\protected@file@percent }
 \newlabel{sec:method}{{2}{2}{The Countersign Supervisor}{section.2}{}}
@@ -20,11 +20,11 @@
 \citation{greenblatt2023control,xiang2024guardagent,agentspec2025,chennabasappa2025llamafirewall}
 \citation{uesato2022process,lightman2024verify}
 \citation{cobbe2021gsm8k,jimenez2024swebench}
+\citation{shinn2023reflexion}
 \citation{zhuge2024agentjudge}
 \citation{gu2026scate}
 \citation{matrix2026provenance}
 \citation{han2026vlaagui}
-\citation{shinn2023reflexion}
 \@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Accepted completions ($n{=}327$): claim verdict (oracle) vs.\ work verdict (evaluator); the empty cell is the central caveat.}}{4}{table.1}\protected@file@percent }
 \newlabel{tab:twobytwo}{{1}{4}{Accepted completions ($n{=}327$): claim verdict (oracle) vs.\^^Mwork verdict (evaluator); the empty cell is the central caveat}{table.1}{}}
 \def\@LN@column{1}
@@ -46,24 +46,29 @@
 \bibcite{cobbe2021gsm8k}{{11}{2021}{{Cobbe et~al.}}{{Cobbe, Kosaraju, Bavarian, Chen, Jun, Kaiser, Plappert, Tworek, Hilton, Nakano, Hesse, and Schulman}}}
 \bibcite{jimenez2024swebench}{{12}{2024}{{Jimenez et~al.}}{{Jimenez, Yang, Wettig, Yao, Pei, Press, and Narasimhan}}}
 \def\@LN@column{1}
-\bibcite{zhuge2024agentjudge}{{13}{2025}{{Zhuge et~al.}}{{Zhuge, Zhao, Ashley, Wang, Khizbullin, Xiong, Liu, Chang, Krishnamoorthi, Tian, Shi, Chandra, and Schmidhuber}}}
-\bibcite{gu2026scate}{{14}{2026}{{Gu et~al.}}{{Gu, Nashid, and Mesbah}}}
-\bibcite{matrix2026provenance}{{15}{2026}{{Salas}}{{}}}
-\bibcite{han2026vlaagui}{{16}{2026}{{Han et~al.}}{{Han, Tu, Wang, Dai, Zhou, Lau, Cardenas, Xu, Xu, Xiong, Zheng, Yao, Zhou, and Xie}}}
-\bibcite{shinn2023reflexion}{{17}{2023}{{Shinn et~al.}}{{Shinn, Cassano, Gopinath, Narasimhan, and Yao}}}
+\bibcite{shinn2023reflexion}{{13}{2023}{{Shinn et~al.}}{{Shinn, Cassano, Gopinath, Narasimhan, and Yao}}}
+\bibcite{zhuge2024agentjudge}{{14}{2025}{{Zhuge et~al.}}{{Zhuge, Zhao, Ashley, Wang, Khizbullin, Xiong, Liu, Chang, Krishnamoorthi, Tian, Shi, Chandra, and Schmidhuber}}}
+\bibcite{gu2026scate}{{15}{2026}{{Gu et~al.}}{{Gu, Nashid, and Mesbah}}}
+\bibcite{matrix2026provenance}{{16}{2026}{{Salas}}{{}}}
+\bibcite{han2026vlaagui}{{17}{2026}{{Han et~al.}}{{Han, Tu, Wang, Dai, Zhou, Lau, Cardenas, Xu, Xu, Xiong, Zheng, Yao, Zhou, and Xie}}}
 \def\@LN@column{1}
 \@writefile{toc}{\contentsline {section}{\numberline {A}Design Details}{6}{appendix.A}\protected@file@percent }
 \newlabel{sec:appendix-design}{{A}{6}{Design Details}{appendix.A}{}}
 \@writefile{toc}{\contentsline {section}{\numberline {B}Proposal Accounting}{6}{appendix.B}\protected@file@percent }
 \newlabel{sec:appendix-accounting}{{B}{6}{Proposal Accounting}{appendix.B}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {C}Additional Failure Modes}{6}{appendix.C}\protected@file@percent }
-\newlabel{sec:appendix-failures}{{C}{6}{Additional Failure Modes}{appendix.C}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {C}Which Checks Actually Fired}{6}{appendix.C}\protected@file@percent }
+\newlabel{sec:appendix-checks}{{C}{6}{Which Checks Actually Fired}{appendix.C}{}}
 \@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Proposal ledger by arm.}}{7}{table.2}\protected@file@percent }
 \newlabel{tab:accounting}{{2}{7}{Proposal ledger by arm}{table.2}{}}
 \def\@LN@column{1}
-\@writefile{toc}{\contentsline {section}{\numberline {D}A Blocked-then-Recovered Trajectory}{7}{appendix.D}\protected@file@percent }
-\newlabel{sec:appendix-traj}{{D}{7}{A Blocked-then-Recovered Trajectory}{appendix.D}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {E}Bayesian Sensitivity Readings}{7}{appendix.E}\protected@file@percent }
-\newlabel{sec:appendix-bayes}{{E}{7}{Bayesian Sensitivity Readings}{appendix.E}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {F}Reproducibility}{7}{appendix.F}\protected@file@percent }
-\gdef \@abspage@last{7}
+\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces Block reason signatures across all 490 runs.}}{7}{table.3}\protected@file@percent }
+\newlabel{tab:checks}{{3}{7}{Block reason signatures across all 490 runs}{table.3}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {D}Additional Failure Modes}{7}{appendix.D}\protected@file@percent }
+\newlabel{sec:appendix-failures}{{D}{7}{Additional Failure Modes}{appendix.D}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {E}A Blocked-then-Recovered Trajectory}{7}{appendix.E}\protected@file@percent }
+\newlabel{sec:appendix-traj}{{E}{7}{A Blocked-then-Recovered Trajectory}{appendix.E}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {F}Bayesian Sensitivity Readings}{7}{appendix.F}\protected@file@percent }
+\newlabel{sec:appendix-bayes}{{F}{7}{Bayesian Sensitivity Readings}{appendix.F}{}}
+\def\@LN@column{1}
+\@writefile{toc}{\contentsline {section}{\numberline {G}Reproducibility}{8}{appendix.G}\protected@file@percent }
+\gdef \@abspage@last{8}

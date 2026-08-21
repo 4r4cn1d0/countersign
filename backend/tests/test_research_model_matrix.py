@@ -1491,3 +1491,44 @@ def test_mcnemar_exact_power_pins_paper_cells_number():
     assert mcnemar_exact_power(83, 0.3, 0.1) < 0.80
     # The superseded all-one-direction model that yielded the old "16".
     assert mcnemar_exact_power(15, 0.5, 0.0) >= 0.80
+
+
+def test_appendix_check_exercise_numbers_match_artifacts():
+    """The paper's Appendix C table (which audit checks actually fired) and
+    the §4 mechanism claims are generated, not typed. Recompute them from the
+    frozen campaign and pin the values the paper prints. Skips when the
+    campaign artifacts are not present (they are gitignored)."""
+    import importlib.util
+
+    script = ROOT / "paper" / "figures" / "gen_appendix_tables.py"
+    campaign = ROOT / "runs" / "pod-sync" / "final-matrix" / "runs"
+    if not campaign.exists():
+        pytest.skip("campaign artifacts not present in this checkout")
+
+    spec = importlib.util.spec_from_file_location("gen_appendix_tables", script)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    module.main()
+
+    report = json.loads((script.parent / "appendix_numbers.json").read_text())
+
+    assert report["runs_scanned"] == 490
+    blocks = report["blocks"]
+    assert blocks["total"] == 17
+    assert blocks["distinct_signatures"] == 3
+    assert blocks["no_citation_bundle"] == 13
+    assert blocks["requirement_recency_alone"] == 3
+    assert blocks["missing_test_alone"] == 1
+    # The paper's most consequential disclosure: the freshness rule, which
+    # Figure 1 illustrates and §2 advertises, never fired.
+    assert blocks["staleness"] == 0
+
+    recovery = report["recovery"]
+    assert recovery["episodes"] == 8
+    assert recovery["gathered_evidence"] == 2
+    assert recovery["recited_only"] == 6
+
+    unsupported = report["unsupported_proposals"]
+    assert unsupported["total"] == 27
+    assert unsupported["had_fresh_green_test_in_trace"] == 25
+    assert unsupported["cited_nothing_at_all"] == 21

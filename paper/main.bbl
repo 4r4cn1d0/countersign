@@ -104,6 +104,14 @@ Carlos~E. Jimenez, John Yang, Alexander Wettig, Shunyu Yao, Kexin Pei, Ofir
 \newblock In \emph{International Conference on Learning Representations
   (ICLR)}, 2024.
 
+\bibitem[Shinn et~al.(2023)Shinn, Cassano, Gopinath, Narasimhan, and
+  Yao]{shinn2023reflexion}
+Noah Shinn, Federico Cassano, Ashwin Gopinath, Karthik Narasimhan, and Shunyu
+  Yao.
+\newblock Reflexion: Language agents with verbal reinforcement learning.
+\newblock In \emph{Advances in Neural Information Processing Systems
+  (NeurIPS)}, 2023.
+
 \bibitem[Zhuge et~al.(2025)Zhuge, Zhao, Ashley, Wang, Khizbullin, Xiong, Liu,
   Chang, Krishnamoorthi, Tian, Shi, Chandra, and
   Schmidhuber]{zhuge2024agentjudge}
@@ -136,13 +144,5 @@ Qijun Han, Haoqin Tu, Zijun Wang, Haoyue Dai, Yiyang Zhou, Nancy Lau, Alvaro~A.
 \newblock {VLAA-GUI}: Knowing when to stop, recover, and search, a modular
   framework for {GUI} automation, 2026.
 \newblock URL \url{https://arxiv.org/abs/2604.21375}.
-
-\bibitem[Shinn et~al.(2023)Shinn, Cassano, Gopinath, Narasimhan, and
-  Yao]{shinn2023reflexion}
-Noah Shinn, Federico Cassano, Ashwin Gopinath, Karthik Narasimhan, and Shunyu
-  Yao.
-\newblock Reflexion: Language agents with verbal reinforcement learning.
-\newblock In \emph{Advances in Neural Information Processing Systems
-  (NeurIPS)}, 2023.
 
 \end{thebibliography}
