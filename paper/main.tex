@@ -99,9 +99,11 @@ termination can tell warranted completion claims from unwarranted ones,
 and what that authority costs
 (\S\ref{sec:results}, Appendix~\ref{sec:appendix-cost}).%
 \label{sec:intro-cost} Countersign reads only the worker's
-execution trace and never consults ground truth; the hidden evaluator
-that determines correctness runs once, post-termination, identically in
-every condition. This separation is
+execution trace and never consults ground truth; in every
+\emph{deployable} condition the hidden evaluator that determines
+correctness runs once, post-termination. The evaluation-only \textsf{oracle\_supervisor} arm is the sole
+exception, consulting it at gate time by design and never pooled into a
+deployable claim. This separation is
 the organizing principle: a claim can be justified and wrong, or
 correct and unjustified, and conflating the two makes ``the verifier
 improved outcomes'' unfalsifiable.
@@ -146,12 +148,14 @@ events resolve, through their provenance chain, to a successful test
 run; (ii)~no cited test predates a later mutation of a file it covers;
 (iii)~the trace holds no requirement update newer than the latest
 successful test evidence. Property~(i) is evaluated over the transitive
-closure of the cited events and (iii) over the whole trace, not over
-the citation list alone (Appendix~\ref{sec:appendix-design}). Freshness
-is tri-state: the supervisor abstains when coverage is unknown. On
+closure of the cited events and (iii) over the whole trace, not the
+citation list alone (Appendix~\ref{sec:appendix-design}); freshness is
+tri-state, abstaining when coverage is unknown. On
 failure it blocks and returns the specific deficiency
 (Figure~\ref{fig:loop}); a repair variant additionally issues the
-smallest evidence-refreshing action. A fourth property---rejecting
+smallest evidence-refreshing action. Enabling the verifier also arms a non-overridable gate on unsafe
+\emph{mutations}, but it never fired: all 490 runs record zero blocked
+non-finish actions, so every block here is a finish-proposal block. A fourth property---rejecting
 citations of a superseded source---exists only in the evaluation-only
 oracle below, never in the deployable gate.
 Determinism is deliberate: halting authority must be auditable and
@@ -228,8 +232,7 @@ completion, \textsf{memory\_baseline} vs.\ \textsf{verification\_only},
 is $9/180$ vs.\ $1/160$ per run, $b{=}5$/$c{=}0$ paired ($p=0.0625$)---but
 a blocking arm suppresses that endpoint mechanically, so everything
 below is read at the proposal level. Two predeclared elements went
-undelivered for funding: a second worker model and a post-hoc LLM-judge
-comparison.
+undelivered for funding (Appendix~\ref{sec:appendix-accounting}).
 
 \textbf{Blocks are precise.} Countersign issued 17 blocks with a live
 verifier---9 enforced, plus 8 raw would-blocks in non-enforcing arms
@@ -248,18 +251,17 @@ fire the no-citation bundle (a claim citing nothing, which any rule
 detects), 3 requirement recency alone, 1 the missing-test rule alone.
 \textbf{The freshness check never fired once in 490 runs}
 (Appendix~\ref{sec:appendix-checks}), so the property the method leads
-with goes untested here: read this as ``the gate does not misfire,''
-not ``it discriminates hard cases.''
+with goes untested: read this as ``the gate does not misfire,'' not
+``it discriminates hard cases.''
 
 \textbf{Most of the gate's yield comes from one trivial rule.} We
 replay every stored proposal of the four ablation campaigns against two
 cheaper rules. The standard CI rule (``a successful test run after the
 last edit'') catches 2 of the subset's 15 unsupported proposals; a
 one-line ``block a finish that cites nothing'' catches 10; Countersign
-judged 11 online (4 arose in no-verifier arms) and caught all 11. The
-citation requirement, not the chronology reasoning, does most of the
-work, and the margin over the one-line rule is too small for this
-campaign to separate them. Neither replayed rule blocked any of the 161
+judged 11 online and caught all 11, of which the one-liner would
+recover 7---so the citation requirement, not the chronology reasoning,
+does most of the work. Neither replayed rule blocked any of the 161
 supported proposals both judged.
 
 
@@ -330,9 +332,9 @@ censored by task weight, not budget.
 authors, so the dev/held-out split prevents tuning but not the
 conceptual correlation between what we trap and what we detect---which
 can inflate only the block numerator, since false blocks and recoveries
-are organic. (2)~The freshness check never fired, and a one-line
-citation rule recovers 7 of the 11 replay catches, so this campaign
-tests the citation requirement far more than the chronology reasoning.
+are organic. (2)~The freshness check never fired, and a one-line citation rule
+recovers 7 of the 11 replay catches, so this campaign tests the
+citation requirement more than the chronology reasoning.
 (3)~One worker model on ten small fixtures establishes nothing about
 prevalence in production software. (4)~The primary endpoint is
 suppressed by construction in blocking arms. (5)~Verifier and oracle
@@ -350,9 +352,9 @@ Workers game outcome
 checks~\citep{vonarx2025rewardhacking,baker2025monitoring}; supervisors
 with authority over another agent are an established design
 space~\citep{greenblatt2023control,xiang2024guardagent,agentspec2025,chennabasappa2025llamafirewall};
-and deterministic finish-blocking hooks are deployed practice---the rule
-our CI replay prices. Countersign differs in auditing cited-evidence
-chronology and pricing its false blocks. The justified/correct split descends from process-vs-outcome
+deterministic finish-blocking hooks are deployed practice---the rule our
+CI replay prices---and Countersign differs only in auditing
+cited-evidence chronology and pricing its false blocks. The justified/correct split descends from process-vs-outcome
 supervision~\citep{uesato2022process,lightman2024verify}, instantiated
 at termination against a hidden
 evaluator~\citep{cobbe2021gsm8k,jimenez2024swebench};
@@ -364,14 +366,14 @@ finish steps~\citep{han2026vlaagui}.
 
 \section*{Responsible-Use Statement}
 
-Countersign controls agent overclaiming, but agents supervising agents
-carries risks: an \emph{allow} audits justification, not correctness,
-and must not be marketed as verification; a visible gate invites
-\emph{oversight displacement} (verdicts must stay cited-evidence
-audits, not badges); halting authority adds a failure
-surface---\emph{who supervises the supervisor}---priced here as
-counter-metrics. No human subjects, personal data, or production
-systems were involved.
+Countersign targets agent overclaiming, but supervising agents carries
+risks. An \emph{allow} audits justification, not correctness, and must
+never be marketed as verification. A visible gate invites
+\emph{oversight displacement}: verdicts must reach operators as
+cited-evidence audits, not badges. And halting authority is itself a
+failure surface---\emph{who supervises the supervisor}---which we price
+rather than assume away. No human subjects or production systems were
+involved.
 
 \bibliographystyle{unsrtnat}
 \bibliography{references}
@@ -404,7 +406,10 @@ replay covers the four ablation campaigns: $15$ unsupported proposals,
 $11$ of them verifier-judged, $161$ supported proposals judged by both
 gates.
 
-Arm details: \textsf{verification\_and\_repair} produced no unsupported
+Two predeclared elements went undelivered, both for funding: a second
+worker model (\texttt{devstral-small-2:24b}, calibrated but not run)
+and the post-hoc LLM-judge supervisor comparison. Arm details:
+\textsf{verification\_and\_repair} produced no unsupported
 proposal in its 40 runs, so its repair path was never exercised---an
 uninformative cell, not evidence repair works. The evaluation-only
 \textsf{oracle\_supervisor} bound refused 5 proposals, admitted zero
