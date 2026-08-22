@@ -31,8 +31,9 @@
 \usepackage{enumitem}
 
 % Modest float-spacing tightening (standard for 4-page short papers).
-\setlength{\textfloatsep}{12pt plus 2pt minus 4pt}
-\setlength{\abovecaptionskip}{4pt}
+\setlength{\textfloatsep}{10pt plus 2pt minus 4pt}
+\setlength{\abovecaptionskip}{3pt}
+\setlength{\belowcaptionskip}{0pt}
 
 % Venue notice: workshop submission, not the main conference.
 \makeatletter
@@ -115,11 +116,10 @@ independent post-hoc oracle it does not compute (\S\ref{sec:method});
 pricing false blocks, under a frozen protocol with a public deviation
 ledger (\S\ref{sec:design}); (iii)~results across 490 runs---perfect
 block precision, an ablation against two cheaper rules, a truncation
-null, and a volatility measurement from a treatment-identical control
-arm that bounds what any rate contrast here can claim
-(\S\ref{sec:results}); (iv)~a calibrated account of the gate as
-evidence hygiene, not a demonstrated safety mechanism
-(\S\ref{sec:failure}).
+null, and a treatment-identical control arm bounding what any rate
+contrast here can claim (\S\ref{sec:results}); (iv)~a calibrated
+account of the gate as evidence hygiene, not a demonstrated safety
+mechanism (\S\ref{sec:failure}).
 
 \begin{figure}[t]
 \centering
@@ -147,10 +147,9 @@ identifiers.
 events resolve, through their provenance chain, to a successful test
 run; (ii)~no cited test predates a later mutation of a file it covers;
 (iii)~the trace holds no requirement update newer than the latest
-successful test evidence. Property~(i) is evaluated over the transitive
-closure of the cited events and (iii) over the whole trace, not the
-citation list alone (Appendix~\ref{sec:appendix-design}); freshness is
-tri-state, abstaining when coverage is unknown. On
+successful test evidence. Property~(i) is evaluated over the cited events' transitive closure and
+(iii) over the whole trace (Appendix~\ref{sec:appendix-design});
+freshness is tri-state, abstaining when coverage is unknown. On
 failure it blocks and returns the specific deficiency
 (Figure~\ref{fig:loop}); a repair variant additionally issues the
 smallest evidence-refreshing action. Enabling the verifier also arms a non-overridable gate on unsafe
@@ -223,16 +222,16 @@ on a dirty tree.
 \label{sec:results}
 
 All numbers come from audited run manifests; the worker is
-\texttt{qwen2.5-coder:14b}. The campaign was sized to validate the
-instrument and calibrate power, not to detect effects; its 490 runs
-yield 341 oracle-judged proposals, 27 unsupported
-(Appendix~\ref{sec:appendix-accounting} reconciles every denominator).
+\texttt{qwen2.5-coder:14b}. The campaign was sized to validate the instrument and calibrate power,
+not to detect effects; its 490 runs yield 341 oracle-judged proposals,
+27 unsupported (Appendix~\ref{sec:appendix-accounting} reconciles the
+denominators).
 \textbf{The predeclared primary returned null}: accepted unsupported
 completion, \textsf{memory\_baseline} vs.\ \textsf{verification\_only},
-is $9/180$ vs.\ $1/160$ per run, $b{=}5$/$c{=}0$ paired ($p=0.0625$)---but
-a blocking arm suppresses that endpoint mechanically, so everything
+is $9/180$ vs.\ $1/160$ per run, $b{=}5$/$c{=}0$ paired ($p=0.0625$),
+but a blocking arm suppresses that endpoint mechanically---so everything
 below is read at the proposal level. Two predeclared elements went
-undelivered for funding (Appendix~\ref{sec:appendix-accounting}).
+undelivered (Appendix~\ref{sec:appendix-accounting}).
 
 \textbf{Blocks are precise.} Countersign issued 17 blocks with a live
 verifier---9 enforced, plus 8 raw would-blocks in non-enforcing arms
@@ -259,10 +258,10 @@ replay every stored proposal of the four ablation campaigns against two
 cheaper rules. The standard CI rule (``a successful test run after the
 last edit'') catches 2 of the subset's 15 unsupported proposals; a
 one-line ``block a finish that cites nothing'' catches 10; Countersign
-judged 11 online and caught all 11, of which the one-liner would
-recover 7---so the citation requirement, not the chronology reasoning,
-does most of the work. Neither replayed rule blocked any of the 161
-supported proposals both judged.
+judged 11 online and caught all 11, of which the one-liner recovers
+7---so the citation requirement, not the chronology reasoning, does most
+of the work. Neither replayed rule blocked any of the 161 supported
+proposals both judged.
 
 
 \textbf{Truncation does not detectably induce false claims.} Baseline
@@ -277,9 +276,10 @@ interpretably} (Figure~\ref{fig:regimes}b). Read at the
 finishes by definition---the ten matched cells give baseline 5,
 \textsf{observe\_only} 3, \textsf{verification\_only} 2. The arms are identical until a proposal
 is made, so the first pair is \emph{treatment-identical}: its
-disagreement on $4/10$ cells (3 vs.\ 1) is pure sampling variation and
-shows the endpoint is volatile at this $n$---individual cells are not
-stable readouts. On the effect scale the gate contrast is nominally the
+disagreement on $4/10$ cells (3 vs.\ 1) carries no treatment at all and
+shows the endpoint is volatile at this $n$. (It ran as two campaigns
+under separate protocols, so it bounds sampler \emph{plus} batch
+variation---an upper bound, which only strengthens the point.) On the effect scale the gate contrast is nominally the
 stronger of the two (net 3 vs.\ 2; exact McNemar $p=0.25$ vs.\
 $0.625$), but neither is close to significance and a contrast that
 cannot be distinguished from an arm pair with \emph{no treatment at
@@ -336,8 +336,8 @@ are organic. (2)~The freshness check never fired, and a one-line citation rule
 recovers 7 of the 11 replay catches, so this campaign tests the
 citation requirement more than the chronology reasoning.
 (3)~One worker model on ten small fixtures establishes nothing about
-prevalence in production software. (4)~The primary endpoint is
-suppressed by construction in blocking arms. (5)~Verifier and oracle
+prevalence in production software, and the noise-floor pair spans two
+campaigns. (4)~The primary endpoint is suppressed by construction. (5)~Verifier and oracle
 share no code but read the same trace, and every block's reasons mirror
 an oracle predicate---near-vacuous independence. (6)~No predeclared
 comparison reaches $p<.05$, and the treatment-identical arm shows why:
@@ -371,8 +371,8 @@ risks. An \emph{allow} audits justification, not correctness, and must
 never be marketed as verification. A visible gate invites
 \emph{oversight displacement}: verdicts must reach operators as
 cited-evidence audits, not badges. And halting authority is itself a
-failure surface---\emph{who supervises the supervisor}---which we price
-rather than assume away. No human subjects or production systems were
+failure surface---\emph{who supervises the supervisor}---priced here
+rather than assumed away. No human subjects or production systems were
 involved.
 
 \bibliographystyle{unsrtnat}
