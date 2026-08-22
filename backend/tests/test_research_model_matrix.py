@@ -1549,6 +1549,14 @@ def test_appendix_check_exercise_numbers_match_artifacts():
     assert cost["gate_decisions"] == 222
     assert cost["gate_latency_median_ms"] == 0.32
 
+    # The ablation overlap: three independent reviewers recomputed this
+    # ratio after the paper mis-stated it as 10-of-11. Pin it.
+    ablation = report["ablation_overlap"]
+    assert ablation["subset_unsupported"] == 15
+    assert ablation["countersign_caught"] == 11
+    assert ablation["recovered_by_one_line_citation_rule"] == 7
+    assert ablation["countersign_margin"] == 4
+
 
 def test_cluster_bootstrap_widens_intervals_relative_to_naive_resampling():
     """The predeclared task-level sensitivity analysis, built before E6 data.

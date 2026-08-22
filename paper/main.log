@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.29 (TeX Live 2026/Homebrew) (preloaded format=pdflatex 2026.3.4)  22 AUG 2026 05:12
+This is pdfTeX, Version 3.141592653-2.6-1.40.29 (TeX Live 2026/Homebrew) (preloaded format=pdflatex 2026.3.4)  22 AUG 2026 14:38
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -601,9 +601,6 @@ File: figures/fig_regimes.pdf Graphic file (type pdf)
 <use figures/fig_regimes.pdf>
 Package pdftex.def Info: figures/fig_regimes.pdf  used on input line 478.
 (pdftex.def)             Requested size: 295.40436pt x 127.01193pt.
-
-Underfull \vbox (badness 1688) has occurred while \output is active []
-
  [7 <./figures/fig_regimes.pdf>] [8] (./main.aux)
  ***********
 LaTeX2e <2025-11-01>
@@ -615,7 +612,7 @@ Package rerunfilecheck Info: File `main.out' has not changed.
 Here is how much of TeX's memory you used:
  13377 strings out of 467525
  212768 string characters out of 5408440
- 675845 words of memory out of 5000000
+ 675843 words of memory out of 5000000
  41786 multiletter control sequences out of 15000+600000
  670475 words of font info for 253 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
@@ -630,7 +627,7 @@ hvr8a.pfb></opt/homebrew/Cellar/texlive/20260301/share/texmf-dist/fonts/type1/u
 rw/times/utmb8a.pfb></opt/homebrew/Cellar/texlive/20260301/share/texmf-dist/fon
 ts/type1/urw/times/utmr8a.pfb></opt/homebrew/Cellar/texlive/20260301/share/texm
 f-dist/fonts/type1/urw/times/utmri8a.pfb>
-Output written on main.pdf (8 pages, 216001 bytes).
+Output written on main.pdf (8 pages, 216026 bytes).
 PDF statistics:
  389 PDF objects out of 1000 (max. 8388607)
  236 compressed objects within 3 object streams

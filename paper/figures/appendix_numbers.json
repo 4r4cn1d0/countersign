@@ -1,4 +1,10 @@
 {
+  "ablation_overlap": {
+    "countersign_caught": 11,
+    "countersign_margin": 4,
+    "recovered_by_one_line_citation_rule": 7,
+    "subset_unsupported": 15
+  },
   "blocks": {
     "distinct_signatures": 3,
     "missing_test_alone": 1,

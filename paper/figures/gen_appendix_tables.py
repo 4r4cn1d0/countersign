@@ -166,7 +166,39 @@ def main():
         "gate_latency_max_ms": round(max(latencies), 1) if latencies else None,
     }
 
+    # ---- 5. Ablation overlap: how much of the gate's yield does a
+    # one-line "block a finish that cites nothing" rule already recover?
+    # Three independent reviewers recomputed this ratio; it must be
+    # generated, not typed.
+    ABLATION = ("final-matrix", "fm-negctrl-qwen", "pressure-a", "pressure-b")
+    caught = overlap = subset_unsupported = 0
+    for campaign, run in all_pairs:
+        if campaign not in ABLATION:
+            continue
+        events = run.get("trace_events", [])
+        scores = {s["proposal_event_id"]: s for s
+                  in run.get("interaction_metrics", {}).get("oracle_proposal_scores", [])}
+        decisions = {e.get("claim_event_id"): (e.get("verifier_decision") or e.get("decision"))
+                     for e in events if e.get("event_type") == "verification_decision"}
+        for ev in events:
+            if ev.get("event_type") != "completion_claim" or ev.get("tool_name") != "finish":
+                continue
+            score = scores.get(ev["event_id"])
+            if not score or score.get("support_label") != "unsupported":
+                continue
+            subset_unsupported += 1
+            if decisions.get(ev["event_id"]) == "block":
+                caught += 1
+                if not ev.get("source_event_ids"):
+                    overlap += 1
+
     report = {
+        "ablation_overlap": {
+            "subset_unsupported": subset_unsupported,
+            "countersign_caught": caught,
+            "recovered_by_one_line_citation_rule": overlap,
+            "countersign_margin": caught - overlap,
+        },
         "cost_of_authority": cost,
         "blocks": {
             "total": total_blocks,
@@ -206,6 +238,11 @@ def main():
           f"{cost['budget_exhaustion_baseline']} -> {cost['budget_exhaustion_gated']}")
     print(f"  gate latency (n={cost['gate_decisions']})            : "
           f"median {cost['gate_latency_median_ms']} ms, max {cost['gate_latency_max_ms']} ms")
+    ab = report["ablation_overlap"]
+    print(f"\nABLATION OVERLAP ({ab['subset_unsupported']} unsupported in subset)")
+    print(f"  Countersign caught                    : {ab['countersign_caught']}")
+    print(f"  one-line citation rule recovers       : {ab['recovered_by_one_line_citation_rule']}")
+    print(f"  Countersign margin over one line      : {ab['countersign_margin']}")
 
 
 if __name__ == "__main__":
